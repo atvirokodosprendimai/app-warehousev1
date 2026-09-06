@@ -33,6 +33,21 @@ SQLite with no cgo. One binary, one database file, one directory of photos.
 - **EUR is the base currency**, with the European Central Bank's daily reference
   rates pulled in so a sale in another currency can be reported in EUR at the
   rate that applied *on the day of the sale*.
+- **A submissions inbox.** A staff member photographs something, names it, and
+  says what they hope for. It lands in an administrator's inbox — and a banner
+  appears on every open page, phone or desktop, without a reload. The admin rings
+  them, agrees a price, and converts it into a real listing attached to a place.
+  Photographs keep their URLs across that conversion, so a link shared earlier
+  still works. What they asked for becomes the owner price by default, because
+  the submitter *is* the owner.
+- **Saved batches.** Build up a selection over days and export it as one file.
+  Unlike a filter, a batch's contents do not change as stock moves — and the
+  batch page shows what an export is holding back, and why, rather than dropping
+  it quietly.
+- **Search that works like a search box.** Full text over reference, title,
+  description and condition: words in any order, across fields, half-typed words
+  matching. Plus a price range, which pins its own currency because minor units
+  are only comparable within one.
 
 ## Running it
 
@@ -121,6 +136,17 @@ Run `templ generate` after editing a `.templ` file, and never edit a `*_templ.go
 
 ## Checks
 
-    go test ./...
+    go test ./...          # unit and repository tests, against the real migrations
+    ./scripts/smoke.sh     # builds the binary and drives it over HTTP
 
 Templates must be regenerated first if a `.templ` changed.
+
+`scripts/smoke.sh` is worth reading before the handlers: it is 63 assertions over
+a real running binary — bootstrap, the permanently closed registration, intake,
+photograph upload and anonymous fetch, pricing, search, price ranges, batches,
+both export profiles, the submissions inbox end to end, and the auth boundary. It
+is the shortest honest description of what this application does, and unlike a
+document it cannot go stale without going red.
+
+Two things it deliberately cannot check: how the pages look, and whether datastar
+hydrates. Those need a browser.
