@@ -54,36 +54,55 @@ CREATE INDEX locations_path_idx ON locations (path);
 
 -- The sellable unit.
 --
--- Money is stored as integer minor units plus an ISO currency code. The asking
--- price is what an export publishes; the sold price and date are kept separately
--- so a report can show what was actually realised against what was asked.
+-- Money is stored as integer minor units plus an ISO currency code.
+--
+-- THREE prices, and they are three different facts about the same item:
+--   shop_*  what we publish. The ONLY price an export may ever emit.
+--   owner_* what the item's owner wants to receive -- the person whose
+--           distributed warehouse it sits in. Never exported: a buyer seeing
+--           what the holder was paid is a disclosure nobody chose to make.
+--   sold_*  what it actually fetched, with its date, so a report can show what
+--           was realised against what was asked and what was owed.
+-- Storing only a margin percentage instead of owner_* would lose whichever of
+-- the two figures was negotiated first.
+--
+-- Every price defaults to zero because the intake flow is photograph, title,
+-- shelve -- and price later, after research. An offer with no price is the
+-- normal state of a fresh draft, not an incomplete row.
 CREATE TABLE offers (
-    id            TEXT PRIMARY KEY,
-    sku           TEXT NOT NULL UNIQUE,
-    title         TEXT NOT NULL,
-    description   TEXT NOT NULL DEFAULT '',
-    condition     TEXT NOT NULL DEFAULT '',
-    status        TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
-                      ('draft','listed','pending','sold','archived')),
-    quantity      INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
-    ask_minor     INTEGER NOT NULL DEFAULT 0,
-    ask_currency  TEXT NOT NULL DEFAULT 'EUR',
-    sold_minor    INTEGER NOT NULL DEFAULT 0,
-    sold_currency TEXT NOT NULL DEFAULT '',
-    sold_at       TEXT,
+    id             TEXT PRIMARY KEY,
+    sku            TEXT NOT NULL UNIQUE,
+    title          TEXT NOT NULL,
+    description    TEXT NOT NULL DEFAULT '',
+    condition      TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
+                       ('draft','listed','pending','sold','archived')),
+    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
+    shop_minor     INTEGER NOT NULL DEFAULT 0,
+    shop_currency  TEXT NOT NULL DEFAULT 'EUR',
+    owner_minor    INTEGER NOT NULL DEFAULT 0,
+    owner_currency TEXT NOT NULL DEFAULT 'EUR',
+    sold_minor     INTEGER NOT NULL DEFAULT 0,
+    sold_currency  TEXT NOT NULL DEFAULT '',
+    sold_at        TEXT,
     -- ON DELETE RESTRICT: emptying a shelf must be a deliberate act of moving
     -- the stock, never a side effect of tidying the tree.
-    location_id   TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-    created_at    TEXT NOT NULL,
-    updated_at    TEXT NOT NULL,
+    location_id    TEXT REFERENCES locations (id) ON DELETE RESTRICT,
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL,
     -- A sold offer must carry its date, or the revenue cannot be attributed to a
     -- period. Enforced here as well as in the domain because a report is only as
     -- trustworthy as the weakest write path.
-    CHECK (status <> 'sold' OR sold_at IS NOT NULL)
+    CHECK (status <> 'sold' OR sold_at IS NOT NULL),
+    -- A published status must carry a published price. Without this, the price
+    -- research step can be skipped and a 0.00 listing reaches a marketplace.
+    CHECK (status NOT IN ('listed','pending') OR shop_minor > 0)
 ) STRICT;
 CREATE INDEX offers_status_idx ON offers (status);
 CREATE INDEX offers_location_idx ON offers (location_id);
 CREATE INDEX offers_sold_at_idx ON offers (sold_at);
+-- The pricing queue: drafts still waiting on the research step.
+CREATE INDEX offers_needs_pricing_idx ON offers (status, shop_minor);
 
 -- Photos. The id is a UUID and is also the public URL's path segment, so the URL
 -- handed to Shopify or eBay is stable and public without being enumerable.

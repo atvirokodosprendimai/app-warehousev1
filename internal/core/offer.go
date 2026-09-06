@@ -102,10 +102,21 @@ type Offer struct {
 	Status Status
 	// Quantity is how many of this item are held.
 	Quantity int
-	// Ask is the asking price. This is the price that goes into an export.
-	Ask Money
+	// Shop is the price we publish. This is the only price that ever reaches a
+	// marketplace export.
+	Shop Money
+	// Owner is what the item's owner wants to receive for it — the person whose
+	// distributed warehouse it sits in, resolved through the location's
+	// custodian. It is deliberately a separate figure from Shop rather than a
+	// margin percentage: the two are negotiated with different people at
+	// different times, and storing only the difference would lose whichever one
+	// was agreed first.
+	//
+	// It must never be exported. A buyer seeing what the holder was paid is a
+	// disclosure the business did not choose to make.
+	Owner Money
 	// Sold is what it actually fetched. Zero until the sale is recorded, and
-	// deliberately separate from Ask so a discount is visible in a report.
+	// deliberately separate from Shop so a discount is visible in a report.
 	Sold Money
 	// SoldAt is when the sale happened, in UTC. Nil until sold.
 	SoldAt *time.Time
@@ -120,10 +131,11 @@ type Offer struct {
 
 // Validate checks the domain rules that hold regardless of who is writing.
 //
-// It deliberately does NOT require a price on a draft: an operator photographs
-// and shelves an item before deciding what to ask for it, and forcing a price at
-// creation time would push them to type a placeholder that later ships to a
-// marketplace.
+// It deliberately does NOT require a price on a draft. The intake flow is
+// photograph, title, shelve — and only later, after finding out what the item
+// can actually fetch, price it. Demanding a price at creation would push the
+// operator to type a placeholder, and a placeholder that reaches StatusListed
+// ships to a marketplace as a real offer.
 func (o *Offer) Validate() error {
 	if strings.TrimSpace(o.Title) == "" {
 		return fmt.Errorf("%w: title is required", ErrInvalid)
@@ -137,25 +149,74 @@ func (o *Offer) Validate() error {
 	if o.Quantity < 0 {
 		return fmt.Errorf("%w: quantity cannot be negative", ErrInvalid)
 	}
-	if o.Status.Exportable() && o.Ask.IsZero() {
-		return fmt.Errorf("%w: an offer in status %s needs an asking price, because that "+
+	if o.Status.Exportable() && o.Shop.IsZero() {
+		return fmt.Errorf("%w: an offer in status %s needs a shop price, because that "+
 			"status is exported to a marketplace", ErrInvalid, o.Status)
 	}
 	if o.Status == StatusSold && o.SoldAt == nil {
 		return fmt.Errorf("%w: a sold offer needs a sale date, or the revenue cannot be "+
 			"attributed to a period", ErrInvalid)
 	}
-	if o.Ask.Currency != "" {
-		if _, err := o.Ask.Exponent(); err != nil {
-			return err
+	for _, m := range []Money{o.Shop, o.Owner, o.Sold} {
+		if m.Currency == "" {
+			continue
 		}
-	}
-	if o.Sold.Currency != "" {
-		if _, err := o.Sold.Exponent(); err != nil {
+		if _, err := m.Exponent(); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// NeedsPricing reports whether the offer is waiting on the research step — it
+// has been photographed and titled but has no shop price yet.
+//
+// This is derived rather than stored as its own status, because it is a property
+// of the price fields and a stored duplicate would go stale the moment somebody
+// typed a price without also moving the status.
+func (o *Offer) NeedsPricing() bool {
+	return o.Status == StatusDraft && o.Shop.IsZero()
+}
+
+// Margin returns what the business keeps: the shop price less what the owner
+// wants. It is the number that decides whether listing the item is worth doing.
+//
+// It refuses to subtract across currencies rather than converting silently,
+// because the rate that applied would be an assumption buried inside a figure
+// nobody could reproduce. Convert deliberately, with a dated [Rate], first.
+func (o *Offer) Margin() (Money, error) {
+	if o.Shop.IsZero() {
+		return Money{}, fmt.Errorf("%w: no shop price yet, so there is no margin to report",
+			ErrInvalid)
+	}
+	if o.Owner.IsZero() {
+		// Nothing owed to a holder: the whole shop price is margin.
+		return o.Shop, nil
+	}
+	if o.Shop.Currency != o.Owner.Currency {
+		return Money{}, fmt.Errorf("%w: shop price is %s and the owner wants %s; convert one "+
+			"of them at a dated rate before comparing", ErrInvalid,
+			o.Shop.Currency, o.Owner.Currency)
+	}
+	return Money{Minor: o.Shop.Minor - o.Owner.Minor, Currency: o.Shop.Currency}, nil
+}
+
+// Realised returns what the business actually kept on a completed sale: the sold
+// price less what the owner wants. Zero-value Sold means the sale is not
+// recorded yet, which is a different thing from a sale that made nothing.
+func (o *Offer) Realised() (Money, error) {
+	if o.Sold.IsZero() {
+		return Money{}, fmt.Errorf("%w: no sold price recorded", ErrInvalid)
+	}
+	if o.Owner.IsZero() {
+		return o.Sold, nil
+	}
+	if o.Sold.Currency != o.Owner.Currency {
+		return Money{}, fmt.Errorf("%w: sold in %s but the owner wants %s; convert at the "+
+			"rate for the sale date before comparing", ErrInvalid,
+			o.Sold.Currency, o.Owner.Currency)
+	}
+	return Money{Minor: o.Sold.Minor - o.Owner.Minor, Currency: o.Sold.Currency}, nil
 }
 
 // PrimaryPhoto returns the first photo, or the zero Photo when there are none.
