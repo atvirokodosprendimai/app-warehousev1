@@ -16,7 +16,6 @@ import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 templ OfferScreen(d OfferDetail) {
 	<div
 		class="stack"
-		data-init={ "@get('/offers/" + d.Row.Offer.ID + "/stream')" }
 		data-signals={ offerSignals(d) }
 	>
 		<div id="offer-flash"></div>
@@ -29,6 +28,7 @@ templ OfferScreen(d OfferDetail) {
 				@OfferStatusCard(d)
 				@OfferPhotosCard(d)
 				@offerLocationCard(d)
+				@OfferCartsCard(d)
 			</div>
 		</div>
 	</div>
@@ -237,7 +237,7 @@ templ OfferPhotosCard(d OfferDetail) {
 							class="photo-del"
 							type="button"
 							aria-label={ "Remove photo " + itoa(i+1) }
-							data-on:click={ "@delete('/photos/" + p.ID + "')" }
+							data-on:click={ "@delete('/photos/" + p.ID + "?offer=" + d.Row.Offer.ID + "')" }
 						>×</button>
 					</figure>
 				}

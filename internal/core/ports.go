@@ -140,6 +140,88 @@ type RateStore interface {
 	RateWriter
 }
 
+// CartReader loads saved batches.
+type CartReader interface {
+	// Cart returns one cart with its items in order, or ErrNotFound.
+	Cart(ctx context.Context, id string) (Cart, error)
+	// Carts lists every cart, most recently touched first.
+	Carts(ctx context.Context) ([]Cart, error)
+	// Contents returns a cart with its offers resolved, in cart order, each with
+	// its photos — everything an export or a cart page needs, in one call.
+	Contents(ctx context.Context, cartID string) (CartContents, error)
+	// CartsHolding returns the carts an offer is already in, so the offer page
+	// can say so rather than letting the operator add it to a second batch by
+	// accident.
+	CartsHolding(ctx context.Context, offerID string) ([]Cart, error)
+}
+
+// CartWriter mutates saved batches.
+type CartWriter interface {
+	CreateCart(ctx context.Context, c Cart) error
+	UpdateCart(ctx context.Context, c Cart) error
+	DeleteCart(ctx context.Context, id string) error
+	// AddToCart appends an offer. Adding one that is already present must be a
+	// no-op rather than an error: the button that calls it is visible on a page
+	// that may be a few seconds stale, and failing there would be noise about
+	// nothing.
+	AddToCart(ctx context.Context, cartID, offerID string) error
+	// RemoveFromCart removes an offer, and is likewise a no-op when it is not
+	// there.
+	RemoveFromCart(ctx context.Context, cartID, offerID string) error
+	// ReorderCart rewrites item positions to the given order.
+	ReorderCart(ctx context.Context, cartID string, offerIDsInOrder []string) error
+}
+
+// CartStore is both halves.
+type CartStore interface {
+	CartReader
+	CartWriter
+}
+
+// SubmissionReader loads staff proposals.
+type SubmissionReader interface {
+	// Submission returns one proposal with its photos, or ErrNotFound.
+	Submission(ctx context.Context, id string) (Submission, error)
+	// Submissions lists proposals matching a filter, newest first.
+	Submissions(ctx context.Context, f SubmissionFilter) ([]Submission, error)
+	// CountOpen returns how many proposals still need a decision. It is what the
+	// live inbox banner shows, so it is a single cheap count rather than a list
+	// the caller has to measure.
+	CountOpen(ctx context.Context) (int, error)
+}
+
+// SubmissionWriter mutates staff proposals.
+type SubmissionWriter interface {
+	CreateSubmission(ctx context.Context, s Submission) error
+	UpdateSubmission(ctx context.Context, s Submission) error
+	AddSubmissionPhoto(ctx context.Context, p Photo) error
+	DeleteSubmissionPhoto(ctx context.Context, photoID string) error
+	// MovePhotosToOffer re-parents a submission's photographs onto an offer,
+	// KEEPING each photo's id. The id is the public URL, so minting new ones
+	// would break any link already shared and orphan the blobs on disk.
+	MovePhotosToOffer(ctx context.Context, submissionID, offerID string) error
+}
+
+// SubmissionStore is both halves.
+type SubmissionStore interface {
+	SubmissionReader
+	SubmissionWriter
+}
+
+// SubmissionFilter narrows an inbox listing. A zero filter means "everything".
+type SubmissionFilter struct {
+	// Status, when non-empty, restricts to these triage states.
+	Status []SubmissionStatus
+	// SubmittedBy restricts to one submitter, which is how a staff user sees
+	// their own proposals and only their own.
+	SubmittedBy string
+	// OpenOnly restricts to proposals still awaiting a decision.
+	OpenOnly bool
+	// Limit and Offset page the result.
+	Limit  int
+	Offset int
+}
+
 // BlobStore holds photo bytes. It is separate from the database because image
 // blobs and row data have different backup and serving needs.
 type BlobStore interface {

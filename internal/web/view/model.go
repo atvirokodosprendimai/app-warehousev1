@@ -35,6 +35,18 @@ type Page struct {
 	Counts map[core.Status]int
 	// NeedsPricing is how many drafts are still waiting on the research step.
 	NeedsPricing int
+	// InboxOpen is how many staff submissions are still waiting on a decision.
+	// It drives the live banner, so it is carried on every page rather than only
+	// on the inbox — the whole point of the banner is to reach an administrator
+	// who is looking somewhere else.
+	InboxOpen int
+	// StreamPath is the ONE SSE endpoint this page opens.
+	//
+	// One connection per page, not one per widget: the server already knows which
+	// fragments changed, so a second stream buys nothing and costs a socket. The
+	// path carries what this page needs — the offer editor asks for its own id —
+	// and the server decides everything that comes back down it.
+	StreamPath string
 }
 
 // Initial returns the user's initials for the sidebar avatar.
@@ -161,7 +173,46 @@ type OfferDetail struct {
 	// PublicBase is the origin a marketplace will fetch photos from. Shown to
 	// the operator because an export is worthless if it is wrong.
 	PublicBase string
+	// Carts is every saved batch, so this offer can be added to one.
+	Carts []core.Cart
+	// InCarts are the batches this offer is already in. Showing them is what
+	// stops the same item being put into two batches destined for two different
+	// marketplaces without anyone noticing.
+	InCarts []core.Cart
 }
+
+// InCart reports whether this offer is already in a given batch.
+func (d OfferDetail) InCart(cartID string) bool {
+	for _, c := range d.InCarts {
+		if c.ID == cartID {
+			return true
+		}
+	}
+	return false
+}
+
+// Carts is the saved-batches screen.
+type Carts struct {
+	Page  Page
+	Carts []core.Cart
+}
+
+// CartScreen is one saved batch, with its export readiness resolved.
+type CartScreen struct {
+	Page Page
+	Cart core.Cart
+	// Send are the items an export would carry.
+	Send []core.Offer
+	// Held are the items it would not, each with a reason. They are shown rather
+	// than dropped: every member of a batch was chosen by hand, so an export that
+	// quietly omits one loses an item the operator believes they are sending.
+	Held []core.Offer
+	// Profiles are the marketplace names this batch can be exported to.
+	Profiles []string
+}
+
+// HoldReason explains why an item is not being sent.
+func (s CartScreen) HoldReason(o core.Offer) string { return core.HoldReason(o) }
 
 // LocationTree is the warehouse screen.
 type LocationTree struct {

@@ -25,8 +25,9 @@ templ PageShell(p Page, actions templ.Component, body templ.Component) {
 			<link rel="stylesheet" href="/assets/app.css"/>
 			<script type="module" src={ DatastarBundle }></script>
 		</head>
-		<body>
+		<body data-init={ "@get('" + p.StreamPath + "')" }>
 			<a class="skip" href="#main">Skip to content</a>
+			@InboxBanner(p.InboxOpen)
 			<div class="shell">
 				@sidebar(p)
 				<div class="main">

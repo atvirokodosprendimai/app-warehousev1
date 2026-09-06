@@ -44,11 +44,7 @@ templ AuthPage(a Auth) {
 							<p>Accounts are created by an administrator.</p>
 						}
 					</div>
-					<div id="auth-msg">
-						if a.Error != "" {
-							@Message("error", a.Error)
-						}
-					</div>
+					@AuthMessage(a.Error)
 					if a.Bootstrap {
 						<div class="field">
 							<label for="name">Your name</label>

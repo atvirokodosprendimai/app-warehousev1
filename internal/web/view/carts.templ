@@ -1,0 +1,230 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// CartsScreen lists the saved batches and creates new ones.
+templ CartsScreen(c Carts) {
+	<div class="stack" data-signals="{cartName: '', cartNote: ''}">
+		<div id="carts-msg"></div>
+		<div class="card">
+			<div class="card-head"><h2>Saved batches</h2></div>
+			@CartList(c.Carts)
+		</div>
+		<div class="card" style="max-width:560px">
+			<div class="card-head"><h2>New batch</h2></div>
+			<div class="card-body stack">
+				<div class="field">
+					<label for="c-name">Name</label>
+					<input
+						id="c-name"
+						class="input"
+						type="text"
+						placeholder="eBay — September"
+						data-bind:cart-name
+						data-on:keydown="evt.key === 'Enter' && @post('/carts')"
+					/>
+				</div>
+				<div class="field">
+					<label for="c-note">Note</label>
+					<input id="c-note" class="input" type="text" placeholder="what this batch is for" data-bind:cart-note/>
+				</div>
+				<div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click="@post('/carts')"
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span>Create batch</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// CartList is the batches table, morphed on its own when one is added.
+templ CartList(carts []core.Cart) {
+	<div id="cart-list">
+		if len(carts) == 0 {
+			@Empty("🧺", "No saved batches yet", "A batch is a selection you build up over time and then export as one file. Unlike a filter, what is in it does not change as stock moves — which is what makes it safe to send.") {
+			}
+		} else {
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col">Batch</th>
+							<th scope="col" class="num">Items</th>
+							<th scope="col">Last changed</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, c := range carts {
+							<tr>
+								<td>
+									<a class="row-title" href={ templ.SafeURL("/carts/" + c.ID) }>{ c.Name }</a>
+									if c.Note != "" {
+										<div class="row-sub">{ c.Note }</div>
+									}
+								</td>
+								<td class="num">{ itoa(c.Size()) }</td>
+								<td class="muted">{ c.UpdatedAt.Format("2 Jan 2006") }</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+// CartDetailScreen is one batch, with what will and will not be exported.
+templ CartDetailScreen(s CartScreen) {
+	<div class="stack">
+		<div id="cart-msg"></div>
+		<div class="card">
+			<div class="card-head">
+				<h2>Ready to send</h2>
+				<span class="spacer"></span>
+				<span class="faint">{ itoa(len(s.Send)) } of { itoa(s.Cart.Size()) }</span>
+			</div>
+			if len(s.Send) == 0 {
+				@Empty("📭", "Nothing in this batch is ready", "Every item is being held back for a reason listed below. Fix those and they will be included.") {
+				}
+			} else {
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col"><span class="sr-only">Photo</span></th>
+								<th scope="col">Item</th>
+								<th scope="col" class="num">Shop price</th>
+								<th scope="col"><span class="sr-only">Remove</span></th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, o := range s.Send {
+								@cartRow(s.Cart.ID, o, "")
+							}
+						</tbody>
+					</table>
+				</div>
+			}
+			<div class="card-body">
+				<div class="toolbar">
+					for _, p := range s.Profiles {
+						<a
+							class="btn btn-primary"
+							href={ templ.SafeURL("/export/" + p + ".csv?cart=" + s.Cart.ID) }
+							download
+						>Download { p } CSV</a>
+					}
+				</div>
+			</div>
+		</div>
+		if len(s.Held) > 0 {
+			<div class="card">
+				<div class="card-head">
+					<h2>Held back</h2>
+					<span class="spacer"></span>
+					<span class="faint">{ itoa(len(s.Held)) }</span>
+				</div>
+				<div class="card-body">
+					@Message("info", "These are in the batch but an export will not carry them. They are listed rather than dropped, because you chose each one by hand.")
+				</div>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col"><span class="sr-only">Photo</span></th>
+								<th scope="col">Item</th>
+								<th scope="col">Why not</th>
+								<th scope="col"><span class="sr-only">Remove</span></th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, o := range s.Held {
+								@cartRow(s.Cart.ID, o, s.HoldReason(o))
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+templ cartRow(cartID string, o core.Offer, reason string) {
+	<tr>
+		<td>
+			if o.PrimaryPhoto().ID != "" {
+				<img class="thumb" src={ o.PrimaryPhoto().PublicPath() } alt="" loading="lazy" width="40" height="40"/>
+			} else {
+				<span class="thumb thumb-empty" aria-hidden="true">📷</span>
+			}
+		</td>
+		<td>
+			<a class="row-title" href={ templ.SafeURL("/offers/" + o.ID) }>{ o.Title }</a>
+			<div class="row-sub code">{ o.SKU }</div>
+		</td>
+		if reason == "" {
+			<td class="num">{ o.Shop.String() }</td>
+		} else {
+			<td><span class="flag-nopricing">{ reason }</span></td>
+		}
+		<td>
+			<button
+				class="btn btn-ghost"
+				type="button"
+				aria-label={ "Remove " + o.Title + " from this batch" }
+				data-on:click={ "@delete('/carts/" + cartID + "/items/" + o.ID + "')" }
+			>Remove</button>
+		</td>
+	</tr>
+}
+
+// OfferCartsCard sits on the offer page and puts the item into a batch.
+//
+// It is a fragment so that adding or removing re-renders exactly this card.
+templ OfferCartsCard(d OfferDetail) {
+	<div class="card" id="offer-carts">
+		<div class="card-head">
+			<h2>Batches</h2>
+			<span class="spacer"></span>
+			<a class="btn btn-ghost" href="/carts">Manage</a>
+		</div>
+		<div class="card-body stack">
+			if len(d.Carts) == 0 {
+				<span class="faint">No saved batches yet.</span>
+				<a class="btn" href="/carts">Create one</a>
+			} else {
+				<div class="toolbar">
+					for _, c := range d.Carts {
+						if d.InCart(c.ID) {
+							<button
+								class="chip"
+								type="button"
+								aria-pressed="true"
+								data-on:click={ "@delete('/carts/" + c.ID + "/items/" + d.Row.Offer.ID + "?from=offer')" }
+							>{ c.Name }</button>
+						} else {
+							<button
+								class="chip"
+								type="button"
+								aria-pressed="false"
+								data-on:click={ "@post('/carts/" + c.ID + "/items/" + d.Row.Offer.ID + "')" }
+							>{ c.Name }</button>
+						}
+					}
+				</div>
+				<span class="hint">
+					A pressed batch already holds this item. An item can sit in more
+					than one, which is worth knowing before you send both.
+				</span>
+			}
+		</div>
+	</div>
+}

@@ -144,6 +144,44 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .skip:focus { left: 0; }
 
+/* ---------- inbox banner ---------- */
+
+/* Full width, above the shell, on every page and every screen size. Its job is
+   to interrupt somebody who is looking at something else, so it is not tucked
+   into the sidebar where a phone would never show it. */
+.inbox-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--pending-bg);
+  color: var(--pending);
+  border-bottom: 1px solid var(--pending);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.inbox-banner:hover { filter: brightness(.97); }
+.inbox-banner strong { font-variant-numeric: tabular-nums; }
+.inbox-go { margin-left: auto; font-weight: 600; white-space: nowrap; }
+
+/* A pulsing dot, so a banner that appears while the page is already open reads
+   as something that just happened rather than something that was always there.
+   It respects prefers-reduced-motion through the global rule above. */
+.inbox-dot {
+  width: 8px; height: 8px; flex: none;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse { 50% { opacity: .35; } }
+
+@media (max-width: 520px) {
+  /* The call to action is implied by the whole strip being a link, so on a
+     narrow screen the count is what survives. */
+  .inbox-go { display: none; }
+}
+
 /* ---------- shell ---------- */
 
 .shell {

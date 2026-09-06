@@ -69,7 +69,7 @@ templ WarehouseScreen(t LocationTree) {
 			<div class="card-head">
 				<h2>Storage</h2>
 				<span class="spacer"></span>
-				<a class="btn" href="/warehouse/new">Add a place</a>
+				@AddPlaceAction("")
 			</div>
 			if len(t.Nodes) == 0 {
 				@Empty("🏬", "No storage defined yet", "Start with a site — a building, a garage, a room in another city. You can add shelves and bins inside it later, without moving any stock.") {
@@ -85,6 +85,7 @@ templ WarehouseScreen(t LocationTree) {
 								<th scope="col">Held by</th>
 								<th scope="col">City</th>
 								<th scope="col" class="num">Items</th>
+								<th scope="col"><span class="sr-only">Actions</span></th>
 							</tr>
 						</thead>
 						<tbody>
@@ -111,6 +112,19 @@ templ WarehouseScreen(t LocationTree) {
 									<td class="num">
 										<a href={ templ.SafeURL("/offers?at=" + n.Location.Path) }>{ itoa(n.Stock) }</a>
 									</td>
+									<td>
+										<!--
+										  "Add" carries the row's own id, so the form opens
+										  already knowing where you are adding to. Without it
+										  the operator has to find, in a select box, the very
+										  place they just clicked beside.
+										-->
+										<a
+											class="btn btn-ghost"
+											href={ templ.SafeURL("/warehouse/new?parent=" + n.Location.ID) }
+											aria-label={ "Add a place inside " + n.Location.Path }
+										>Add inside</a>
+									</td>
 								</tr>
 							}
 						</tbody>
@@ -121,9 +135,22 @@ templ WarehouseScreen(t LocationTree) {
 	</div>
 }
 
+// AddPlaceAction is the top-bar button for adding storage. When parentID is set
+// the form opens with that place already chosen.
+templ AddPlaceAction(parentID string) {
+	if parentID == "" {
+		<a class="btn" href="/warehouse/new">Add a place</a>
+	} else {
+		<a class="btn" href={ templ.SafeURL("/warehouse/new?parent=" + parentID) }>Add a place</a>
+	}
+}
+
 // NewLocationScreen adds a node to the storage tree.
-templ NewLocationScreen(parents []core.Location) {
-	<div class="stack" data-signals="{locParent: '', locKind: 'site', locCode: '', locLabel: '', locCustodian: '', locContact: '', locCity: '', locCountry: ''}">
+//
+// preset is the enclosing place chosen on the previous screen; empty means the
+// operator is adding a new site.
+templ NewLocationScreen(parents []core.Location, preset string) {
+	<div class="stack" data-signals={ newLocationSignals(preset) }>
 		<div id="loc-msg"></div>
 		<div class="card" style="max-width:640px">
 			<div class="card-head"><h2>Add a place</h2></div>
@@ -151,7 +178,7 @@ templ NewLocationScreen(parents []core.Location) {
 				<div class="grid-2">
 					<div class="field">
 						<label for="l-code">Code</label>
-						<input id="l-code" class="input" type="text" placeholder="A000005" data-bind:loc-code/>
+						<input id="l-code" class="input" type="text" placeholder="A000005" autofocus data-bind:loc-code/>
 						<span class="hint">What is written on the shelf. No slashes.</span>
 					</div>
 					<div class="field">
@@ -199,22 +226,36 @@ templ NewLocationScreen(parents []core.Location) {
 	</div>
 }
 
-// ExportScreen builds a marketplace CSV.
-templ ExportScreen(profiles []string, base string, absolute bool) {
+// newLocationSignals seeds the add-a-place form.
+//
+// When a parent was chosen the default KIND changes too, from "site" to "shelf".
+// A site is a root and cannot sit inside anything, so leaving the default at
+// "site" beside a preselected parent would offer a combination the domain
+// refuses — a form whose default state is invalid.
+func newLocationSignals(preset string) string {
+	kind := "site"
+	if preset != "" {
+		kind = "shelf"
+	}
+	return "{locParent: " + jsString(preset) + ", locKind: " + jsString(kind) +
+		", locCode: '', locLabel: '', locCustodian: '', locContact: '', locCity: '', locCountry: ''}"
+}
+
+// ExportScreen builds a marketplace CSV, either of everything sellable or of one
+// saved batch.
+templ ExportScreen(profiles []string, base string, absolute bool, carts []core.Cart) {
 	<div class="stack">
 		if !absolute {
 			@Message("error", "PUBLIC_BASE_URL is not an absolute http(s) URL, so photo links in an export would not resolve. A marketplace fetches images from its own servers and reports no error when they fail — fix this before exporting.")
 		}
-		<div class="card" style="max-width:640px">
-			<div class="card-head"><h2>Export</h2></div>
+		<div class="card" style="max-width:720px">
+			<div class="card-head"><h2>Export everything sellable</h2></div>
 			<div class="card-body stack">
 				<p class="muted">
 					Only offers that are listed or pending are exported. Drafts and
 					archived items are left out, and the owner's price is never included.
 				</p>
-				<div class="field">
-					<span class="hint">Photo links will be built from <code class="code">{ base }</code></span>
-				</div>
+				<span class="hint">Photo links will be built from <code class="code">{ base }</code></span>
 				<div class="toolbar">
 					for _, p := range profiles {
 						<a class="btn btn-primary" href={ templ.SafeURL("/export/" + p + ".csv") } download>
@@ -223,6 +264,50 @@ templ ExportScreen(profiles []string, base string, absolute bool) {
 					}
 				</div>
 			</div>
+		</div>
+		<div class="card" style="max-width:720px">
+			<div class="card-head">
+				<h2>Export a saved batch</h2>
+				<span class="spacer"></span>
+				<a class="btn btn-ghost" href="/carts">Manage batches</a>
+			</div>
+			if len(carts) == 0 {
+				@Empty("🧺", "No saved batches", "A batch is a selection you build up over time and then send as one file. Unlike a filter, its contents do not change underneath you.") {
+					<a class="btn btn-primary" href="/carts">Create one</a>
+				}
+			} else {
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col">Batch</th>
+								<th scope="col" class="num">Items</th>
+								<th scope="col">Download</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, c := range carts {
+								<tr>
+									<td>
+										<a class="row-title" href={ templ.SafeURL("/carts/" + c.ID) }>{ c.Name }</a>
+										if c.Note != "" {
+											<div class="row-sub">{ c.Note }</div>
+										}
+									</td>
+									<td class="num">{ itoa(c.Size()) }</td>
+									<td>
+										<div class="toolbar">
+											for _, p := range profiles {
+												<a class="btn btn-ghost" href={ templ.SafeURL("/export/" + p + ".csv?cart=" + c.ID) } download>{ p }</a>
+											}
+										</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			}
 		</div>
 	</div>
 }
@@ -234,40 +319,7 @@ templ UsersScreen(u Users) {
 		<div id="users-msg"></div>
 		<div class="card">
 			<div class="card-head"><h2>Accounts</h2></div>
-			<div class="table-wrap">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col">Name</th>
-							<th scope="col">Email</th>
-							<th scope="col">Role</th>
-							<th scope="col">State</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, m := range u.Users {
-							<tr>
-								<td>{ m.Name() }</td>
-								<td class="code">{ m.Email }</td>
-								<td class="muted">
-									if m.IsAdmin {
-										Administrator
-									} else {
-										Staff
-									}
-								</td>
-								<td>
-									if m.Active() {
-										<span class="badge badge-listed">Active</span>
-									} else {
-										<span class="badge badge-archived">Disabled</span>
-									}
-								</td>
-							</tr>
-						}
-					</tbody>
-				</table>
-			</div>
+			@UserTable(u.Users)
 		</div>
 		<div class="card" style="max-width:560px">
 			<div class="card-head"><h2>Add an account</h2></div>
