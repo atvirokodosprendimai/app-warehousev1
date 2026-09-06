@@ -27,6 +27,14 @@ go.work.sum
 # env file
 .env
 
+# Runtime state. DB_PATH and PHOTOS_DIR default under data/, so simply running
+# the binary from the repository root creates these — which is how the database
+# and a directory of uploaded photographs got committed once already.
+data/
+*.db
+*.db-shm
+*.db-wal
+
 # Editor/IDE
 # .idea/
 # .vscode/
