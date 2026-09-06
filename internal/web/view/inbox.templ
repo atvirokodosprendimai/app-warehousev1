@@ -246,10 +246,21 @@ templ submissionPhotos(d SubmissionDetail) {
 			<div class="photos">
 				for i, p := range d.Submission.Photos {
 					<figure class="photo">
-						<img src={ p.PublicPath() } alt={ photoAlt(d.Submission.Title, i) } loading="lazy" width="104" height="104"/>
-						if i == 0 {
-							<span class="photo-primary">MAIN</span>
-						}
+						<!-- Same reasoning as the offer editor: the thumbnail is cropped,
+						     so it links to the original and lets the phone's own viewer
+						     do the zooming. -->
+						<a
+							class="photo-view"
+							href={ templ.SafeURL(p.PublicPath()) }
+							target="_blank"
+							rel="noopener"
+							aria-label={ "Open " + photoAlt(d.Submission.Title, i) + " at full size" }
+						>
+							<img src={ p.PublicPath() } alt={ photoAlt(d.Submission.Title, i) } loading="lazy" width="104" height="104"/>
+							if i == 0 {
+								<span class="photo-primary">MAIN</span>
+							}
+						</a>
 					</figure>
 				}
 				if d.Submission.Status != core.SubmissionAccepted {

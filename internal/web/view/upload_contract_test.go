@@ -139,6 +139,81 @@ func TestSubmissionPhotoUploadSatisfiesDatastarsFormContract(t *testing.T) {
 	assertFormUploadContract(t, "submission photos card", renderString(t, SubmissionBody(d)))
 }
 
+// TestPhotoThumbnailsOpenTheOriginal pins the only way to magnify a photograph.
+//
+// The thumbnail is rendered at 104px with object-fit:cover, so it is a CROP —
+// the strip cannot show the whole image at any zoom level, and on a phone a bare
+// <img> leaves no way to see the rest of it. Linking to the stored original
+// hands magnification to the browser's own image viewer, which does pinch-zoom,
+// double-tap and save without a line of our code.
+//
+// This is asserted rather than left to review because it is invisible to every
+// server-side check: an <img> and a linked <img> serve identical bytes, return
+// identical status codes, and differ only in what a person can do with them.
+func TestPhotoThumbnailsOpenTheOriginal(t *testing.T) {
+	photo := core.Photo{ID: "11111111-1111-1111-1111-111111111111", ContentType: "image/jpeg"}
+
+	cases := map[string]string{
+		"offer photos": renderString(t, OfferPhotosCard(OfferDetail{
+			Row: OfferRow{Offer: core.Offer{ID: "o1", Title: "Lamp", Photos: []core.Photo{photo}}},
+		})),
+		"submission photos": renderString(t, SubmissionBody(SubmissionDetail{
+			Submission: core.Submission{ID: "s1", Title: "Chair", Photos: []core.Photo{photo}},
+		})),
+	}
+
+	for name, html := range cases {
+		i := strings.Index(html, `<img src="`+photo.PublicPath())
+		if i < 0 {
+			t.Errorf("%s: the thumbnail is missing entirely", name)
+			continue
+		}
+		// The nearest preceding tag must be the opening anchor.
+		open := strings.LastIndex(html[:i], "<a ")
+		if open < 0 {
+			t.Errorf("%s: the thumbnail is not wrapped in a link, so there is no way to "+
+				"see the photograph at full size — the tile is a crop", name)
+			continue
+		}
+		anchor := html[open:i]
+		if !strings.Contains(anchor, `href="`+photo.PublicPath()+`"`) {
+			t.Errorf("%s: the link does not point at the stored original: %s", name, anchor)
+		}
+		// Same-tab navigation would discard unsaved signal state on the offer
+		// editor — the title, description and prices the operator has typed.
+		if !strings.Contains(anchor, `target="_blank"`) {
+			t.Errorf("%s: the photo link is not target=_blank, so opening it would "+
+				"navigate away and discard unsaved edits", name)
+		}
+		if !strings.Contains(anchor, `rel="noopener"`) {
+			t.Errorf("%s: target=_blank without rel=noopener", name)
+		}
+	}
+}
+
+// TestRemoveIsNotNestedInsideThePhotoLink guards both a mobile hazard and valid
+// HTML: a <button> inside an <a> is invalid, and an overlaid destructive control
+// sits exactly where a thumb taps to view.
+func TestRemoveIsNotNestedInsideThePhotoLink(t *testing.T) {
+	html := renderString(t, OfferPhotosCard(OfferDetail{
+		Row: OfferRow{Offer: core.Offer{
+			ID: "o1", Title: "Lamp",
+			Photos: []core.Photo{{ID: "11111111-1111-1111-1111-111111111111", ContentType: "image/jpeg"}},
+		}},
+	}))
+
+	del := strings.Index(html, `class="photo-del"`)
+	if del < 0 {
+		t.Fatal("no remove control found, so this test asserts nothing")
+	}
+	openA := strings.LastIndex(html[:del], "<a ")
+	closeA := strings.LastIndex(html[:del], "</a>")
+	if openA > closeA {
+		t.Error("the remove button is nested inside the photo link: invalid HTML, and " +
+			"a destructive control sitting on the tap target that opens the photo")
+	}
+}
+
 // TestNoFormsOutsideFileUpload guards the other half of the team rule: forms are
 // permitted for file upload and nowhere else.
 //

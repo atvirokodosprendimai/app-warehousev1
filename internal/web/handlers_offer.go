@@ -238,7 +238,7 @@ func (a *App) offerDetail(r *http.Request, id string) (view.OfferDetail, error) 
 		Row:        a.row(r.Context(), o),
 		Locations:  locs,
 		Currencies: core.KnownCurrencies(),
-		PublicBase: a.Cfg.PublicBaseURL,
+		PublicBase: a.publicBase(r.Context()),
 	}
 
 	// The editor asks its own stream to carry this offer's cards as well, so a

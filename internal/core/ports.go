@@ -236,6 +236,25 @@ type SubmissionFilter struct {
 	Offset int
 }
 
+// SettingsReader loads the deployment values an administrator can change.
+type SettingsReader interface {
+	// Settings returns the stored values. A fresh installation has none, and
+	// that is a zero value rather than an error — the caller falls back to its
+	// configured default.
+	Settings(ctx context.Context) (Settings, error)
+}
+
+// SettingsWriter stores them.
+type SettingsWriter interface {
+	SaveSettings(ctx context.Context, s Settings) error
+}
+
+// SettingsStore is both halves.
+type SettingsStore interface {
+	SettingsReader
+	SettingsWriter
+}
+
 // BlobStore holds photo bytes. It is separate from the database because image
 // blobs and row data have different backup and serving needs.
 type BlobStore interface {

@@ -71,6 +71,32 @@ type App struct {
 	Submissions core.SubmissionReader
 	// Submission is the proposal write side.
 	Submission SubmissionService
+
+	// Settings holds the deployment values an administrator can change while the
+	// application is running.
+	Settings core.SettingsStore
+}
+
+// publicBase returns the origin a marketplace fetches photographs from.
+//
+// The STORED setting wins over the environment, because the environment is set
+// by whoever starts the process and the mistake is usually noticed by somebody
+// else, after an export has already gone out. Falling back to the environment
+// keeps a deployment that never opens the settings page working exactly as it
+// did before.
+//
+// A read failure falls back rather than erroring: a photograph link built from a
+// stale-but-configured origin is repairable, and refusing to render the page at
+// all because a settings row could not be read is not.
+func (a *App) publicBase(ctx context.Context) string {
+	if a.Settings != nil {
+		if s, err := a.Settings.Settings(ctx); err == nil && s.PublicBaseURL != "" {
+			return s.PublicBaseURL
+		} else if err != nil {
+			a.Log.Warn("settings unreadable, using the configured default", "err", err)
+		}
+	}
+	return a.Cfg.PublicBaseURL
 }
 
 // CartService is the slice of the cart write side the HTTP layer uses.

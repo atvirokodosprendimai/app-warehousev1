@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -183,7 +184,7 @@ func (a *App) GetPhoto(w http.ResponseWriter, r *http.Request) {
 // GetExport renders the export screen.
 func (a *App) GetExport(w http.ResponseWriter, r *http.Request) {
 	p := a.page(r, "Export", "export")
-	base := a.Cfg.PublicBaseURL
+	base := a.publicBase(r.Context())
 	absolute := strings.HasPrefix(base, "http://") || strings.HasPrefix(base, "https://")
 
 	carts, err := a.Carts.Carts(r.Context())
@@ -199,16 +200,16 @@ func (a *App) GetExport(w http.ResponseWriter, r *http.Request) {
 	send, held := a.catalogue(r)
 
 	_ = view.PageShell(p, nil,
-		view.ExportScreen(a.exportProfiles(), base, absolute, carts, len(send), held)).Render(r.Context(), w)
+		view.ExportScreen(a.exportProfiles(r.Context()), base, absolute, carts, len(send), held)).Render(r.Context(), w)
 }
 
 // exportOptions builds the marketplace settings for an export run.
-func (a *App) exportOptions() export.Options {
+func (a *App) exportOptions(ctx context.Context) export.Options {
 	opt := a.Cfg.Export
 	if opt.Currency == "" {
 		opt.Currency = core.BaseCurrency
 	}
-	opt.BaseURL = a.Cfg.PublicBaseURL
+	opt.BaseURL = a.publicBase(ctx)
 	return opt
 }
 
@@ -225,8 +226,8 @@ func (a *App) exportOptions() export.Options {
 // copy goes stale the first time a profile gains a required field: the page
 // would go on offering a download that then fails with a raw 400, which is the
 // exact defect this replaces.
-func (a *App) exportProfiles() []view.ExportProfile {
-	opt := a.exportOptions()
+func (a *App) exportProfiles(ctx context.Context) []view.ExportProfile {
+	opt := a.exportOptions(ctx)
 	out := make([]view.ExportProfile, 0, len(export.Names()))
 
 	for _, name := range export.Names() {
@@ -280,7 +281,7 @@ func (a *App) GetExportFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opt := a.exportOptions()
+	opt := a.exportOptions(r.Context())
 
 	// Render into memory first. Write streams straight to w, and a failure
 	// halfway through would otherwise leave a 200 carrying half a catalogue that

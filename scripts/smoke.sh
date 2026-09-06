@@ -305,6 +305,36 @@ check "the agreed note is kept on the submission" "agreed 20 EUR, collecting Tue
 curl -fsS -b "$COOKIES" "$BASE/" -o "$RUN/dash3.html"
 absent "the banner clears once nothing is waiting" "new submission waiting" "$RUN/dash3.html"
 
+echo "== the public domain is settable, and it reaches the export =="
+curl -fsS -b "$COOKIES" "$BASE/settings" -o "$RUN/settings.html"
+check "settings shows the address in use" "$BASE" "$RUN/settings.html"
+check "and warns a marketplace cannot fetch from it" "only resolves on this machine" "$RUN/settings.html"
+
+curl -s -b "$STAFF" "$BASE/settings" -o /dev/null -w '%{http_code}' > "$RUN/staffset.code"
+check "staff cannot open settings" "403" "$RUN/staffset.code"
+
+# A trailing slash is sent on purpose: the value must come back normalised, and
+# the box must show what was STORED rather than what was typed.
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
+  -d '{"setPublicBase":"https://warehouse.example.com/"}' -o "$RUN/setpost.txt"
+check "domain saved, trailing slash removed" "https://warehouse.example.com<" "$RUN/setpost.txt"
+absent "the unreachable warning clears once a real domain is set" "only resolves on this machine" "$RUN/setpost.txt"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
+  -d '{"setPublicBase":"warehouse.example.com"}' -o "$RUN/setbad.txt"
+check "an address with no scheme is refused" "must be an absolute address" "$RUN/setbad.txt"
+
+# ★ The point of the whole feature: the stored domain must reach the exported
+# file. Without this the setting could save, display correctly, and change
+# nothing that anybody outside this machine ever sees.
+curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv" -o "$RUN/shopify2.csv"
+check "the export now builds photo links from the saved domain" "https://warehouse.example.com/p/" "$RUN/shopify2.csv"
+absent "and no longer from the start-up default" "$BASE/p/" "$RUN/shopify2.csv"
+
+# Put it back, so anything added after this still sees a fetchable address.
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
+  -d "{\"setPublicBase\":\"$BASE\"}" -o /dev/null
+
 echo "== auth boundary =="
 curl -s "$BASE/offers" -o /dev/null -w '%{http_code}' > "$RUN/anon.code"
 check "anonymous is redirected away from offers" "303" "$RUN/anon.code"

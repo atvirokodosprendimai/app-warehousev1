@@ -22,6 +22,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/fx"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/settings"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/submission"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web"
@@ -79,6 +80,7 @@ func run(log *slog.Logger) error {
 	rates := fx.NewRepo(db.Read, db.Write)
 	carts := cart.NewRepo(db.Read, db.Write)
 	subs := submission.NewRepo(db.Read, db.Write)
+	conf := settings.NewRepo(db.Read, db.Write)
 
 	// Services own the write rules.
 	authSvc := auth.NewService(users)
@@ -120,6 +122,7 @@ func run(log *slog.Logger) error {
 		Rates:       rates,
 		Carts:       carts,
 		Submissions: subs,
+		Settings:    conf,
 		Auth:        authSvc,
 		Offer:       offerSvc,
 		Location:    locationSvc,

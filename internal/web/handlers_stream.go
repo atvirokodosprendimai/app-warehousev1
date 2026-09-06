@@ -46,6 +46,18 @@ func (a *App) GetStream(w http.ResponseWriter, r *http.Request) {
 		offerEvents = ch
 	}
 
+	// ⚠ Logged HERE rather than left to the request logger, which writes when a
+	// response FINISHES. This one finishes when the tab closes, so on a busy
+	// afternoon the single longest-lived request on every page would be the one
+	// piece of traffic that never appeared while it was happening.
+	a.Log.Info("stream opened",
+		"user", u.Email,
+		"offer", offerID,
+		"inbox", u.IsAdmin,
+		"ip", r.RemoteAddr,
+	)
+	defer a.Log.Info("stream closed", "user", u.Email, "offer", offerID)
+
 	sse := render.NewSSE(w, r)
 	ticker := time.NewTicker(render.Heartbeat)
 	defer ticker.Stop()

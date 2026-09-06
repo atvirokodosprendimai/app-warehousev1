@@ -26,6 +26,9 @@ func (a *App) Routes() http.Handler {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	// RequestLogger before Recoverer, so a panic is recorded against its request
+	// with the request_id attached rather than only as Recoverer's stack dump.
+	r.Use(middleware.RequestLogger(slogFormatter{log: a.Log}))
 	r.Use(middleware.Recoverer)
 	// The session middleware must wrap everything that reads a session, which is
 	// everything: the sign-in page writes one and the rest read it.
@@ -104,6 +107,8 @@ func (a *App) Routes() http.Handler {
 		r.Use(a.requireUser, a.requireAdmin)
 
 		r.Get("/inbox", a.GetInbox)
+		r.Get("/settings", a.GetSettings)
+		r.Post("/settings", a.PostSettings)
 		r.Post("/submit/{id}/review", a.PostStartReview)
 		r.Post("/submit/{id}/decline", a.PostDecline)
 		r.Post("/submit/{id}/accept", a.PostAccept)

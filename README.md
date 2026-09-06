@@ -70,6 +70,18 @@ registration: every later account is created by an administrator.
 export. A marketplace that cannot fetch an image does not report an error — it
 just produces a listing with no pictures.
 
+It is only the **start-up default**: an administrator can set the domain at
+**Settings**, it takes effect immediately without a restart, and it survives one.
+That page also says plainly when the address in use only resolves on this
+machine — which is the state a fresh install is in, and the state that silently
+ruins an export.
+
+Requests are logged to the same structured stream as everything else, at INFO,
+so a default run shows ordinary traffic rather than hiding it behind a debug
+flag. SSE streams log when they open as well as when they close: they last as
+long as the tab, so completion-only logging would make the longest-lived request
+on every page the one you could never see arriving.
+
 ## How it is put together
 
     cmd/warehouse      the binary: config, wiring, routes

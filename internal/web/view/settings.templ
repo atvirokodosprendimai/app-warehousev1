@@ -1,0 +1,124 @@
+package view
+
+import "time"
+
+// SettingsView is the deployment-settings screen.
+type SettingsView struct {
+	Page Page
+	// Current is the origin photo addresses are ACTUALLY built from right now,
+	// whatever its source. It is the question an operator is really asking.
+	Current string
+	// FromEnvironment is the start-up default, shown so it is obvious whether the
+	// stored value is doing anything or the deployment is still on its default.
+	FromEnvironment string
+	// Stored is the saved override, empty when none has been set.
+	Stored string
+	// UpdatedAt is when it was saved.
+	UpdatedAt time.Time
+	// Reachable reports whether the current origin could be fetched from outside
+	// this machine. False is a warning, never a refusal.
+	Reachable bool
+	// Note is a message to show after a save.
+	Note string
+}
+
+// Source describes where the effective value came from, in one phrase.
+func (s SettingsView) Source() string {
+	if s.Stored != "" && s.Stored == s.Current {
+		return "set here"
+	}
+	return "from the environment at start-up"
+}
+
+// SettingsScreen is the whole page.
+templ SettingsScreen(s SettingsView) {
+	<div class="stack" data-signals={ "{setPublicBase: " + jsString(settingsBoxValue(s)) + "}" }>
+		<div id="settings-msg"></div>
+		@SettingsPanel(s)
+	</div>
+}
+
+// settingsBoxValue is what the input starts with.
+//
+// The EFFECTIVE value, not the stored one: on a fresh installation the stored
+// value is empty and the box would be blank over a working deployment, which
+// reads as "nothing is configured" when something is. Pre-filling with what is
+// actually in use also makes the commonest edit — correcting a domain — a change
+// rather than a retype.
+func settingsBoxValue(s SettingsView) string {
+	if s.Stored != "" {
+		return s.Stored
+	}
+	return s.Current
+}
+
+// SettingsPanel is a fragment so a save re-renders it with the NORMALISED value,
+// rather than leaving whatever was typed in the box.
+templ SettingsPanel(s SettingsView) {
+	<div id="settings-panel" class="stack">
+		<div class="card" style="max-width:640px">
+			<div class="card-head"><h2>Public address</h2></div>
+			<div class="card-body stack">
+				<p class="muted">
+					The domain this warehouse is reachable at from the internet. Shopify
+					and eBay fetch photographs from their own servers, so every image
+					address in an export is built by appending to this.
+				</p>
+				if s.Note != "" {
+					@Message("ok", s.Note)
+				}
+				<div>
+					<span class="tile-label">In use now</span>
+					<div class="tile-value" style="font-size:18px">
+						<code class="code">{ s.Current }</code>
+					</div>
+					<span class="hint">{ s.Source() }</span>
+				</div>
+				if !s.Reachable {
+					@Message("error", "A marketplace cannot fetch photographs from "+s.Current+" — it only resolves on this machine. Exports will produce listings with no pictures, and no marketplace reports that as an error. Set the domain this warehouse is published at.")
+				}
+				<div class="field">
+					<label for="pub-base">Domain</label>
+					<input
+						id="pub-base"
+						class="input"
+						type="url"
+						inputmode="url"
+						autocomplete="url"
+						spellcheck="false"
+						placeholder="https://warehouse.example.com"
+						data-bind:set-public-base
+						data-on:keydown="evt.key === 'Enter' && @post('/settings')"
+					/>
+					<span class="hint">
+						Just the origin — scheme and host, no path. A trailing slash is
+						removed for you.
+					</span>
+				</div>
+				<div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click="@post('/settings')"
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span>Save address</span>
+					</button>
+				</div>
+				if s.Stored != "" {
+					<span class="faint">
+						Saved { s.UpdatedAt.Format("2 Jan 2006 15:04") } UTC. The start-up
+						default was <code class="code">{ s.FromEnvironment }</code>.
+					</span>
+				} else {
+					<span class="faint">
+						Nothing saved yet, so the start-up default is in use. Setting it
+						here takes effect immediately and survives a restart.
+					</span>
+				}
+			</div>
+		</div>
+	</div>
+}

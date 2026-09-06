@@ -229,16 +229,45 @@ templ OfferPhotosCard(d OfferDetail) {
 			<div class="photos">
 				for i, p := range d.Row.Offer.Photos {
 					<figure class="photo">
-						<img src={ p.PublicPath() } alt={ photoAlt(d.Row.Offer.Title, i) } loading="lazy" width="104" height="104"/>
-						if i == 0 {
-							<span class="photo-primary">MAIN</span>
-						}
+						<!--
+						  The thumbnail is a LINK to the stored original, not a
+						  decoration. object-fit:cover crops it to a square, so the strip
+						  can never show the whole photograph — and on a phone there was
+						  otherwise no way to see the rest of it, let alone magnify it.
+						  Opening the file hands the job to the browser's own image
+						  viewer, which already does pinch-zoom, double-tap and save,
+						  and needs no code from us to be right on every device.
+
+						  target=_blank is load-bearing rather than habit: this page
+						  keeps unsaved edits (title, description, prices) in datastar
+						  signals, so navigating away in the same tab would silently
+						  discard whatever the operator had typed.
+						-->
+						<a
+							class="photo-view"
+							href={ templ.SafeURL(p.PublicPath()) }
+							target="_blank"
+							rel="noopener"
+							aria-label={ "Open " + photoAlt(d.Row.Offer.Title, i) + " at full size" }
+						>
+							<img src={ p.PublicPath() } alt={ photoAlt(d.Row.Offer.Title, i) } loading="lazy" width="104" height="104"/>
+							if i == 0 {
+								<span class="photo-primary">MAIN</span>
+							}
+						</a>
+						<!--
+						  Remove sits BELOW the image rather than over it. At 24px in the
+						  corner of a 104px tile it was both under the 44px touch target
+						  this application holds itself to and directly in the way of the
+						  tap that opens the photo — on a phone that is a destructive
+						  action a thumb finds by accident.
+						-->
 						<button
 							class="photo-del"
 							type="button"
-							aria-label={ "Remove photo " + itoa(i+1) }
+							aria-label={ "Remove " + photoAlt(d.Row.Offer.Title, i) }
 							data-on:click={ "@delete('/photos/" + p.ID + "?offer=" + d.Row.Offer.ID + "')" }
-						>×</button>
+						>Remove</button>
 					</figure>
 				}
 				<!--
