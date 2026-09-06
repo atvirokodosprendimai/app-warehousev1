@@ -153,9 +153,10 @@ func (r *Repo) Offers(ctx context.Context, f core.OfferFilter) ([]core.Offer, er
 // tested — without a database round trip in the way.
 func listQuery(f core.OfferFilter) (string, []any) {
 	var (
-		join  string
-		where []string
-		args  []any
+		join   string
+		where  []string
+		args   []any
+		ranked bool
 	)
 
 	if len(f.Status) > 0 {
@@ -174,20 +175,34 @@ func listQuery(f core.OfferFilter) (string, []any) {
 		// match the unrelated subtree "AXB", silently widening a filter the
 		// operator wrote to narrow. ESCAPE '\' declares the escape character
 		// that [likeEscape] applied.
-		join = " JOIN locations l ON l.id = o.location_id"
+		join += " JOIN locations l ON l.id = o.location_id"
 		where = append(where, `l.path LIKE ? ESCAPE '\'`)
 		args = append(args, likeEscape(p)+"%")
 	}
 
 	if q := strings.TrimSpace(f.Query); q != "" {
-		// Same escaping for the same reason: a search for the literal "A_B"
-		// must not return every three-character SKU. LIKE is SQLite's
-		// case-insensitive comparison for ASCII, which is what the port asks
-		// for; it does not fold non-ASCII case, and adding a collation for that
-		// is a decision for whoever needs it.
-		pat := "%" + likeEscape(q) + "%"
-		where = append(where, `(o.sku LIKE ? ESCAPE '\' OR o.title LIKE ? ESCAPE '\' OR o.description LIKE ? ESCAPE '\')`)
-		args = append(args, pat, pat, pat)
+		// Full text, not LIKE. A substring match cannot answer "brass lamp" for a
+		// row titled "Lamp, brass" — both words are present, in the wrong order
+		// and split across fields, which is the ordinary shape of a search box
+		// query rather than an edge case. The index is external-content, so it
+		// reads its columns back from `offers` and there is no second copy of
+		// every description to keep honest.
+		join += " JOIN offers_fts fts ON fts.rowid = o.rowid"
+		where = append(where, "offers_fts MATCH ?")
+		args = append(args, ftsQuery(q))
+		ranked = true
+	}
+
+	// A price bound also pins the currency. Minor units are only comparable
+	// within one — 5000 is 50 EUR and also 5000 JPY — so a bound that ignored it
+	// would compare against the wrong scale and quietly return the wrong stock.
+	if f.PriceMin != nil {
+		where = append(where, "o.shop_currency = ? AND o.shop_minor >= ?")
+		args = append(args, f.PriceMin.Currency, f.PriceMin.Minor)
+	}
+	if f.PriceMax != nil {
+		where = append(where, "o.shop_currency = ? AND o.shop_minor <= ?")
+		args = append(args, f.PriceMax.Currency, f.PriceMax.Minor)
 	}
 
 	if f.NeedsPricing {
@@ -209,13 +224,44 @@ func listQuery(f core.OfferFilter) (string, []any) {
 	if offset < 0 {
 		offset = 0
 	}
-	// id breaks the tie so that two offers taken in during the same second come
-	// back in a stable order; without it a page boundary could show one row
-	// twice and skip another.
-	q += " ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?"
+
+	// A search orders by relevance; a plain listing orders by recency. Ordering
+	// search results by date instead would bury an exact title match under
+	// whatever happened to be taken in this morning. id breaks either tie, so
+	// that two offers sharing a rank or a second come back in a stable order —
+	// without it a page boundary can show one row twice and skip another.
+	order := " ORDER BY o.created_at DESC, o.id DESC"
+	if ranked {
+		order = " ORDER BY fts.rank, o.id DESC"
+	}
+	q += order + " LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 
 	return q, args
+}
+
+// ftsQuery turns what somebody typed into an FTS5 query.
+//
+// ⚠ The raw string CANNOT be passed through. FTS5 MATCH takes a query language,
+// not a phrase: a bare `"` is a syntax error that fails the whole search, and
+// bare words like AND, OR, NOT and NEAR are OPERATORS — so searching for the
+// word "not" would either error or mean something entirely different from what
+// was typed.
+//
+// Every token is therefore quoted, which makes it a literal, and given a `*` so
+// that a half-typed word still matches. Tokens are joined with AND because
+// adding a word to a search should narrow it; OR would make every extra word
+// return more, which is the opposite of what anyone expects.
+func ftsQuery(s string) string {
+	fields := strings.Fields(s)
+	terms := make([]string, 0, len(fields))
+	for _, w := range fields {
+		// A double quote inside a quoted FTS5 string is escaped by doubling it,
+		// the same as in SQL.
+		w = strings.ReplaceAll(w, `"`, `""`)
+		terms = append(terms, `"`+w+`"*`)
+	}
+	return strings.Join(terms, " AND ")
 }
 
 // CountByStatus returns how many offers sit in each status.

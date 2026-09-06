@@ -5,7 +5,6 @@ import (
 
 	"github.com/starfederation/datastar-go/datastar"
 
-	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/render"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/view"
 )
@@ -75,7 +74,7 @@ func (a *App) GetCart(w http.ResponseWriter, r *http.Request) {
 		Cart:     cart,
 		Send:     send,
 		Held:     held,
-		Profiles: export.Names(),
+		Profiles: a.exportProfiles(),
 	}
 	_ = view.PageShell(s.Page, nil, view.CartDetailScreen(s)).Render(r.Context(), w)
 }
@@ -151,7 +150,7 @@ func (a *App) repaintCart(w http.ResponseWriter, r *http.Request, cartID string)
 		Cart:     cart,
 		Send:     send,
 		Held:     held,
-		Profiles: export.Names(),
+		Profiles: a.exportProfiles(),
 	}
 	sse := render.NewSSE(w, r)
 	// The whole screen rather than a row: removing an item can move others

@@ -80,16 +80,73 @@ templ offerRow(r OfferRow, showOwner bool) {
 	</tr>
 }
 
-// OffersScreen is the full offers listing with its filter toolbar.
+// OffersScreen is the full offers listing with its search and filter toolbar.
+//
+// The STATUS filters are links, because a filtered listing is a distinct URL
+// worth bookmarking and sharing. The SEARCH BOX is not: it changes on every
+// keystroke, and a URL per keystroke would fill the history with rubbish. So the
+// text and price inputs are bound signals that ask the server for a new table on
+// a debounce, and only the table is replaced.
 templ OffersScreen(l OfferList) {
-	<div class="stack">
+	<div class="stack" data-signals={ searchSignals(l) }>
 		<div class="card">
 			<div class="card-head">
-				<h2>Filter</h2>
+				<h2>Find</h2>
 				<span class="spacer"></span>
-				<span class="faint">{ itoa(l.Total) } matching</span>
+				<span class="faint" id="offer-count">{ itoa(l.Total) } matching</span>
 			</div>
-			<div class="card-body">
+			<div class="card-body stack">
+				<div class="field">
+					<label for="q">Search</label>
+					<input
+						id="q"
+						class="input"
+						type="search"
+						placeholder="brass lamp"
+						autocomplete="off"
+						data-bind:search-query
+						data-on:input__debounce.300ms={ "@get('" + l.RowsPath() + "')" }
+						data-indicator:_finding
+					/>
+					<span class="hint">
+						Looks in the reference, title, description and condition. Words may
+						be in any order, and a half-typed word still matches.
+					</span>
+				</div>
+				<div class="grid-2">
+					<div class="field">
+						<label for="pmin">Price from</label>
+						<input
+							id="pmin"
+							class="input"
+							type="text"
+							inputmode="decimal"
+							placeholder="any"
+							data-bind:price-min
+							data-on:input__debounce.400ms={ "@get('" + l.RowsPath() + "')" }
+						/>
+					</div>
+					<div class="field">
+						<label for="pmax">Price to</label>
+						<div class="money-row">
+							<input
+								id="pmax"
+								class="input"
+								type="text"
+								inputmode="decimal"
+								placeholder="any"
+								data-bind:price-max
+								data-on:input__debounce.400ms={ "@get('" + l.RowsPath() + "')" }
+							/>
+							<select class="select" aria-label="Price filter currency" data-bind:price-currency data-on:change={ "@get('" + l.RowsPath() + "')" }>
+								for _, c := range l.Currencies {
+									<option value={ c }>{ c }</option>
+								}
+							</select>
+						</div>
+						<span class="hint">A price range only matches offers priced in that currency.</span>
+					</div>
+				</div>
 				<div class="toolbar" role="group" aria-label="Filter by status">
 					@filterChip("/offers", "All", !l.Filter.NeedsPricing && len(l.Filter.Status) == 0)
 					for _, s := range core.Statuses() {
@@ -97,10 +154,48 @@ templ OffersScreen(l OfferList) {
 					}
 					@filterChip("/offers?needs_pricing=1", "Needs pricing", l.Filter.NeedsPricing)
 				</div>
+				<div data-show="$_finding" style="display:none" class="msg msg-info">
+					<span class="spinner" aria-hidden="true"></span>
+					<span>Searching…</span>
+				</div>
 			</div>
 		</div>
 		@OfferTable("offer-list", l.Rows, true)
 	</div>
+}
+
+// searchSignals seeds the find controls from the server's own filter, so a page
+// arrived at with ?q= in the URL shows that text in the box rather than an empty
+// field over a filtered list.
+func searchSignals(l OfferList) string {
+	cur := core.BaseCurrency
+	if l.Filter.PriceMin != nil {
+		cur = l.Filter.PriceMin.Currency
+	} else if l.Filter.PriceMax != nil {
+		cur = l.Filter.PriceMax.Currency
+	}
+	return "{searchQuery: " + jsString(l.Filter.Query) +
+		", priceMin: " + jsString(boundText(l.Filter.PriceMin)) +
+		", priceMax: " + jsString(boundText(l.Filter.PriceMax)) +
+		", priceCurrency: " + jsString(cur) + "}"
+}
+
+// boundText renders a price bound for its input, or "" when unbounded.
+func boundText(m *core.Money) string {
+	if m == nil {
+		return ""
+	}
+	s, err := m.Decimal()
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// OfferCount is the "N matching" line, patched alongside the table so the count
+// cannot disagree with the rows underneath it.
+templ OfferCount(n int) {
+	<span class="faint" id="offer-count">{ itoa(n) } matching</span>
 }
 
 // filterChip is a link, not a button: a filtered listing is a distinct URL, so

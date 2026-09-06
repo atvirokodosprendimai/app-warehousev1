@@ -130,10 +130,11 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l := view.OfferList{
-		Page:   a.page(r, title, nav),
-		Rows:   a.rows(r.Context(), offers),
-		Filter: f,
-		Total:  len(offers),
+		Page:       a.page(r, title, nav),
+		Rows:       a.rows(r.Context(), offers),
+		Filter:     f,
+		Total:      len(offers),
+		Currencies: core.KnownCurrencies(),
 	}
 	_ = view.PageShell(l.Page, view.NewOfferAction(), view.OffersScreen(l)).Render(r.Context(), w)
 }

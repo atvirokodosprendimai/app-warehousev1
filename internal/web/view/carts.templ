@@ -116,11 +116,18 @@ templ CartDetailScreen(s CartScreen) {
 			<div class="card-body">
 				<div class="toolbar">
 					for _, p := range s.Profiles {
-						<a
-							class="btn btn-primary"
-							href={ templ.SafeURL("/export/" + p + ".csv?cart=" + s.Cart.ID) }
-							download
-						>Download { p } CSV</a>
+						if p.Ready {
+							<a
+								class="btn btn-primary"
+								href={ templ.SafeURL("/export/" + p.Name + ".csv?cart=" + s.Cart.ID) }
+								download
+							>Download { p.Name } CSV</a>
+						}
+					}
+					for _, p := range s.Profiles {
+						if !p.Ready {
+							@Message("info", p.Name+" is not configured: "+p.Problem)
+						}
 					}
 				</div>
 			</div>

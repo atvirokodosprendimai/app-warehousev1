@@ -2,125 +2,44 @@ package offer
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	// modernc.org/sqlite is the CGO-free driver; it registers itself as "sqlite".
-	_ "modernc.org/sqlite"
-
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
 
-// schemaStatements is the part of migrations/00001_init.sql this package needs,
-// copied verbatim so the suite depends on no sibling package. Keep it in step
-// with that migration: a drift here makes the tests pass against a schema
-// production does not have.
-var schemaStatements = []string{
-	`CREATE TABLE locations (
-	    id                TEXT PRIMARY KEY,
-	    parent_id         TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    kind              TEXT NOT NULL CHECK (kind IN
-	                          ('site','building','room','aisle','shelf','segment','bin')),
-	    code              TEXT NOT NULL,
-	    path              TEXT NOT NULL UNIQUE,
-	    label             TEXT NOT NULL DEFAULT '',
-	    custodian         TEXT NOT NULL DEFAULT '',
-	    custodian_contact TEXT NOT NULL DEFAULT '',
-	    city              TEXT NOT NULL DEFAULT '',
-	    country           TEXT NOT NULL DEFAULT '',
-	    notes             TEXT NOT NULL DEFAULT '',
-	    created_at        TEXT NOT NULL,
-	    UNIQUE (parent_id, code)
-	) STRICT`,
-	`CREATE INDEX locations_parent_idx ON locations (parent_id)`,
-	`CREATE INDEX locations_path_idx ON locations (path)`,
-	`CREATE TABLE offers (
-	    id             TEXT PRIMARY KEY,
-	    sku            TEXT NOT NULL UNIQUE,
-	    title          TEXT NOT NULL,
-	    description    TEXT NOT NULL DEFAULT '',
-	    condition      TEXT NOT NULL DEFAULT '',
-	    status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
-	                       ('draft','listed','pending','sold','archived')),
-	    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
-	    shop_minor     INTEGER NOT NULL DEFAULT 0,
-	    shop_currency  TEXT NOT NULL DEFAULT 'EUR',
-	    owner_minor    INTEGER NOT NULL DEFAULT 0,
-	    owner_currency TEXT NOT NULL DEFAULT 'EUR',
-	    sold_minor     INTEGER NOT NULL DEFAULT 0,
-	    sold_currency  TEXT NOT NULL DEFAULT '',
-	    sold_at        TEXT,
-	    location_id    TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    created_at     TEXT NOT NULL,
-	    updated_at     TEXT NOT NULL,
-	    CHECK (status <> 'sold' OR sold_at IS NOT NULL),
-	    CHECK (status NOT IN ('listed','pending') OR shop_minor > 0)
-	) STRICT`,
-	`CREATE INDEX offers_status_idx ON offers (status)`,
-	`CREATE INDEX offers_location_idx ON offers (location_id)`,
-	`CREATE INDEX offers_sold_at_idx ON offers (sold_at)`,
-	`CREATE INDEX offers_needs_pricing_idx ON offers (status, shop_minor)`,
-	`CREATE TABLE offer_photos (
-	    id           TEXT PRIMARY KEY,
-	    offer_id     TEXT NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
-	    position     INTEGER NOT NULL DEFAULT 0,
-	    filename     TEXT NOT NULL DEFAULT '',
-	    content_type TEXT NOT NULL,
-	    byte_size    INTEGER NOT NULL DEFAULT 0,
-	    sha256       TEXT NOT NULL DEFAULT '',
-	    created_at   TEXT NOT NULL
-	) STRICT`,
-	`CREATE INDEX offer_photos_offer_idx ON offer_photos (offer_id, position)`,
-}
-
-// newTestRepo opens a fresh SQLite database in the test's temp directory,
-// creates the schema, and returns a Repo over it.
+// newTestRepo opens a fresh database, runs the REAL migrations over it, and
+// returns a Repo.
 //
-// It mirrors the application's own handle split: a single writer with
-// _txlock=immediate, and a reader carrying query_only(1). The reader pragma is
-// not decoration — it makes the suite prove that no read path writes, because
-// the driver refuses rather than merely being asked not to.
+// ⚠ It deliberately uses the embedded migrations rather than a copy of the
+// CREATE TABLE statements. This file used to carry such a copy, with a comment
+// asking whoever changed the schema to keep it in step — and it drifted at the
+// first opportunity: adding the full-text index left the suite green against a
+// schema production does not have, because the copy knew nothing about it. A
+// fixture that restates the schema is a second source of truth, and the test
+// that reads it cannot tell when it has stopped being true.
+//
+// store.Open also gives the tests the application's real handle split: a single
+// writer with _txlock=immediate and a reader carrying query_only(1). The reader
+// pragma is not decoration — it makes the suite prove that no read path writes,
+// because the driver refuses rather than merely being asked not to.
 func newTestRepo(t *testing.T) *Repo {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "offer_test.db")
-	write, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate")
+	db, err := store.Open(filepath.Join(t.TempDir(), "offer_test.db"))
 	if err != nil {
-		t.Fatalf("open writer: %v", err)
+		t.Fatalf("open: %v", err)
 	}
-	// SQLite admits one writer; a larger pool would only queue somewhere with
-	// worse diagnostics.
-	write.SetMaxOpenConns(1)
-	if err := write.Ping(); err != nil {
-		t.Fatalf("ping writer: %v", err)
+	if err := store.Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
-	for _, stmt := range schemaStatements {
-		if _, err := write.Exec(stmt); err != nil {
-			t.Fatalf("create schema: %v\n%s", err, stmt)
-		}
-	}
-
-	read, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_pragma=query_only(1)")
-	if err != nil {
-		t.Fatalf("open reader: %v", err)
-	}
-	if err := read.Ping(); err != nil {
-		t.Fatalf("ping reader: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_ = read.Close()
-		_ = write.Close()
-	})
-	return NewRepo(read, write)
+	t.Cleanup(func() { _ = db.Close() })
+	return NewRepo(db.Read, db.Write)
 }
 
 // baseTime is a fixed instant the tests build timestamps from, so that ordering

@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -189,8 +190,72 @@ func (a *App) GetExport(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		a.Log.Warn("carts unavailable", "err", err)
 	}
+
+	// Work out what a catalogue export would and would not carry, and show BOTH
+	// before anything is clicked. The exporter refuses an offer it cannot render
+	// rather than dropping it, so without this the operator meets that refusal as
+	// a failed download naming a SKU — after choosing to export, with nothing on
+	// screen explaining which items are the problem or why.
+	send, held := a.catalogue(r)
+
 	_ = view.PageShell(p, nil,
-		view.ExportScreen(export.Names(), base, absolute, carts)).Render(r.Context(), w)
+		view.ExportScreen(a.exportProfiles(), base, absolute, carts, len(send), held)).Render(r.Context(), w)
+}
+
+// exportOptions builds the marketplace settings for an export run.
+func (a *App) exportOptions() export.Options {
+	opt := a.Cfg.Export
+	if opt.Currency == "" {
+		opt.Currency = core.BaseCurrency
+	}
+	opt.BaseURL = a.Cfg.PublicBaseURL
+	return opt
+}
+
+// exportProfiles reports which marketplaces this deployment can actually export
+// to, and why not when it cannot.
+//
+// ★ It asks each exporter rather than restating its requirements here. Every
+// profile validates its options BEFORE it looks at a single offer, so rendering
+// an empty export to io.Discard is precisely an options check — and it costs
+// nothing, because a refusal happens before any row is written.
+//
+// The alternative was for this package to know that eBay needs a category and an
+// item location. That is a second copy of a rule owned somewhere else, and the
+// copy goes stale the first time a profile gains a required field: the page
+// would go on offering a download that then fails with a raw 400, which is the
+// exact defect this replaces.
+func (a *App) exportProfiles() []view.ExportProfile {
+	opt := a.exportOptions()
+	out := make([]view.ExportProfile, 0, len(export.Names()))
+
+	for _, name := range export.Names() {
+		exp, err := export.For(name)
+		if err != nil {
+			continue
+		}
+		p := view.ExportProfile{Name: name, Ready: true}
+		if err := exp.Write(io.Discard, nil, opt); err != nil {
+			p.Ready = false
+			p.Problem = err.Error()
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// catalogue returns everything a whole-catalogue export would publish, and
+// everything it is holding back.
+func (a *App) catalogue(r *http.Request) (send []core.Offer, held []core.Offer) {
+	offers, err := a.Offers.Offers(r.Context(), core.OfferFilter{
+		Status: []core.Status{core.StatusListed, core.StatusPending},
+		Limit:  10000,
+	})
+	if err != nil {
+		a.Log.Error("catalogue", "err", err)
+		return nil, nil
+	}
+	return core.PartitionExportable(offers)
 }
 
 // GetExportFile streams a marketplace CSV.
@@ -215,11 +280,7 @@ func (a *App) GetExportFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opt := a.Cfg.Export
-	if opt.Currency == "" {
-		opt.Currency = core.BaseCurrency
-	}
-	opt.BaseURL = a.Cfg.PublicBaseURL
+	opt := a.exportOptions()
 
 	// Render into memory first. Write streams straight to w, and a failure
 	// halfway through would otherwise leave a 200 carrying half a catalogue that
@@ -240,11 +301,16 @@ func (a *App) GetExportFile(w http.ResponseWriter, r *http.Request) {
 func (a *App) exportSet(r *http.Request, profile string) ([]core.Offer, string, error) {
 	cartID := strings.TrimSpace(r.URL.Query().Get("cart"))
 	if cartID == "" {
-		offers, err := a.Offers.Offers(r.Context(), core.OfferFilter{
-			Status: []core.Status{core.StatusListed, core.StatusPending},
-			Limit:  10000,
-		})
-		return offers, profile + "-all.csv", err
+		// Only the ready ones. What is being held back is shown on the export
+		// page rather than being discovered as a failed download, and it is the
+		// same partition that page rendered — one function, so the page cannot
+		// promise something the exporter then refuses.
+		send, _ := a.catalogue(r)
+		if len(send) == 0 {
+			return nil, "", errors.New("nothing is ready to export yet — the export " +
+				"page lists what each item is waiting for")
+		}
+		return send, profile + "-all.csv", nil
 	}
 
 	send, _, err := a.Cart.ExportSet(r.Context(), cartID)

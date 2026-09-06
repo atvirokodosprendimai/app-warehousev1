@@ -45,8 +45,22 @@ type OfferFilter struct {
 	// LocationPathPrefix restricts to items stored at or beneath a path, so
 	// "everything in the Kaunas garage" is one query rather than a tree walk.
 	LocationPathPrefix string
-	// Query is a case-insensitive substring match over SKU, title and description.
+	// Query is a full-text search over SKU, title, description and condition.
+	//
+	// It is matched against an FTS index rather than with LIKE, so a two-word
+	// query finds rows containing both words in either order and in either field
+	// — which is what someone typing into a search box means, and what a
+	// substring match cannot do.
 	Query string
+	// PriceMin and PriceMax bound the SHOP price. A nil bound is open on that
+	// side, so "under 50" and "over 20" are both expressible without a sentinel.
+	//
+	// They carry their currency with them because minor units are only comparable
+	// within one: 5000 is 50 EUR and also 500 JPY, and a bound that lost track of
+	// which would silently filter against the wrong scale. A bound therefore
+	// restricts the result to offers priced in that same currency.
+	PriceMin *Money
+	PriceMax *Money
 	// NeedsPricing restricts to drafts with no shop price — the work queue for
 	// the research step in the photograph, title, price-later flow.
 	NeedsPricing bool

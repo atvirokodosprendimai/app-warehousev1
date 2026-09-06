@@ -58,6 +58,9 @@ func (a *App) Routes() http.Handler {
 		r.Get("/", a.GetDashboard)
 
 		r.Get("/offers", a.GetOffers)
+		// The live search asks for just the table. Status stays in the page URL
+		// and the text and price terms ride as signals.
+		r.Get("/offers/rows", a.GetOfferRows)
 		r.Get("/offers/new", a.GetIntake)
 		r.Post("/offers", a.PostOffers)
 		r.Get("/offers/{id}", a.GetOffer)

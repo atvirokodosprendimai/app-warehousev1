@@ -77,17 +77,31 @@ type CartContents struct {
 	Offers []Offer
 }
 
-// Exportable splits the contents into what a marketplace export will publish and
+// Exportable splits the cart into what a marketplace export will publish and
 // what it will not.
 //
-// Returning BOTH halves is deliberate. A filtered listing may silently omit
-// whatever does not qualify, because the operator did not name its members one
-// by one — but a cart's members were each chosen by hand, so dropping one
-// without saying so loses an item the operator believes they are sending. The
-// caller is expected to show the second slice, not discard it.
+// Returning BOTH halves is deliberate: a cart's members were each chosen by
+// hand, so dropping one without saying so loses an item the operator believes
+// they are sending. The caller is expected to show the second slice, not discard
+// it.
 func (c CartContents) Exportable() (send []Offer, held []Offer) {
-	for _, o := range c.Offers {
-		if o.Status.Exportable() && !o.Shop.IsZero() && len(o.Photos) > 0 {
+	return PartitionExportable(c.Offers)
+}
+
+// PartitionExportable splits offers into those a marketplace export will carry
+// and those it will not.
+//
+// It is shared by the cart export and the whole-catalogue export rather than
+// each deciding for itself, because "can this be published" is one question and
+// two implementations of it would drift — leaving a page that promises to send
+// something the exporter then refuses.
+//
+// The three conditions are exactly what an exporter needs and cannot invent: a
+// status that means it is for sale, a price to sell it at, and a picture, since
+// a listing with no photograph is one nobody clicks.
+func PartitionExportable(offers []Offer) (send []Offer, held []Offer) {
+	for _, o := range offers {
+		if HoldReason(o) == "" {
 			send = append(send, o)
 			continue
 		}

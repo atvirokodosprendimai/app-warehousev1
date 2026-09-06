@@ -8,6 +8,7 @@
 package view
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
@@ -150,6 +151,32 @@ type OfferList struct {
 	Filter core.OfferFilter
 	// Total is how many offers match before paging.
 	Total int
+	// Currencies is the list the price-range filter may choose from.
+	Currencies []string
+}
+
+// RowsPath is the endpoint the live search asks for a new table.
+//
+// It carries the STATUS part of the current filter, because that part lives in
+// the page URL and a bare "/offers/rows" would not know about it — so typing in
+// the search box while looking at "Listed" would quietly widen the result to
+// every status. The text and price parts are not here: they travel as signals,
+// which is the whole reason they are not in the URL.
+func (l OfferList) RowsPath() string {
+	q := make([]string, 0, 3)
+	for _, s := range l.Filter.Status {
+		q = append(q, "status="+string(s))
+	}
+	if l.Filter.NeedsPricing {
+		q = append(q, "needs_pricing=1")
+	}
+	if l.Filter.LocationPathPrefix != "" {
+		q = append(q, "at="+url.QueryEscape(l.Filter.LocationPathPrefix))
+	}
+	if len(q) == 0 {
+		return "/offers/rows"
+	}
+	return "/offers/rows?" + strings.Join(q, "&")
 }
 
 // StatusActive reports whether a status chip should render pressed.
@@ -207,8 +234,24 @@ type CartScreen struct {
 	// than dropped: every member of a batch was chosen by hand, so an export that
 	// quietly omits one loses an item the operator believes they are sending.
 	Held []core.Offer
-	// Profiles are the marketplace names this batch can be exported to.
-	Profiles []string
+	// Profiles are the marketplaces this batch can be exported to, each with
+	// whether this deployment is actually configured for it.
+	Profiles []ExportProfile
+}
+
+// ExportProfile is one marketplace's readiness to receive an export.
+//
+// Ready is false when the deployment has not been configured for it — eBay needs
+// a category and an item location, and neither has a defensible default. The
+// page shows the reason instead of offering a download that would fail, which is
+// what it did before this type existed.
+type ExportProfile struct {
+	// Name is the profile's registry name, e.g. "shopify".
+	Name string
+	// Ready reports whether an export to this marketplace could run at all.
+	Ready bool
+	// Problem is why not, in the exporter's own words. Empty when Ready.
+	Problem string
 }
 
 // HoldReason explains why an item is not being sent.

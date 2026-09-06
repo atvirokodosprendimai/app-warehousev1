@@ -243,28 +243,78 @@ func newLocationSignals(preset string) string {
 
 // ExportScreen builds a marketplace CSV, either of everything sellable or of one
 // saved batch.
-templ ExportScreen(profiles []string, base string, absolute bool, carts []core.Cart) {
+templ ExportScreen(profiles []ExportProfile, base string, absolute bool, carts []core.Cart, ready int, held []core.Offer) {
 	<div class="stack">
 		if !absolute {
 			@Message("error", "PUBLIC_BASE_URL is not an absolute http(s) URL, so photo links in an export would not resolve. A marketplace fetches images from its own servers and reports no error when they fail — fix this before exporting.")
 		}
 		<div class="card" style="max-width:720px">
-			<div class="card-head"><h2>Export everything sellable</h2></div>
+			<div class="card-head">
+				<h2>Export everything sellable</h2>
+				<span class="spacer"></span>
+				<span class="faint">{ itoa(ready) } ready</span>
+			</div>
 			<div class="card-body stack">
 				<p class="muted">
 					Only offers that are listed or pending are exported. Drafts and
 					archived items are left out, and the owner's price is never included.
 				</p>
 				<span class="hint">Photo links will be built from <code class="code">{ base }</code></span>
-				<div class="toolbar">
+				if ready == 0 {
+					@Message("info", "Nothing is ready to export yet. Anything being held back is listed below, with what it is waiting for.")
+				} else {
+					<div class="toolbar">
+						for _, p := range profiles {
+							if p.Ready {
+								<a class="btn btn-primary" href={ templ.SafeURL("/export/" + p.Name + ".csv") } download>
+									Download { p.Name } CSV
+								</a>
+							}
+						}
+					</div>
 					for _, p := range profiles {
-						<a class="btn btn-primary" href={ templ.SafeURL("/export/" + p + ".csv") } download>
-							Download { p } CSV
-						</a>
+						if !p.Ready {
+							@Message("info", p.Name+" is not configured: "+p.Problem)
+						}
 					}
-				</div>
+					<div>
+					</div>
+				}
 			</div>
 		</div>
+		if len(held) > 0 {
+			<div class="card" style="max-width:720px">
+				<div class="card-head">
+					<h2>Not being sent</h2>
+					<span class="spacer"></span>
+					<span class="faint">{ itoa(len(held)) }</span>
+				</div>
+				<div class="card-body">
+					@Message("info", "These are listed or pending but an export cannot render them. They are shown here rather than discovered as a failed download.")
+				</div>
+				<div class="table-wrap">
+					<table>
+						<thead>
+							<tr>
+								<th scope="col">Item</th>
+								<th scope="col">Waiting for</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, o := range held {
+								<tr>
+									<td>
+										<a class="row-title" href={ templ.SafeURL("/offers/" + o.ID) }>{ o.Title }</a>
+										<div class="row-sub code">{ o.SKU }</div>
+									</td>
+									<td><span class="flag-nopricing">{ core.HoldReason(o) }</span></td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
+		}
 		<div class="card" style="max-width:720px">
 			<div class="card-head">
 				<h2>Export a saved batch</h2>
@@ -298,7 +348,9 @@ templ ExportScreen(profiles []string, base string, absolute bool, carts []core.C
 									<td>
 										<div class="toolbar">
 											for _, p := range profiles {
-												<a class="btn btn-ghost" href={ templ.SafeURL("/export/" + p + ".csv?cart=" + c.ID) } download>{ p }</a>
+												if p.Ready {
+													<a class="btn btn-ghost" href={ templ.SafeURL("/export/" + p.Name + ".csv?cart=" + c.ID) } download>{ p.Name }</a>
+												}
 											}
 										</div>
 									</td>

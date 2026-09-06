@@ -210,9 +210,228 @@ func TestOffersFilterByQueryIsCaseInsensitiveAcrossSKUTitleDescription(t *testin
 		if err != nil {
 			t.Fatalf("Offers(%q): %v", q, err)
 		}
-		if s := fmt.Sprint(ids(got)); s != "[o3 o2 o1]" {
-			t.Errorf("Query %q = %s, want [o3 o2 o1]", q, s)
+		// All three fields are searched, and the one that does not mention a lamp
+		// is not returned. The SET is asserted separately from the ORDER, because
+		// they are different properties and only one of them changed when this
+		// moved from LIKE to a full-text index.
+		if len(got) != 3 {
+			t.Fatalf("Query %q = %s, want three matches", q, fmt.Sprint(ids(got)))
 		}
+		found := map[string]bool{}
+		for _, o := range got {
+			found[o.ID] = true
+		}
+		for _, want := range []string{"o1", "o2", "o3"} {
+			if !found[want] {
+				t.Errorf("Query %q did not find %s: got %s", q, want, fmt.Sprint(ids(got)))
+			}
+		}
+		if found["o4"] {
+			t.Errorf("Query %q returned the unrelated offer o4", q)
+		}
+	}
+}
+
+// TestSearchOrdersByRelevanceNotRecency pins the ordering property that a plain
+// listing does NOT have.
+//
+// o3 is the newest row and o2 is the best match. If somebody restores the
+// created_at ordering for searches, the newest row leads and an exact title
+// match is buried under whatever came in this morning — which is the whole
+// reason the query builder switches ordering when a search term is present.
+func TestSearchOrdersByRelevanceNotRecency(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	mustCreate(t, r, newOffer("o1", "LAMP-001", "Something else", baseTime))
+	mustCreate(t, r, newOffer("o2", "SKU-2", "Vintage Lamp", baseTime.Add(time.Minute)))
+	desc := newOffer("o3", "SKU-3", "Chair", baseTime.Add(2*time.Minute))
+	desc.Description = "Comes with a matching lamp somewhere in this much longer description"
+	mustCreate(t, r, desc)
+
+	got, err := r.Offers(ctx, core.OfferFilter{Query: "lamp"})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	if len(got) == 0 {
+		t.Fatal("no matches")
+	}
+	if got[0].ID == "o3" {
+		t.Errorf("the newest row led the results (%s), so the search is ordered by "+
+			"date rather than relevance", fmt.Sprint(ids(got)))
+	}
+
+	// And the contrast: with no search term, recency IS the order.
+	all, err := r.Offers(ctx, core.OfferFilter{})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	if all[0].ID != "o3" {
+		t.Errorf("an unfiltered listing = %s, want the newest (o3) first",
+			fmt.Sprint(ids(all)))
+	}
+}
+
+// TestSearchMatchesWordsInAnyOrderAndAcrossFields is what a full-text index buys
+// over a substring match, and it is the reason the change was made: "brass lamp"
+// has to find "Lamp, brass" even though that substring appears nowhere in it.
+func TestSearchMatchesWordsInAnyOrderAndAcrossFields(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	reordered := newOffer("o1", "SKU-1", "Lamp, brass", baseTime)
+	mustCreate(t, r, reordered)
+	split := newOffer("o2", "SKU-2", "Desk lamp", baseTime.Add(time.Minute))
+	split.Description = "solid brass, rewired"
+	mustCreate(t, r, split)
+	mustCreate(t, r, newOffer("o3", "SKU-3", "Brass doorknob", baseTime.Add(2*time.Minute)))
+
+	got, err := r.Offers(ctx, core.OfferFilter{Query: "brass lamp"})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	found := map[string]bool{}
+	for _, o := range got {
+		found[o.ID] = true
+	}
+	if !found["o1"] {
+		t.Error("a title with the words in the other order was not found")
+	}
+	if !found["o2"] {
+		t.Error("a match split between title and description was not found")
+	}
+	if found["o3"] {
+		t.Error("an offer matching only one of the two words was returned; the terms " +
+			"are joined with AND, so adding a word must narrow the search")
+	}
+}
+
+// TestSearchIndexFollowsUpdatesAndDeletes is the test that matters most for an
+// external-content index, because nothing else notices when it goes wrong.
+//
+// The index does not update itself: three triggers keep it in step. If one is
+// missing or names the wrong columns, the search simply starts returning stale
+// or deleted rows, with no error anywhere and no failing build.
+func TestSearchIndexFollowsUpdatesAndDeletes(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	o := newOffer("o1", "SKU-1", "Vintage brass lamp", baseTime)
+	mustCreate(t, r, o)
+
+	// Present under its original title.
+	got, err := r.Offers(ctx, core.OfferFilter{Query: "brass"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("before update: got %v, err %v", ids(got), err)
+	}
+
+	// Retitle it. The old word must stop matching and the new one must start.
+	o.Title = "Oak dining chair"
+	o.UpdatedAt = baseTime.Add(time.Hour)
+	if err := r.UpdateOffer(ctx, o); err != nil {
+		t.Fatalf("UpdateOffer: %v", err)
+	}
+	if got, err = r.Offers(ctx, core.OfferFilter{Query: "brass"}); err != nil {
+		t.Fatalf("after update: %v", err)
+	} else if len(got) != 0 {
+		t.Errorf("the old title still matches after a rename, so the update trigger "+
+			"is not removing the previous index entry: got %v", ids(got))
+	}
+	if got, err = r.Offers(ctx, core.OfferFilter{Query: "oak"}); err != nil {
+		t.Fatalf("after update: %v", err)
+	} else if len(got) != 1 {
+		t.Errorf("the new title does not match after a rename, so the update trigger "+
+			"is not adding the new index entry: got %v", ids(got))
+	}
+
+	// Delete it. It must leave the index too.
+	if err := r.DeleteOffer(ctx, "o1"); err != nil {
+		t.Fatalf("DeleteOffer: %v", err)
+	}
+	if got, err = r.Offers(ctx, core.OfferFilter{Query: "oak"}); err != nil {
+		t.Fatalf("after delete: %v", err)
+	} else if len(got) != 0 {
+		t.Errorf("a deleted offer is still in the search index: got %v", ids(got))
+	}
+}
+
+// TestSearchSurvivesPunctuationInTheQuery guards the raw-string trap: FTS5 MATCH
+// takes a query LANGUAGE, so a stray quote is a syntax error and a bare "AND" or
+// "NOT" is an operator. Passing what somebody typed straight through fails the
+// whole search rather than finding nothing.
+func TestSearchSurvivesPunctuationInTheQuery(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+	mustCreate(t, r, newOffer("o1", "SKU-1", `The "good" chair`, baseTime))
+
+	for _, q := range []string{`"`, `good"`, `AND`, `NOT`, `chair OR`, `*`, `-`} {
+		if _, err := r.Offers(ctx, core.OfferFilter{Query: q}); err != nil {
+			t.Errorf("Offers(%q) failed instead of simply matching nothing: %v", q, err)
+		}
+	}
+
+	// And a quoted word still finds its row rather than erroring.
+	got, err := r.Offers(ctx, core.OfferFilter{Query: `good`})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	if len(got) != 1 {
+		t.Errorf("got %v, want the one matching offer", ids(got))
+	}
+}
+
+// TestFilterByPriceRange covers the bounds and the currency rule.
+func TestFilterByPriceRange(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	priced := func(id, sku string, minor int64, cur string, at time.Time) {
+		t.Helper()
+		o := newOffer(id, sku, "Item "+id, at)
+		o.Shop = core.Money{Minor: minor, Currency: cur}
+		mustCreate(t, r, o)
+	}
+	priced("cheap", "SKU-1", 1000, "EUR", baseTime)                    // 10.00 EUR
+	priced("mid", "SKU-2", 5000, "EUR", baseTime.Add(time.Minute))     // 50.00 EUR
+	priced("dear", "SKU-3", 20000, "EUR", baseTime.Add(2*time.Minute)) // 200.00 EUR
+	priced("yen", "SKU-4", 5000, "JPY", baseTime.Add(3*time.Minute))   // 5000 JPY
+
+	eur := func(minor int64) *core.Money { return &core.Money{Minor: minor, Currency: "EUR"} }
+
+	got, err := r.Offers(ctx, core.OfferFilter{PriceMin: eur(2000), PriceMax: eur(100000)})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	found := map[string]bool{}
+	for _, o := range got {
+		found[o.ID] = true
+	}
+	if found["cheap"] {
+		t.Error("an offer below the minimum was returned")
+	}
+	if !found["mid"] || !found["dear"] {
+		t.Errorf("a bounded range missed offers inside it: %v", ids(got))
+	}
+	// ★ The currency rule. 5000 JPY has the SAME minor units as 50.00 EUR, so a
+	// bound that ignored the currency would return it as though it were fifty
+	// euros. That is the whole reason a bound carries its currency.
+	if found["yen"] {
+		t.Error("a JPY offer matched a EUR price range: minor units were compared " +
+			"across currencies, so 5000 JPY passed as 50.00 EUR")
+	}
+
+	// An open upper bound.
+	if got, err = r.Offers(ctx, core.OfferFilter{PriceMin: eur(10000)}); err != nil {
+		t.Fatalf("Offers: %v", err)
+	} else if len(got) != 1 || got[0].ID != "dear" {
+		t.Errorf("min-only filter = %v, want just the dear one", ids(got))
+	}
+
+	// An open lower bound.
+	if got, err = r.Offers(ctx, core.OfferFilter{PriceMax: eur(1500)}); err != nil {
+		t.Fatalf("Offers: %v", err)
+	} else if len(got) != 1 || got[0].ID != "cheap" {
+		t.Errorf("max-only filter = %v, want just the cheap one", ids(got))
 	}
 }
 
