@@ -13,108 +13,9 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
-
-// schemaStatements is the part of migrations/00001_init.sql and
-// migrations/00003_submissions.sql this package needs, copied verbatim so the
-// suite depends on no sibling package. Keep it in step with those migrations: a
-// drift here makes the tests pass against a schema production does not have.
-//
-// locations is present because offers.location_id references it and a conversion
-// must name a location, so an offer row written during an acceptance test would
-// otherwise fail the foreign key. CHECK constraints are copied too — the decline
-// reason and the accepted offer_id are enforced in three places on purpose, and a
-// test schema without them would only prove two of them.
-var schemaStatements = []string{
-	`CREATE TABLE users (
-	    id            TEXT PRIMARY KEY,
-	    email         TEXT NOT NULL UNIQUE,
-	    password_hash TEXT NOT NULL,
-	    display_name  TEXT NOT NULL DEFAULT '',
-	    is_admin      INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0, 1)),
-	    created_at    TEXT NOT NULL,
-	    disabled_at   TEXT
-	) STRICT`,
-	`CREATE TABLE locations (
-	    id                TEXT PRIMARY KEY,
-	    parent_id         TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    kind              TEXT NOT NULL CHECK (kind IN
-	                          ('site','building','room','aisle','shelf','segment','bin')),
-	    code              TEXT NOT NULL,
-	    path              TEXT NOT NULL UNIQUE,
-	    label             TEXT NOT NULL DEFAULT '',
-	    custodian         TEXT NOT NULL DEFAULT '',
-	    custodian_contact TEXT NOT NULL DEFAULT '',
-	    city              TEXT NOT NULL DEFAULT '',
-	    country           TEXT NOT NULL DEFAULT '',
-	    notes             TEXT NOT NULL DEFAULT '',
-	    created_at        TEXT NOT NULL,
-	    UNIQUE (parent_id, code)
-	) STRICT`,
-	`CREATE TABLE offers (
-	    id             TEXT PRIMARY KEY,
-	    sku            TEXT NOT NULL UNIQUE,
-	    title          TEXT NOT NULL,
-	    description    TEXT NOT NULL DEFAULT '',
-	    condition      TEXT NOT NULL DEFAULT '',
-	    status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
-	                       ('draft','listed','pending','sold','archived')),
-	    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
-	    shop_minor     INTEGER NOT NULL DEFAULT 0,
-	    shop_currency  TEXT NOT NULL DEFAULT 'EUR',
-	    owner_minor    INTEGER NOT NULL DEFAULT 0,
-	    owner_currency TEXT NOT NULL DEFAULT 'EUR',
-	    sold_minor     INTEGER NOT NULL DEFAULT 0,
-	    sold_currency  TEXT NOT NULL DEFAULT '',
-	    sold_at        TEXT,
-	    location_id    TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    created_at     TEXT NOT NULL,
-	    updated_at     TEXT NOT NULL,
-	    CHECK (status <> 'sold' OR sold_at IS NOT NULL),
-	    CHECK (status NOT IN ('listed','pending') OR shop_minor > 0)
-	) STRICT`,
-	`CREATE TABLE offer_photos (
-	    id           TEXT PRIMARY KEY,
-	    offer_id     TEXT NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
-	    position     INTEGER NOT NULL DEFAULT 0,
-	    filename     TEXT NOT NULL DEFAULT '',
-	    content_type TEXT NOT NULL,
-	    byte_size    INTEGER NOT NULL DEFAULT 0,
-	    sha256       TEXT NOT NULL DEFAULT '',
-	    created_at   TEXT NOT NULL
-	) STRICT`,
-	`CREATE INDEX offer_photos_offer_idx ON offer_photos (offer_id, position)`,
-	`CREATE TABLE submissions (
-	    id              TEXT PRIMARY KEY,
-	    submitted_by    TEXT NOT NULL REFERENCES users (id) ON DELETE RESTRICT,
-	    title           TEXT NOT NULL,
-	    note            TEXT NOT NULL DEFAULT '',
-	    asking_minor    INTEGER NOT NULL DEFAULT 0,
-	    asking_currency TEXT NOT NULL DEFAULT 'EUR',
-	    status          TEXT NOT NULL DEFAULT 'new' CHECK (status IN
-	                        ('new','reviewing','accepted','declined')),
-	    decline_reason  TEXT NOT NULL DEFAULT '',
-	    offer_id        TEXT REFERENCES offers (id) ON DELETE SET NULL,
-	    created_at      TEXT NOT NULL,
-	    reviewed_at     TEXT,
-	    reviewed_by     TEXT REFERENCES users (id) ON DELETE SET NULL,
-	    CHECK (status <> 'declined' OR decline_reason <> ''),
-	    CHECK (status <> 'accepted' OR offer_id IS NOT NULL)
-	) STRICT`,
-	`CREATE INDEX submissions_status_idx ON submissions (status, created_at)`,
-	`CREATE INDEX submissions_by_idx ON submissions (submitted_by, created_at)`,
-	`CREATE TABLE submission_photos (
-	    id            TEXT PRIMARY KEY,
-	    submission_id TEXT NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,
-	    position      INTEGER NOT NULL DEFAULT 0,
-	    filename      TEXT NOT NULL DEFAULT '',
-	    content_type  TEXT NOT NULL,
-	    byte_size     INTEGER NOT NULL DEFAULT 0,
-	    sha256        TEXT NOT NULL DEFAULT '',
-	    created_at    TEXT NOT NULL
-	) STRICT`,
-	`CREATE INDEX submission_photos_idx ON submission_photos (submission_id, position)`,
-}
 
 // newTestRepo opens a fresh SQLite database in the test's temp directory,
 // creates the schema, and returns a Repo over it.
@@ -147,10 +48,16 @@ func newTestRepoReadingThrough(t *testing.T, readDriver string) *Repo {
 	if err := write.Ping(); err != nil {
 		t.Fatalf("ping writer: %v", err)
 	}
-	for _, stmt := range schemaStatements {
-		if _, err := write.Exec(stmt); err != nil {
-			t.Fatalf("create schema: %v\n%s", err, stmt)
-		}
+	// The REAL migrations, not a copy of the CREATE TABLE statements.
+	//
+	// ⚠ This file used to carry such a copy with a comment asking whoever changed
+	// the schema to keep it in step. The sibling offer package carried the same
+	// arrangement and it drifted at the first opportunity — a new index left that
+	// suite green against a schema production does not have. A fixture that
+	// restates the schema is a second source of truth, and the test reading it
+	// cannot tell when it has stopped being true.
+	if err := store.Migrate(write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 
 	read, err := sql.Open(readDriver, "file:"+path+

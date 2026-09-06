@@ -298,6 +298,37 @@ func itoa(n int) string {
 	return string(b[i:])
 }
 
+// Submit is the staff submission screen: the form, and that person's own history.
+type Submit struct {
+	Page Page
+	// Mine is what this person has offered, whatever came of it.
+	Mine []core.Submission
+	// Currencies is what an asking price may be stated in.
+	Currencies []string
+}
+
+// Inbox is the administrator's triage queue.
+type Inbox struct {
+	Page        Page
+	Submissions []core.Submission
+	// ShowAll is true when the listing includes decided items as well as open
+	// ones, so the header and the toggle can say which view this is.
+	ShowAll bool
+}
+
+// SubmissionDetail is one proposal.
+type SubmissionDetail struct {
+	Page       Page
+	Submission core.Submission
+	// Locations is the tree, for choosing where an accepted item goes.
+	Locations []core.Location
+	// Currencies is what a price may be stated in.
+	Currencies []string
+	// CanDecide is true for an administrator. A submitter sees their own
+	// proposal and its outcome, but not the panel that decides it.
+	CanDecide bool
+}
+
 // Users is the account-management screen.
 type Users struct {
 	Page  Page

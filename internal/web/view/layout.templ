@@ -65,6 +65,10 @@ templ sidebar(p Page) {
 			@navLink("/", "dashboard", p.Nav, "Dashboard", 0, false)
 			@navLink("/offers", "offers", p.Nav, "Offers", 0, false)
 			@navLink("/offers?needs_pricing=1", "pricing", p.Nav, "Awaiting pricing", p.NeedsPricing, true)
+			@navLink("/submit", "submit", p.Nav, "Offer something", 0, false)
+			if p.User.IsAdmin {
+				@navLink("/inbox", "inbox", p.Nav, "Inbox", p.InboxOpen, true)
+			}
 			<span class="nav-label">Status</span>
 			for _, s := range core.Statuses() {
 				@navLink(statusHref(s), "status-"+string(s), p.Nav, s.Label(), p.Count(s), true)

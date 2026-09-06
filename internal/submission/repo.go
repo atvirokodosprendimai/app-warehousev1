@@ -53,7 +53,7 @@ const timeLayout = time.RFC3339
 // users row, because the inbox shows who sent what on every line and a second
 // lookup per row is the difference between one query and a page of them.
 const submissionColumns = `s.id, s.submitted_by, s.title, s.note,
-	s.asking_minor, s.asking_currency, s.status, s.decline_reason, s.offer_id,
+	s.asking_minor, s.asking_currency, s.status, s.review_note, s.offer_id,
 	s.created_at, s.reviewed_at, s.reviewed_by, u.display_name, u.email`
 
 // submitterJoin resolves the submitter's display name.
@@ -232,12 +232,12 @@ func (r *Repo) CountOpen(ctx context.Context) (int, error) {
 // stale when somebody changes their display name.
 func (r *Repo) CreateSubmission(ctx context.Context, s core.Submission) error {
 	const q = `INSERT INTO submissions (id, submitted_by, title, note, asking_minor,
-		asking_currency, status, decline_reason, offer_id, created_at, reviewed_at,
+		asking_currency, status, review_note, offer_id, created_at, reviewed_at,
 		reviewed_by)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.write.ExecContext(ctx, q,
 		s.ID, s.SubmittedBy, s.Title, s.Note, s.Asking.Minor, s.Asking.Currency,
-		string(s.Status), s.DeclineReason, nullString(s.OfferID),
+		string(s.Status), s.ReviewNote, nullString(s.OfferID),
 		formatTime(s.CreatedAt), nullTime(s.ReviewedAt), nullString(s.ReviewedBy))
 	if err != nil {
 		return fmt.Errorf("submission: create: %w", err)
@@ -254,11 +254,11 @@ func (r *Repo) CreateSubmission(ctx context.Context, s core.Submission) error {
 // them.
 func (r *Repo) UpdateSubmission(ctx context.Context, s core.Submission) error {
 	const q = `UPDATE submissions SET title = ?, note = ?, asking_minor = ?,
-		asking_currency = ?, status = ?, decline_reason = ?, offer_id = ?,
+		asking_currency = ?, status = ?, review_note = ?, offer_id = ?,
 		reviewed_at = ?, reviewed_by = ? WHERE id = ?`
 	res, err := r.write.ExecContext(ctx, q,
 		s.Title, s.Note, s.Asking.Minor, s.Asking.Currency, string(s.Status),
-		s.DeclineReason, nullString(s.OfferID), nullTime(s.ReviewedAt),
+		s.ReviewNote, nullString(s.OfferID), nullTime(s.ReviewedAt),
 		nullString(s.ReviewedBy), s.ID)
 	if err != nil {
 		return fmt.Errorf("submission: update %s: %w", s.ID, err)
@@ -407,7 +407,7 @@ func scanSubmission(sc rowScanner) (core.Submission, error) {
 		email       sql.NullString
 	)
 	err := sc.Scan(&s.ID, &s.SubmittedBy, &s.Title, &s.Note, &s.Asking.Minor,
-		&s.Asking.Currency, &status, &s.DeclineReason, &offerID, &created,
+		&s.Asking.Currency, &status, &s.ReviewNote, &offerID, &created,
 		&reviewedAt, &reviewedBy, &displayName, &email)
 	if err != nil {
 		return core.Submission{}, err

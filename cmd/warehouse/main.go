@@ -23,6 +23,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/submission"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web"
 	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
@@ -77,6 +78,7 @@ func run(log *slog.Logger) error {
 	locations := location.NewRepo(db.Read, db.Write)
 	rates := fx.NewRepo(db.Read, db.Write)
 	carts := cart.NewRepo(db.Read, db.Write)
+	subs := submission.NewRepo(db.Read, db.Write)
 
 	// Services own the write rules.
 	authSvc := auth.NewService(users)
@@ -84,6 +86,12 @@ func run(log *slog.Logger) error {
 	locationSvc := location.NewService(locations)
 	cartSvc := cart.NewService(carts)
 	fxSvc := fx.NewService(rates, fx.NewClient(nil, ""))
+	// The offer REPOSITORY is handed to the submission service, not the offer
+	// service. Conversion is the one place these two aggregates touch, and the
+	// submission package states that collaboration as a two-method interface the
+	// repo already satisfies — so the dependency is exactly as wide as the
+	// collaboration rather than the whole of the offer write side.
+	submissionSvc := submission.NewService(subs, offers, blobs)
 
 	if cfg.FetchRates {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -106,17 +114,19 @@ func run(log *slog.Logger) error {
 				Location:    cfg.ExportLocation,
 			},
 		},
-		Users:     users,
-		Offers:    offers,
-		Locations: locations,
-		Rates:     rates,
-		Carts:     carts,
-		Auth:      authSvc,
-		Offer:     offerSvc,
-		Location:  locationSvc,
-		Cart:      cartSvc,
-		Blobs:     blobs,
-		Bus:       web.NewBus(),
+		Users:       users,
+		Offers:      offers,
+		Locations:   locations,
+		Rates:       rates,
+		Carts:       carts,
+		Submissions: subs,
+		Auth:        authSvc,
+		Offer:       offerSvc,
+		Location:    locationSvc,
+		Cart:        cartSvc,
+		Submission:  submissionSvc,
+		Blobs:       blobs,
+		Bus:         web.NewBus(),
 	}
 
 	srv := &http.Server{

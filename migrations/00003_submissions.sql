@@ -25,7 +25,7 @@ CREATE TABLE submissions (
     asking_currency TEXT NOT NULL DEFAULT 'EUR',
     status          TEXT NOT NULL DEFAULT 'new' CHECK (status IN
                         ('new','reviewing','accepted','declined')),
-    decline_reason  TEXT NOT NULL DEFAULT '',
+    review_note  TEXT NOT NULL DEFAULT '',
     -- SET NULL, not CASCADE: if the offer is later deleted the submission's
     -- history should survive as a record that it was accepted, rather than
     -- vanishing along with it.
@@ -34,7 +34,7 @@ CREATE TABLE submissions (
     reviewed_at     TEXT,
     reviewed_by     TEXT REFERENCES users (id) ON DELETE SET NULL,
     -- A decline without a reason produces the same submission again next week.
-    CHECK (status <> 'declined' OR decline_reason <> ''),
+    CHECK (status <> 'declined' OR review_note <> ''),
     -- An accepted submission must name what it became, or the audit trail from
     -- "we agreed a price on the phone" to "this is the listing" is broken.
     CHECK (status <> 'accepted' OR offer_id IS NOT NULL)

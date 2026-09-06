@@ -314,8 +314,8 @@ func TestDeclineClosesTheSubmissionWithItsReason(t *testing.T) {
 	if got.Status != core.SubmissionDeclined {
 		t.Fatalf("Status = %q, want %q", got.Status, core.SubmissionDeclined)
 	}
-	if got.DeclineReason != "we have three already" {
-		t.Fatalf("DeclineReason = %q, want it trimmed", got.DeclineReason)
+	if got.ReviewNote != "we have three already" {
+		t.Fatalf("ReviewNote = %q, want it trimmed", got.ReviewNote)
 	}
 	if got.ReviewedBy != admin.ID {
 		t.Fatalf("ReviewedBy = %q, want %q", got.ReviewedBy, admin.ID)
@@ -325,11 +325,11 @@ func TestDeclineClosesTheSubmissionWithItsReason(t *testing.T) {
 	}
 }
 
-// TestAnEmptyDeclineReasonIsRefusedAllTheWayDown checks the same rule at each of
+// TestAnEmptyReviewNoteIsRefusedAllTheWayDown checks the same rule at each of
 // the three layers that hold it. A bare "no" produces the same submission again
 // next week, and a rule enforced in one place is a rule the next write path
 // skips.
-func TestAnEmptyDeclineReasonIsRefusedAllTheWayDown(t *testing.T) {
+func TestAnEmptyReviewNoteIsRefusedAllTheWayDown(t *testing.T) {
 	svc, r, _, _ := newTestService(t)
 	ctx := context.Background()
 	staff, admin := staffAndAdmin(t, r)

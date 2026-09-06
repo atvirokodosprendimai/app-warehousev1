@@ -265,7 +265,7 @@ func seedInbox(t *testing.T, r *Repo) {
 			sub.OfferID = "o1"
 		}
 		if row.status == core.SubmissionDeclined {
-			sub.DeclineReason = "not something we can sell"
+			sub.ReviewNote = "not something we can sell"
 		}
 		if err := r.CreateSubmission(ctx, sub); err != nil {
 			t.Fatalf("create %s: %v", row.id, err)
@@ -375,7 +375,7 @@ func TestSubmissionRoundTripsEveryField(t *testing.T) {
 	sub.Note = "works, one scratch"
 	sub.Asking = core.Money{Minor: 12050, Currency: "EUR"}
 	sub.Status = core.SubmissionDeclined
-	sub.DeclineReason = "we have three already"
+	sub.ReviewNote = "we have three already"
 	sub.ReviewedAt = &reviewed
 	sub.ReviewedBy = "admin"
 	if err := r.CreateSubmission(ctx, sub); err != nil {
@@ -392,8 +392,8 @@ func TestSubmissionRoundTripsEveryField(t *testing.T) {
 	if got.Asking != sub.Asking {
 		t.Fatalf("Asking = %v, want %v", got.Asking, sub.Asking)
 	}
-	if got.DeclineReason != sub.DeclineReason {
-		t.Fatalf("DeclineReason = %q, want %q", got.DeclineReason, sub.DeclineReason)
+	if got.ReviewNote != sub.ReviewNote {
+		t.Fatalf("ReviewNote = %q, want %q", got.ReviewNote, sub.ReviewNote)
 	}
 	if got.ReviewedBy != "admin" {
 		t.Fatalf("ReviewedBy = %q, want %q", got.ReviewedBy, "admin")

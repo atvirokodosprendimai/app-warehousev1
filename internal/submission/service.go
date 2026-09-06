@@ -211,7 +211,7 @@ func (s *Service) Decline(ctx context.Context, admin core.User, id, reason strin
 	}
 	stamp := now()
 	sub.Status = core.SubmissionDeclined
-	sub.DeclineReason = reason
+	sub.ReviewNote = reason
 	sub.ReviewedAt = &stamp
 	sub.ReviewedBy = admin.ID
 	if err := sub.Validate(); err != nil {
@@ -330,9 +330,11 @@ func (s *Service) Accept(ctx context.Context, admin core.User, id string, c core
 	stamp := now()
 	sub.Status = core.SubmissionAccepted
 	sub.OfferID = o.ID
-	// A submission cannot be both declined and accepted; whatever reason it once
-	// carried describes a decision that has been changed.
-	sub.DeclineReason = ""
+	// The note now records what was AGREED rather than why it was refused —
+	// "agreed 30 EUR, collecting Tuesday". Whatever the submission carried from
+	// an earlier decline describes a decision that has since been changed, so it
+	// is replaced rather than kept beside a contradictory outcome.
+	sub.ReviewNote = strings.TrimSpace(c.Note)
 	sub.ReviewedAt = &stamp
 	sub.ReviewedBy = admin.ID
 	if err := sub.Validate(); err != nil {

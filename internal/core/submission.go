@@ -98,10 +98,17 @@ type Submission struct {
 	Asking Money
 	// Status is the triage state.
 	Status SubmissionStatus
-	// DeclineReason is shown to the submitter when it was not taken. It is
-	// required on a decline: "no" without a reason produces the same submission
-	// again next week.
-	DeclineReason string
+	// ReviewNote is what the administrator wrote when they decided.
+	//
+	// One field for both outcomes rather than a separate decline reason, because
+	// it is one idea — what was agreed or why it was refused — and two fields for
+	// one idea drift: the accept path would grow its own and nothing would keep
+	// them consistent.
+	//
+	// It is REQUIRED on a decline, because "no" without a reason produces the
+	// same submission again next week. It is optional on an accept, where it
+	// records the terms agreed on the phone: "agreed 30 EUR, collecting Tuesday".
+	ReviewNote string
 	// OfferID is the offer this became, set only once accepted.
 	OfferID string
 	// Photos are the images the submitter attached, in order.
@@ -124,7 +131,7 @@ func (s *Submission) Validate() error {
 	if !s.Status.Valid() {
 		return fmt.Errorf("%w: unknown submission status %q", ErrInvalid, s.Status)
 	}
-	if s.Status == SubmissionDeclined && strings.TrimSpace(s.DeclineReason) == "" {
+	if s.Status == SubmissionDeclined && strings.TrimSpace(s.ReviewNote) == "" {
 		return fmt.Errorf("%w: a declined submission needs a reason — the submitter "+
 			"cannot act on a bare no, and will send the same thing again", ErrInvalid)
 	}
@@ -179,6 +186,11 @@ type Conversion struct {
 	Condition string
 	// Description is the listing body.
 	Description string
+	// Note records what was agreed with the submitter — "agreed 30 EUR,
+	// collecting Tuesday". It is written to the submission's ReviewNote, so an
+	// accepted item keeps the terms beside it rather than only in somebody's
+	// memory of a phone call. Optional.
+	Note string
 }
 
 // Validate checks the agreed terms.

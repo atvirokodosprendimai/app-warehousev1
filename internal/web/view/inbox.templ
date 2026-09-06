@@ -1,0 +1,387 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// SubmitScreen is what a staff member sees: a photograph, a name for the thing,
+// and optionally what they hope to get for it.
+//
+// It asks for nothing an offer needs and they cannot supply. A submission is a
+// message, not a half-built listing, and demanding listing fields here would
+// either stop them submitting or admit incomplete offers into the catalogue.
+templ SubmitScreen(s Submit) {
+	<div class="stack" data-signals={ submitSignals(s) }>
+		<div id="submit-msg"></div>
+		<div class="card" style="max-width:640px">
+			<div class="card-head"><h2>Offer something to the warehouse</h2></div>
+			<div class="card-body stack">
+				<p class="muted">
+					Tell us what it is and add a photograph. Someone will look at it and
+					get in touch about a price.
+				</p>
+				<div class="field">
+					<label for="s-title">What is it?</label>
+					<input
+						id="s-title"
+						class="input"
+						type="text"
+						placeholder="Vintage brass desk lamp"
+						autofocus
+						data-bind:sub-title
+						data-on:keydown="evt.key === 'Enter' && @post('/submit')"
+					/>
+				</div>
+				<div class="field">
+					<label for="s-note">Anything else worth knowing?</label>
+					<textarea id="s-note" class="textarea" placeholder="condition, history, how soon it needs to go" data-bind:sub-note></textarea>
+				</div>
+				<div class="field">
+					<label for="s-amt">What would you like for it?</label>
+					<div class="money-row">
+						<input id="s-amt" class="input" type="text" inputmode="decimal" placeholder="leave blank to ask" data-bind:sub-amount/>
+						<select class="select" aria-label="Currency" data-bind:sub-currency>
+							for _, c := range s.Currencies {
+								<option value={ c }>{ c }</option>
+							}
+						</select>
+					</div>
+					<span class="hint">Optional. "What will you give me for it?" is a fine answer.</span>
+				</div>
+				<div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click="@post('/submit')"
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span>Send it, then add photos</span>
+					</button>
+				</div>
+			</div>
+		</div>
+		<div class="card">
+			<div class="card-head"><h2>What you have sent</h2></div>
+			if len(s.Mine) == 0 {
+				@Empty("📮", "Nothing sent yet", "Anything you offer will appear here with what came of it.") {
+				}
+			} else {
+				@submissionTable(s.Mine, false)
+			}
+		</div>
+	</div>
+}
+
+// submitSignals seeds the staff form.
+func submitSignals(s Submit) string {
+	return "{subTitle: '', subNote: '', subAmount: '', subCurrency: " +
+		jsString(core.BaseCurrency) + "}"
+}
+
+// InboxScreen is the administrator's queue.
+templ InboxScreen(in Inbox) {
+	<div class="stack">
+		<div class="card">
+			<div class="card-head">
+				<h2>
+					if in.ShowAll {
+						Everything ever sent
+					} else {
+						Waiting for a decision
+					}
+				</h2>
+				<span class="spacer"></span>
+				if in.ShowAll {
+					<a class="btn btn-ghost" href="/inbox">Show only open</a>
+				} else {
+					<a class="btn btn-ghost" href="/inbox?all=1">Show all</a>
+				}
+			</div>
+			if len(in.Submissions) == 0 {
+				@Empty("📭", "Nothing waiting", "When somebody offers the warehouse an item it appears here, and a banner shows on every page until you have looked at it.") {
+				}
+			} else {
+				@submissionTable(in.Submissions, true)
+			}
+		</div>
+	</div>
+}
+
+templ submissionTable(subs []core.Submission, showWho bool) {
+	<div class="table-wrap">
+		<table>
+			<thead>
+				<tr>
+					<th scope="col"><span class="sr-only">Photo</span></th>
+					<th scope="col">Item</th>
+					if showWho {
+						<th scope="col">From</th>
+					}
+					<th scope="col" class="num">Wants</th>
+					<th scope="col">State</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, s := range subs {
+					<tr>
+						<td>
+							if s.PrimaryPhoto().ID != "" {
+								<img class="thumb" src={ s.PrimaryPhoto().PublicPath() } alt="" loading="lazy" width="40" height="40"/>
+							} else {
+								<span class="thumb thumb-empty" aria-hidden="true">📷</span>
+							}
+						</td>
+						<td>
+							<a class="row-title" href={ templ.SafeURL("/submit/" + s.ID) }>{ s.Title }</a>
+							if !s.Ready() {
+								<div class="flag-nopricing">No photograph yet</div>
+							}
+						</td>
+						if showWho {
+							<td class="muted">{ s.SubmitterName }</td>
+						}
+						<td class="num">{ askingText(s) }</td>
+						<td>
+							<span class={ "badge badge-" + submissionBadge(s.Status) }>{ s.Status.Label() }</span>
+							if s.Status == core.SubmissionAccepted && s.OfferID != "" {
+								<div class="row-sub">
+									<a href={ templ.SafeURL("/offers/" + s.OfferID) }>see the listing</a>
+								</div>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
+// askingText renders what the submitter hoped for, or a dash.
+func askingText(s core.Submission) string {
+	if s.Asking.IsZero() {
+		return "—"
+	}
+	return s.Asking.String()
+}
+
+// submissionBadge maps a triage state onto the status palette, so the inbox
+// reads with the same colour language as the rest of the application rather than
+// inventing a second one.
+func submissionBadge(s core.SubmissionStatus) string {
+	switch s {
+	case core.SubmissionNew:
+		return "pending"
+	case core.SubmissionReviewing:
+		return "draft"
+	case core.SubmissionAccepted:
+		return "listed"
+	case core.SubmissionDeclined:
+		return "archived"
+	}
+	return "draft"
+}
+
+// SubmissionScreen is one proposal.
+templ SubmissionScreen(d SubmissionDetail) {
+	<div class="stack" data-signals={ decideSignals(d) }>
+		<div id="sub-flash"></div>
+		@SubmissionBody(d)
+	</div>
+}
+
+// SubmissionBody is the part that changes, so a decision re-renders exactly this
+// and nothing else.
+templ SubmissionBody(d SubmissionDetail) {
+	<div id="sub-body" class="grid-2" style="align-items:start">
+		<div class="stack">
+			<div class="card">
+				<div class="card-head">
+					<h2>{ d.Submission.Title }</h2>
+					<span class="spacer"></span>
+					<span class={ "badge badge-" + submissionBadge(d.Submission.Status) }>{ d.Submission.Status.Label() }</span>
+				</div>
+				<div class="card-body stack">
+					<div>
+						<span class="tile-label">From</span>
+						<div>{ d.Submission.SubmitterName }</div>
+					</div>
+					if d.Submission.Note != "" {
+						<div>
+							<span class="tile-label">They said</span>
+							<p class="muted">{ d.Submission.Note }</p>
+						</div>
+					}
+					<div>
+						<span class="tile-label">They would like</span>
+						<div class="tile-value">{ askingText(d.Submission) }</div>
+					</div>
+					if d.Submission.ReviewNote != "" {
+						<div>
+							<span class="tile-label">Decision note</span>
+							<p class="muted">{ d.Submission.ReviewNote }</p>
+						</div>
+					}
+					if d.Submission.Status == core.SubmissionAccepted && d.Submission.OfferID != "" {
+						@Message("ok", "Accepted. It is now a listing.")
+						<a class="btn btn-primary" href={ templ.SafeURL("/offers/" + d.Submission.OfferID) }>Open the listing</a>
+					}
+				</div>
+			</div>
+			@submissionPhotos(d)
+		</div>
+		if d.CanDecide && d.Submission.Status != core.SubmissionAccepted {
+			@decidePanel(d)
+		}
+	</div>
+}
+
+templ submissionPhotos(d SubmissionDetail) {
+	<div class="card">
+		<div class="card-head">
+			<h2>Photographs</h2>
+			<span class="spacer"></span>
+			<span class="faint">{ itoa(len(d.Submission.Photos)) }</span>
+		</div>
+		<div class="card-body stack">
+			<div class="photos">
+				for i, p := range d.Submission.Photos {
+					<figure class="photo">
+						<img src={ p.PublicPath() } alt={ photoAlt(d.Submission.Title, i) } loading="lazy" width="104" height="104"/>
+						if i == 0 {
+							<span class="photo-primary">MAIN</span>
+						}
+					</figure>
+				}
+				if d.Submission.Status != core.SubmissionAccepted {
+					<label class="drop">
+						<span aria-hidden="true">＋</span>
+						<span>Add</span>
+						<input
+							class="sr-only"
+							type="file"
+							accept="image/jpeg,image/png,image/webp,image/gif"
+							multiple
+							data-bind:sub-files
+							data-on:change={ "@post('/submit/" + d.Submission.ID + "/photos', {contentType: 'form'})" }
+						/>
+					</label>
+				}
+			</div>
+			if len(d.Submission.Photos) == 0 {
+				@Message("info", "Nobody can judge an item they cannot see. Add at least one photograph.")
+			} else {
+				<span class="hint">
+					These keep their addresses when the item is accepted, so a link
+					shared now still works afterwards.
+				</span>
+			}
+		</div>
+	</div>
+}
+
+// decidePanel is the administrator's half: ring them, agree a price, and either
+// turn it into a listing or say why not.
+templ decidePanel(d SubmissionDetail) {
+	<div class="card">
+		<div class="card-head"><h2>Decide</h2></div>
+		<div class="card-body stack">
+			if d.Submission.Status == core.SubmissionNew {
+				<div>
+					<button
+						class="btn"
+						type="button"
+						data-on:click={ "@post('/submit/" + d.Submission.ID + "/review')" }
+					>I am looking at this</button>
+					<span class="hint">Marks it as picked up, so nobody rings them twice.</span>
+				</div>
+			}
+			<div class="field">
+				<label for="d-note">Note</label>
+				<textarea id="d-note" class="textarea" placeholder="agreed 30 EUR, collecting Tuesday" data-bind:dec-note></textarea>
+				<span class="hint">
+					Required to decline — a bare no sends the same item back next week.
+					Optional to accept, where it records what you agreed.
+				</span>
+			</div>
+			<div class="field">
+				<label for="d-shop">Shop price</label>
+				<div class="money-row">
+					<input id="d-shop" class="input" type="text" inputmode="decimal" placeholder="0.00" data-bind:dec-shop-amount/>
+					<select class="select" aria-label="Shop currency" data-bind:dec-shop-currency>
+						for _, c := range d.Currencies {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+				</div>
+				<span class="hint">What we will list it at.</span>
+			</div>
+			<div class="field">
+				<label for="d-owner">Pay them</label>
+				<div class="money-row">
+					<input id="d-owner" class="input" type="text" inputmode="decimal" placeholder="what you agreed" data-bind:dec-owner-amount/>
+					<select class="select" aria-label="Owner currency" data-bind:dec-owner-currency>
+						for _, c := range d.Currencies {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+				</div>
+				<span class="hint">Leave blank to use what they asked for. Never exported.</span>
+			</div>
+			<div class="field">
+				<label for="d-loc">Put it in</label>
+				<select id="d-loc" class="select" data-bind:dec-location>
+					<option value="">Choose a place…</option>
+					for _, l := range d.Locations {
+						<option value={ l.ID }>{ l.Path }</option>
+					}
+				</select>
+				<span class="hint">Required. An accepted item that is nowhere cannot be found again.</span>
+			</div>
+			<div class="grid-2">
+				<div class="field">
+					<label for="d-sku">Reference</label>
+					<input id="d-sku" class="input" type="text" placeholder="generated if blank" data-bind:dec-sku/>
+				</div>
+				<div class="field">
+					<label for="d-cond">Condition</label>
+					<input id="d-cond" class="input" type="text" placeholder="used — good" data-bind:dec-condition/>
+				</div>
+			</div>
+			<div class="field">
+				<label for="d-desc">Listing description</label>
+				<textarea id="d-desc" class="textarea" data-bind:dec-description></textarea>
+			</div>
+			<div class="toolbar">
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click={ "@post('/submit/" + d.Submission.ID + "/accept')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Accept and create the listing</span>
+				</button>
+				<button
+					class="btn btn-danger"
+					type="button"
+					data-on:click={ "@post('/submit/" + d.Submission.ID + "/decline')" }
+				>Decline</button>
+			</div>
+		</div>
+	</div>
+}
+
+// decideSignals seeds the decide panel.
+//
+// The owner price starts at what the submitter ASKED for, because that is the
+// number the conversation begins from — and leaving it blank would make the
+// commonest case, agreeing to what they wanted, require retyping it.
+func decideSignals(d SubmissionDetail) string {
+	cur := currencyOr(d.Submission.Asking, core.BaseCurrency)
+	return "{decNote: '', decShopAmount: '', decShopCurrency: " + jsString(cur) +
+		", decOwnerAmount: " + jsString(decimalOrEmpty(d.Submission.Asking)) +
+		", decOwnerCurrency: " + jsString(cur) +
+		", decLocation: '', decSku: '', decCondition: '', decDescription: " +
+		jsString(d.Submission.Note) + "}"
+}

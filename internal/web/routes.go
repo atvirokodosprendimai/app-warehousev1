@@ -89,6 +89,24 @@ func (a *App) Routes() http.Handler {
 
 		r.Get("/export", a.GetExport)
 		r.Get("/export/{file}", a.GetExportFile)
+
+		// Anyone signed in may offer the warehouse something. Reading one back is
+		// gated on the ROW rather than the route — a submitter sees their own, an
+		// administrator sees any — so those checks live in the handler.
+		r.Get("/submit", a.GetSubmit)
+		r.Post("/submit", a.PostSubmit)
+		r.Get("/submit/{id}", a.GetSubmission)
+		r.Post("/submit/{id}/photos", a.PostSubmissionPhoto)
+	})
+
+	// ---- administrator ----
+	r.Group(func(r chi.Router) {
+		r.Use(a.requireUser, a.requireAdmin)
+
+		r.Get("/inbox", a.GetInbox)
+		r.Post("/submit/{id}/review", a.PostStartReview)
+		r.Post("/submit/{id}/decline", a.PostDecline)
+		r.Post("/submit/{id}/accept", a.PostAccept)
 	})
 
 	// ---- administrator ----
