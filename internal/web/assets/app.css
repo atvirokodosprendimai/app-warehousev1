@@ -1,0 +1,660 @@
+/* Warehouse — design system.
+ *
+ * One stylesheet, served from the binary. No framework: the whole UI is
+ * server-rendered HTML morphed by datastar, so there is no build step to hang a
+ * utility framework off, and a hand-written token layer is smaller than the
+ * subset of one we would use.
+ *
+ * Tokens first, then primitives, then components. Every colour is a token so
+ * that the dark scheme is a token swap rather than a second stylesheet.
+ */
+
+/* ---------- tokens ---------- */
+
+:root {
+  color-scheme: light dark;
+
+  /* Neutrals. A warm grey rather than pure grey: a warehouse tool is looked at
+     for hours and a cold blue-grey reads as clinical at low brightness. */
+  --bg:          #f7f6f3;
+  --surface:     #ffffff;
+  --surface-2:   #f2f0ec;
+  --border:      #e2ded7;
+  --border-firm: #cdc7bd;
+  --text:        #1c1a17;
+  --text-muted:  #6b655c;
+  --text-faint:  #948d82;
+
+  /* One accent, used for focus, primary actions and the active nav item.
+     A second accent would compete with the status colours, which carry meaning. */
+  --accent:      #1f5f4f;
+  --accent-hover:#174b3f;
+  --accent-soft: #e3efeb;
+  --accent-text: #ffffff;
+
+  /* Status colours. These are semantic, not decorative — they are the only
+     colours that mean something, so nothing else may use them. */
+  --draft:       #6b655c;
+  --draft-bg:    #eceae6;
+  --listed:      #1f5f4f;
+  --listed-bg:   #e3efeb;
+  --pending:     #8a5a00;
+  --pending-bg:  #fbefd9;
+  --sold:        #2a4d8f;
+  --sold-bg:     #e4ebf7;
+  --archived:    #8a8178;
+  --archived-bg: #f0eeea;
+  --danger:      #a32d24;
+  --danger-bg:   #fbe8e6;
+
+  --radius:    10px;
+  --radius-sm: 7px;
+  --shadow:    0 1px 2px rgba(28, 26, 23, .05), 0 4px 12px rgba(28, 26, 23, .04);
+  --shadow-lg: 0 8px 32px rgba(28, 26, 23, .14);
+
+  --sidebar-w: 232px;
+
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+          "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #161513;
+    --surface:     #1f1e1b;
+    --surface-2:   #262421;
+    --border:      #322f2b;
+    --border-firm: #45413b;
+    --text:        #f0ede8;
+    --text-muted:  #a8a199;
+    --text-faint:  #7d766d;
+
+    --accent:      #4fbf9f;
+    --accent-hover:#6fd0b4;
+    --accent-soft: #16332c;
+    --accent-text: #0d1b17;
+
+    --draft:       #a8a199;
+    --draft-bg:    #2a2825;
+    --listed:      #4fbf9f;
+    --listed-bg:   #16332c;
+    --pending:     #e0a340;
+    --pending-bg:  #33280f;
+    --sold:        #7ba3e8;
+    --sold-bg:     #1b2740;
+    --archived:    #8a8178;
+    --archived-bg: #262421;
+    --danger:      #f08a80;
+    --danger-bg:   #3a1d1a;
+
+    --shadow:    0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, .55);
+  }
+}
+
+/* ---------- reset ---------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p, figure { margin: 0; }
+img { max-width: 100%; display: block; }
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* One focus treatment everywhere. :focus-visible rather than :focus so a mouse
+   click does not leave a ring, but every keyboard path shows one. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Respect a reduced-motion preference rather than animating regardless. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ---------- skip link ---------- */
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-radius: 0 0 var(--radius-sm) 0;
+}
+.skip:focus { left: 0; }
+
+/* ---------- shell ---------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 0;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  color: var(--text);
+  text-decoration: none;
+}
+.brand-mark {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-text);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  flex: none;
+}
+
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 10px 8px 4px;
+}
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 44px minimum touch target. */
+  min-height: 44px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+.nav a:hover { background: var(--surface-2); color: var(--text); }
+/* aria-current is the accessible source of truth; the style follows it rather
+   than a separate .active class, so the two can never disagree. */
+.nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.nav-count {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+}
+
+.sidebar-foot { margin-top: auto; border-top: 1px solid var(--border); padding-top: 14px; }
+.who { display: flex; align-items: center; gap: 10px; padding: 0 8px 10px; }
+.avatar {
+  width: 30px; height: 30px; flex: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 650;
+  color: var(--text-muted);
+}
+.who-name { font-size: 13px; font-weight: 550; line-height: 1.2; }
+.who-role { font-size: 11px; color: var(--text-faint); }
+
+.main { min-width: 0; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.topbar h1 { font-size: 19px; font-weight: 650; letter-spacing: -.015em; }
+.topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+.content { padding: 26px; display: flex; flex-direction: column; gap: 22px; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+  .nav { flex-direction: row; }
+  .nav-label, .sidebar-foot, .nav-count { display: none; }
+  .nav a { white-space: nowrap; }
+  .content, .topbar { padding-left: 16px; padding-right: 16px; }
+}
+
+/* ---------- stat tiles ---------- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 12px;
+}
+.tile {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-decoration: none;
+  color: inherit;
+}
+a.tile:hover { border-color: var(--border-firm); box-shadow: var(--shadow); }
+.tile-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* Tabular numerals so a column of figures lines up and a changing number does
+   not make the tile jitter. */
+.tile-value {
+  font-size: 27px;
+  font-weight: 650;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tile-note { font-size: 12px; color: var(--text-muted); }
+
+/* ---------- card ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.card-head h2 { font-size: 14px; font-weight: 650; }
+.card-head .spacer { margin-left: auto; }
+.card-body { padding: 16px; }
+
+/* ---------- table ---------- */
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--surface);
+}
+tbody td { padding: 11px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-2); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.code { font-family: var(--mono); font-size: 12.5px; color: var(--text-muted); }
+
+.thumb {
+  width: 40px; height: 40px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  flex: none;
+}
+.thumb-empty {
+  display: grid; place-items: center;
+  color: var(--text-faint);
+  font-size: 15px;
+}
+
+.row-title { font-weight: 550; color: var(--text); text-decoration: none; }
+.row-title:hover { color: var(--accent); text-decoration: underline; }
+.row-sub { font-size: 12px; color: var(--text-faint); }
+
+/* ---------- badge ---------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+/* A dot as well as a hue: status must survive a colour-blind reader and a
+   greyscale print, so hue is never the only channel. */
+.badge::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.badge-draft    { color: var(--draft);    background: var(--draft-bg); }
+.badge-listed   { color: var(--listed);   background: var(--listed-bg); }
+.badge-pending  { color: var(--pending);  background: var(--pending-bg); }
+.badge-sold     { color: var(--sold);     background: var(--sold-bg); }
+.badge-archived { color: var(--archived); background: var(--archived-bg); }
+
+.flag-nopricing {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pending);
+}
+
+/* ---------- buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-firm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.btn-danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+.btn-danger:hover:not(:disabled) { background: var(--danger-bg); }
+
+.btn-ghost { border-color: transparent; background: transparent; color: var(--text-muted); }
+.btn-ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+
+/* Touch pointers get the full 44px; a mouse does not need it and the denser
+   control reads better in a dashboard. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; padding: 0 16px; }
+}
+
+/* ---------- fields ---------- */
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 13px; font-weight: 600; color: var(--text); }
+.field .hint { font-size: 12px; color: var(--text-faint); }
+
+.input, .select, .textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid var(--border-firm);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+.textarea { min-height: 110px; resize: vertical; line-height: 1.55; }
+.input::placeholder, .textarea::placeholder { color: var(--text-faint); }
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.input[aria-invalid="true"] { border-color: var(--danger); }
+
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+
+.money-row { display: grid; grid-template-columns: 1fr 96px; gap: 8px; }
+
+/* ---------- messages ---------- */
+
+.msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  border: 1px solid transparent;
+}
+.msg-error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger); }
+.msg-ok    { color: var(--listed); background: var(--listed-bg); border-color: var(--listed); }
+.msg-info  { color: var(--text-muted); background: var(--surface-2); border-color: var(--border); }
+
+/* ---------- empty state ---------- */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 52px 24px;
+  text-align: center;
+}
+.empty-icon { font-size: 30px; opacity: .5; }
+.empty h3 { font-size: 15px; font-weight: 650; }
+.empty p { font-size: 13.5px; color: var(--text-muted); max-width: 42ch; }
+
+/* ---------- loading ---------- */
+
+.spinner {
+  width: 15px; height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- auth page ---------- */
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.auth-head { display: flex; flex-direction: column; gap: 5px; align-items: center; text-align: center; }
+.auth-head h1 { font-size: 19px; font-weight: 650; }
+.auth-head p { font-size: 13.5px; color: var(--text-muted); }
+
+/* ---------- modal ---------- */
+
+/* The page ships an EMPTY #modal div; the backend renders this into it. Nothing
+   is pre-rendered and toggled, so the browser holds no dialog state. */
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 18, 16, .5);
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  z-index: 50;
+}
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.modal-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 15px 18px; border-bottom: 1px solid var(--border);
+}
+.modal-head h2 { font-size: 15px; font-weight: 650; }
+.modal-head .spacer { margin-left: auto; }
+.modal-body { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.modal-foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 13px 18px; border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+/* ---------- photo strip ---------- */
+
+.photos { display: flex; flex-wrap: wrap; gap: 10px; }
+.photo {
+  position: relative;
+  width: 104px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.photo img { width: 104px; height: 104px; object-fit: cover; }
+.photo-primary {
+  position: absolute; top: 5px; left: 5px;
+  padding: 1px 6px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-text);
+  font-size: 10px; font-weight: 700; letter-spacing: .03em;
+}
+.photo-del {
+  position: absolute; top: 4px; right: 4px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(20, 18, 16, .68);
+  color: #fff;
+  cursor: pointer;
+  display: grid; place-items: center;
+  font-size: 14px; line-height: 1;
+}
+.photo-del:hover { background: var(--danger); }
+
+/* The public URL is the whole point of a photo here — a marketplace fetches it
+   — so it is shown, selectable, and never truncated out of reach. */
+.photo-url {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  word-break: break-all;
+  padding: 4px 6px;
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 104px; height: 104px;
+  border: 1.5px dashed var(--border-firm);
+  border-radius: var(--radius-sm);
+  color: var(--text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  background: transparent;
+}
+.drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- misc ---------- */
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 11px;
+  border: 1px solid var(--border-firm);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 13px; font-weight: 550;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.chip[aria-pressed="true"] {
+  background: var(--accent-soft); border-color: var(--accent); color: var(--accent);
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.muted { color: var(--text-muted); }
+.faint { color: var(--text-faint); }
+.right { margin-left: auto; }

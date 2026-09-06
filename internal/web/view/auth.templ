@@ -1,0 +1,128 @@
+package view
+
+// AuthPage renders sign-in, or the one-time first-administrator bootstrap.
+//
+// There is no public registration in this product. The bootstrap branch is
+// reachable only while the database holds zero users, and the router refuses the
+// route entirely once one exists — so this template never has to decide who is
+// allowed to see it.
+//
+// ⚠ No <form> element, by team decision. Inputs are bound to signals with
+// data-bind and the action posts them. The casing pair matters and is easy to
+// get wrong: HTML lowercases attribute names, so the attribute suffix must be
+// KEBAB (data-bind:auth-email) and it binds the camelCase signal (authEmail).
+// Writing data-bind:authEmail would silently bind "authemail" — a different
+// signal — and nothing would report it.
+templ AuthPage(a Auth) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			if a.Bootstrap {
+				<title>Create the first administrator · Warehouse</title>
+			} else {
+				<title>Sign in · Warehouse</title>
+			}
+			<link rel="stylesheet" href="/assets/app.css"/>
+			<script type="module" src={ DatastarBundle }></script>
+		</head>
+		<body>
+			<main class="auth-page" data-signals="{authEmail: '', authPassword: '', authName: ''}">
+				<div class="auth-card">
+					<div class="auth-head">
+						<span class="brand-mark" aria-hidden="true">W</span>
+						if a.Bootstrap {
+							<h1>Create the first administrator</h1>
+							<p>
+								This installation has no accounts yet. The account you
+								create now becomes the administrator, and this page
+								closes permanently afterwards.
+							</p>
+						} else {
+							<h1>Sign in</h1>
+							<p>Accounts are created by an administrator.</p>
+						}
+					</div>
+					<div id="auth-msg">
+						if a.Error != "" {
+							@Message("error", a.Error)
+						}
+					</div>
+					if a.Bootstrap {
+						<div class="field">
+							<label for="name">Your name</label>
+							<input
+								id="name"
+								class="input"
+								type="text"
+								autocomplete="name"
+								data-bind:auth-name
+							/>
+						</div>
+					}
+					<div class="field">
+						<label for="email">Email</label>
+						<input
+							id="email"
+							class="input"
+							type="email"
+							autocomplete="username"
+							required
+							data-bind:auth-email
+							data-on:keydown={ submitOnEnter(a) }
+						/>
+					</div>
+					<div class="field">
+						<label for="password">Password</label>
+						<input
+							id="password"
+							class="input"
+							type="password"
+							if a.Bootstrap {
+								autocomplete="new-password"
+							} else {
+								autocomplete="current-password"
+							}
+							required
+							data-bind:auth-password
+							data-on:keydown={ submitOnEnter(a) }
+						/>
+						if a.Bootstrap {
+							<span class="hint">At least 10 characters. There is no password reset, so store it somewhere safe.</span>
+						}
+					</div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click={ authAction(a) }
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						if a.Bootstrap {
+							<span>Create administrator</span>
+						} else {
+							<span>Sign in</span>
+						}
+					</button>
+				</div>
+			</main>
+		</body>
+	</html>
+}
+
+// authAction returns the datastar action expression for the primary button.
+func authAction(a Auth) string {
+	if a.Bootstrap {
+		return "@post('/bootstrap')"
+	}
+	return "@post('/login')"
+}
+
+// submitOnEnter lets Enter submit from either field, which is what anyone
+// signing in expects. Without a <form> there is no implicit submit, so the
+// behaviour has to be stated.
+func submitOnEnter(a Auth) string {
+	return "evt.key === 'Enter' && " + authAction(a)
+}

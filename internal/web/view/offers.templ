@@ -1,0 +1,193 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// OfferTable renders a list of offers.
+//
+// It is shared by the dashboard and the offers screen rather than each writing
+// its own table, so a column added in one place appears in both and they cannot
+// drift into disagreeing about what an offer looks like.
+//
+// The wrapping element carries a stable id: it is the morph target for every
+// SSE patch that changes the list, and datastar matches fragments by id.
+templ OfferTable(id string, rows []OfferRow, showOwner bool) {
+	<div id={ id }>
+		if len(rows) == 0 {
+			@Empty("📦", "Nothing here yet", "Offers you add will appear in this list.") {
+				<a class="btn btn-primary" href="/offers/new">Add the first offer</a>
+			}
+		} else {
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th scope="col"><span class="sr-only">Photo</span></th>
+							<th scope="col">Item</th>
+							<th scope="col">Status</th>
+							<th scope="col">Location</th>
+							<th scope="col" class="num">Shop price</th>
+							if showOwner {
+								<th scope="col" class="num">Owner wants</th>
+								<th scope="col" class="num">Margin</th>
+							}
+						</tr>
+					</thead>
+					<tbody>
+						for _, r := range rows {
+							@offerRow(r, showOwner)
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	</div>
+}
+
+templ offerRow(r OfferRow, showOwner bool) {
+	<tr>
+		<td>
+			if r.Thumb() != "" {
+				<img class="thumb" src={ r.Thumb() } alt="" loading="lazy" width="40" height="40"/>
+			} else {
+				<span class="thumb thumb-empty" aria-hidden="true">📷</span>
+			}
+		</td>
+		<td>
+			<a class="row-title" href={ templ.SafeURL("/offers/" + r.Offer.ID) }>{ r.Offer.Title }</a>
+			<div class="row-sub code">{ r.Offer.SKU }</div>
+		</td>
+		<td>
+			@Badge(r.Offer.Status)
+			if r.Offer.NeedsPricing() {
+				<div class="flag-nopricing">Needs pricing</div>
+			}
+		</td>
+		<td>
+			if r.LocationPath != "" {
+				<div class="code">{ r.LocationPath }</div>
+			} else {
+				<div class="faint">Not shelved</div>
+			}
+			if r.Where.Summary() != "" {
+				<div class="row-sub">{ r.Where.Summary() }</div>
+			}
+		</td>
+		<td class="num">{ r.PriceText() }</td>
+		if showOwner {
+			<td class="num muted">{ r.OwnerText() }</td>
+			<td class="num">{ r.MarginText() }</td>
+		}
+	</tr>
+}
+
+// OffersScreen is the full offers listing with its filter toolbar.
+templ OffersScreen(l OfferList) {
+	<div class="stack">
+		<div class="card">
+			<div class="card-head">
+				<h2>Filter</h2>
+				<span class="spacer"></span>
+				<span class="faint">{ itoa(l.Total) } matching</span>
+			</div>
+			<div class="card-body">
+				<div class="toolbar" role="group" aria-label="Filter by status">
+					@filterChip("/offers", "All", !l.Filter.NeedsPricing && len(l.Filter.Status) == 0)
+					for _, s := range core.Statuses() {
+						@filterChip(statusHref(s), s.Label(), l.StatusActive(s))
+					}
+					@filterChip("/offers?needs_pricing=1", "Needs pricing", l.Filter.NeedsPricing)
+				</div>
+			</div>
+		</div>
+		@OfferTable("offer-list", l.Rows, true)
+	</div>
+}
+
+// filterChip is a link, not a button: a filtered listing is a distinct URL, so
+// it should be bookmarkable and shareable and survive a reload. aria-pressed
+// carries the selected state for a screen reader and the stylesheet keys off the
+// same attribute, so the two cannot disagree.
+templ filterChip(href, label string, active bool) {
+	if active {
+		<a class="chip" href={ templ.SafeURL(href) } aria-pressed="true">{ label }</a>
+	} else {
+		<a class="chip" href={ templ.SafeURL(href) } aria-pressed="false">{ label }</a>
+	}
+}
+
+// DashboardScreen is the landing view.
+templ DashboardScreen(d Dashboard) {
+	<div class="stack">
+		<div class="tiles">
+			@tile("/offers?status=listed", "Listed", itoa(d.Page.Count(core.StatusListed)), "live on marketplaces")
+			@tile("/offers?status=pending", "Pending", itoa(d.Page.Count(core.StatusPending)), "sold, not settled")
+			@tile("/offers?needs_pricing=1", "Awaiting pricing", itoa(d.Page.NeedsPricing), "photographed, not priced")
+			@tile("/offers?status=sold", "Sold", itoa(d.Page.Count(core.StatusSold)), "all time")
+		</div>
+		<div class="tiles">
+			@tile("", "Stock value", moneyOrDash(d.StockValue), "shop price of listed stock")
+			@tile("", "Owed to holders", moneyOrDash(d.OwedToHolders), "against that same stock")
+			@tile("", "Sold this month", moneyOrDash(d.SoldThisMonth), "realised")
+			@rateTile(d.Rate)
+		</div>
+		if len(d.Pricing) > 0 {
+			<div class="card">
+				<div class="card-head">
+					<h2>Awaiting pricing</h2>
+					<span class="spacer"></span>
+					<a class="btn btn-ghost" href="/offers?needs_pricing=1">See all</a>
+				</div>
+				@OfferTable("pricing-queue", d.Pricing, true)
+			</div>
+		}
+		<div class="card">
+			<div class="card-head">
+				<h2>Recent</h2>
+				<span class="spacer"></span>
+				<a class="btn btn-ghost" href="/offers">See all</a>
+			</div>
+			@OfferTable("recent-offers", d.Recent, false)
+		</div>
+	</div>
+}
+
+templ tile(href, label, value, note string) {
+	if href != "" {
+		<a class="tile" href={ templ.SafeURL(href) }>
+			<span class="tile-label">{ label }</span>
+			<span class="tile-value">{ value }</span>
+			<span class="tile-note">{ note }</span>
+		</a>
+	} else {
+		<div class="tile">
+			<span class="tile-label">{ label }</span>
+			<span class="tile-value">{ value }</span>
+			<span class="tile-note">{ note }</span>
+		</div>
+	}
+}
+
+// rateTile shows the reference rate and, importantly, WHEN it is from. A stale
+// rate that looks current is how a report quietly stops being reproducible, so
+// the date is part of the value rather than a tooltip.
+templ rateTile(r core.Rate) {
+	<div class="tile">
+		<span class="tile-label">EUR / USD</span>
+		if r.Rate == "" {
+			<span class="tile-value">—</span>
+			<span class="tile-note">no rate fetched yet</span>
+		} else {
+			<span class="tile-value">{ r.Rate }</span>
+			<span class="tile-note">ECB reference, { r.AsOf }</span>
+		}
+	</div>
+}
+
+// moneyOrDash renders an amount, or an em dash when there is nothing to show.
+// Rendering "0.00" for "nothing yet" would state a fact the data does not carry.
+func moneyOrDash(m core.Money) string {
+	if m.IsZero() {
+		return "—"
+	}
+	return m.String()
+}

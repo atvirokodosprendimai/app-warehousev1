@@ -1,0 +1,4 @@
+{
+  "check": "go test ./...",
+  "notes": "templ templates compile to *_templ.go, which are committed. If a .templ file changed, run `go tool templ generate` before the check."
+}

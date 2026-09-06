@@ -1,0 +1,382 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// OfferScreen is the single-offer editor.
+//
+// It opens ONE SSE connection for the whole page (data-init on the wrapper), and
+// the server decides what to push down it. Per-widget streams would multiply
+// connections for no gain — the server already knows which fragments changed.
+//
+// Signals are declared here rather than in the layout, because signals are
+// global and flattened and every unprefixed one rides to the backend on every
+// action. Keeping them on the screen that uses them means the dashboard does not
+// pay for the editor's state. They are feature-prefixed for the same reason:
+// there is no component scope to protect them.
+templ OfferScreen(d OfferDetail) {
+	<div
+		class="stack"
+		data-init={ "@get('/offers/" + d.Row.Offer.ID + "/stream')" }
+		data-signals={ offerSignals(d) }
+	>
+		<div id="offer-flash"></div>
+		<div class="grid-2" style="align-items:start">
+			<div class="stack">
+				@offerDetailsCard(d)
+				@offerPricingCard(d)
+			</div>
+			<div class="stack">
+				@OfferStatusCard(d)
+				@OfferPhotosCard(d)
+				@offerLocationCard(d)
+			</div>
+		</div>
+	</div>
+}
+
+// offerSignals builds the page's initial signal object.
+//
+// camelCase inside the object literal, kebab-case in the data-bind attribute
+// suffix — they are the same signal. HTML lowercases attribute names, so writing
+// data-bind:shopAmount would bind "shopamount" and silently miss this literal.
+func offerSignals(d OfferDetail) string {
+	o := d.Row.Offer
+	return "{" +
+		"offerTitle: " + jsString(o.Title) + ", " +
+		"offerDescription: " + jsString(o.Description) + ", " +
+		"offerCondition: " + jsString(o.Condition) + ", " +
+		"shopAmount: " + jsString(decimalOrEmpty(o.Shop)) + ", " +
+		"shopCurrency: " + jsString(currencyOr(o.Shop, core.BaseCurrency)) + ", " +
+		"ownerAmount: " + jsString(decimalOrEmpty(o.Owner)) + ", " +
+		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
+		"offerLocation: " + jsString(o.LocationID) +
+		"}"
+}
+
+templ offerDetailsCard(d OfferDetail) {
+	<div class="card">
+		<div class="card-head">
+			<h2>Details</h2>
+			<span class="spacer"></span>
+			<span class="code faint">{ d.Row.Offer.SKU }</span>
+		</div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="o-title">Title</label>
+				<input id="o-title" class="input" type="text" data-bind:offer-title/>
+				<span class="hint">This is the listing headline on every marketplace.</span>
+			</div>
+			<div class="field">
+				<label for="o-desc">Description</label>
+				<textarea id="o-desc" class="textarea" data-bind:offer-description></textarea>
+			</div>
+			<div class="field">
+				<label for="o-cond">Condition</label>
+				<input id="o-cond" class="input" type="text" placeholder="used — good" data-bind:offer-condition/>
+			</div>
+			<div>
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Save details</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// offerPricingCard is the research step made concrete: the price is set here,
+// after intake, and the owner's figure sits beside it so the margin is visible
+// at the moment the decision is made.
+templ offerPricingCard(d OfferDetail) {
+	<div class="card">
+		<div class="card-head"><h2>Pricing</h2></div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="shop-amt">Shop price</label>
+				<div class="money-row">
+					<input id="shop-amt" class="input" type="text" inputmode="decimal" placeholder="0.00" data-bind:shop-amount/>
+					<select class="select" aria-label="Shop price currency" data-bind:shop-currency>
+						for _, c := range d.Currencies {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+				</div>
+				<span class="hint">Published to Shopify and eBay. This is the only price that leaves the building.</span>
+			</div>
+			<div class="field">
+				<label for="own-amt">Owner wants</label>
+				<div class="money-row">
+					<input id="own-amt" class="input" type="text" inputmode="decimal" placeholder="0.00" data-bind:owner-amount/>
+					<select class="select" aria-label="Owner price currency" data-bind:owner-currency>
+						for _, c := range d.Currencies {
+							<option value={ c }>{ c }</option>
+						}
+					</select>
+				</div>
+				<span class="hint">What the holder is to be paid. Never exported.</span>
+			</div>
+			@MarginLine(d.Row)
+			<div>
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/prices')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Save prices</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+// MarginLine is its own fragment so the server can re-render just this line
+// after a price change, rather than the whole card.
+templ MarginLine(r OfferRow) {
+	<div id="offer-margin">
+		if r.Offer.Shop.IsZero() {
+			@Message("info", "No shop price yet. This offer is in the pricing queue.")
+		} else if r.MarginText() == "—" {
+			@Message("error", "The shop price and the owner price are in different currencies, so the margin cannot be shown. Convert one of them first.")
+		} else {
+			@Message("ok", "Margin "+r.MarginText()+" on a shop price of "+r.PriceText()+".")
+		}
+	</div>
+}
+
+// OfferStatusCard is a fragment as well as part of the page: a status change
+// re-renders exactly this card over SSE.
+templ OfferStatusCard(d OfferDetail) {
+	<div class="card" id="offer-status">
+		<div class="card-head">
+			<h2>Status</h2>
+			<span class="spacer"></span>
+			@Badge(d.Row.Offer.Status)
+		</div>
+		<div class="card-body stack">
+			if d.Row.Offer.Status == core.StatusSold {
+				<div class="stack">
+					<div>
+						<span class="tile-label">Sold for</span>
+						<div class="tile-value">{ moneyOrDash(d.Row.Offer.Sold) }</div>
+					</div>
+					if d.Row.Offer.SoldAt != nil {
+						<span class="faint">on { d.Row.Offer.SoldAt.Format("2 January 2006") }</span>
+					}
+					if realisedText(d.Row) != "" {
+						<span class="muted">Kept after paying the holder: { realisedText(d.Row) }</span>
+					}
+				</div>
+			} else {
+				<div class="toolbar">
+					for _, s := range core.Statuses() {
+						if s != d.Row.Offer.Status && s != core.StatusSold {
+							<button
+								class="btn"
+								type="button"
+								data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/status/" + string(s) + "')" }
+								data-indicator:_busy
+								data-attr:disabled="$_busy"
+							>Mark { s.Label() }</button>
+						}
+					}
+				</div>
+				if d.Row.Offer.Shop.IsZero() {
+					@Message("info", "Set a shop price before listing. A published status needs a published price.")
+				}
+				<div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click={ "@get('/offers/" + d.Row.Offer.ID + "/sold-dialog')" }
+					>Record a sale</button>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// realisedText renders what was kept on a completed sale, or "" if unavailable.
+func realisedText(r OfferRow) string {
+	m, err := r.Offer.Realised()
+	if err != nil {
+		return ""
+	}
+	return m.String()
+}
+
+// OfferPhotosCard is a fragment: adding or removing a photo re-renders it whole.
+//
+// ⚠ The file input is the ONE place this app uses form encoding. Bytes cannot
+// ride in a signal, so the upload posts with contentType 'form'; everything else
+// on the page stays signal-bound.
+templ OfferPhotosCard(d OfferDetail) {
+	<div class="card" id="offer-photos">
+		<div class="card-head">
+			<h2>Photos</h2>
+			<span class="spacer"></span>
+			<span class="faint">{ itoa(len(d.Row.Offer.Photos)) }</span>
+		</div>
+		<div class="card-body stack">
+			<div class="photos">
+				for i, p := range d.Row.Offer.Photos {
+					<figure class="photo">
+						<img src={ p.PublicPath() } alt={ photoAlt(d.Row.Offer.Title, i) } loading="lazy" width="104" height="104"/>
+						if i == 0 {
+							<span class="photo-primary">MAIN</span>
+						}
+						<button
+							class="photo-del"
+							type="button"
+							aria-label={ "Remove photo " + itoa(i+1) }
+							data-on:click={ "@delete('/photos/" + p.ID + "')" }
+						>×</button>
+					</figure>
+				}
+				<label class="drop">
+					<span aria-hidden="true">＋</span>
+					<span>Add</span>
+					<input
+						class="sr-only"
+						type="file"
+						accept="image/jpeg,image/png,image/webp,image/gif"
+						multiple
+						data-bind:photo-files
+						data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+					/>
+				</label>
+			</div>
+			if len(d.Row.Offer.Photos) == 0 {
+				@Message("info", "A marketplace listing without photographs will not sell. Add at least one.")
+			} else {
+				<details>
+					<summary class="faint">Public image URLs</summary>
+					<div class="stack" style="margin-top:8px">
+						for _, p := range d.Row.Offer.Photos {
+							<code class="photo-url">{ p.PublicURL(d.PublicBase) }</code>
+						}
+					</div>
+					<p class="hint">
+						Shopify and eBay fetch these from their own servers, so they must
+						be reachable from the public internet.
+					</p>
+				</details>
+			}
+		</div>
+	</div>
+}
+
+// photoAlt gives every image real alternative text. "Photo" alone tells a screen
+// reader nothing it could not infer from the element.
+func photoAlt(title string, i int) string {
+	if i == 0 {
+		return title + " — main photograph"
+	}
+	return title + " — photograph " + itoa(i+1)
+}
+
+templ offerLocationCard(d OfferDetail) {
+	<div class="card" id="offer-location">
+		<div class="card-head"><h2>Where it lives</h2></div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="o-loc">Location</label>
+				<select id="o-loc" class="select" data-bind:offer-location>
+					<option value="">Not shelved</option>
+					for _, l := range d.Locations {
+						<option value={ l.ID }>{ l.Path }</option>
+					}
+				</select>
+			</div>
+			if d.Row.Where.Summary() != "" {
+				<span class="muted">{ d.Row.Where.Summary() }</span>
+			}
+			if d.Row.Where.Offsite() && d.Row.Where.CustodianContact != "" {
+				<span class="faint">Contact: { d.Row.Where.CustodianContact }</span>
+			}
+			<div>
+				<button
+					class="btn"
+					type="button"
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/location')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>Move</button>
+			</div>
+		</div>
+	</div>
+}
+
+// SoldDialog is rendered by the backend into the page's empty #modal div.
+//
+// Nothing about it is pre-rendered and toggled: the browser holds no dialog
+// state, so there is no way for the page to think a dialog is open when it is
+// not.
+templ SoldDialog(d OfferDetail) {
+	<div id="modal">
+		<div class="modal-scrim" data-on:click="@get('/modal/close')">
+			<div
+				class="modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="sold-title"
+				data-on:click="evt.stopPropagation()"
+				data-signals={ "{soldAmount: '', soldCurrency: " + jsString(currencyOr(d.Row.Offer.Shop, core.BaseCurrency)) + ", soldDate: " + jsString(today()) + "}" }
+			>
+				<div class="modal-head">
+					<h2 id="sold-title">Record a sale</h2>
+					<span class="spacer"></span>
+					<button class="btn btn-ghost" type="button" aria-label="Close" data-on:click="@get('/modal/close')">×</button>
+				</div>
+				<div class="modal-body">
+					<div id="sold-msg"></div>
+					<p class="muted">{ d.Row.Offer.Title }</p>
+					<div class="field">
+						<label for="sold-amt">Sold for</label>
+						<div class="money-row">
+							<input id="sold-amt" class="input" type="text" inputmode="decimal" placeholder="0.00" data-bind:sold-amount/>
+							<select class="select" aria-label="Sale currency" data-bind:sold-currency>
+								for _, c := range d.Currencies {
+									<option value={ c }>{ c }</option>
+								}
+							</select>
+						</div>
+						<span class="hint">The price actually paid, which may be less than the shop price.</span>
+					</div>
+					<div class="field">
+						<label for="sold-date">Sale date</label>
+						<input id="sold-date" class="input" type="date" data-bind:sold-date/>
+						<span class="hint">Reports attribute the revenue to this date, and convert at that day's rate.</span>
+					</div>
+				</div>
+				<div class="modal-foot">
+					<button class="btn" type="button" data-on:click="@get('/modal/close')">Cancel</button>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/sold')" }
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span>Record sale</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// CloseModal is the empty fragment that removes an open dialog. Sending an empty
+// div by id is how the server closes something it opened.
+templ CloseModal() {
+	<div id="modal"></div>
+}

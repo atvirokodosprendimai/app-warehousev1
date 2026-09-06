@@ -1,0 +1,150 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// PageShell is the chrome every signed-in screen renders inside.
+//
+// Navigation is real <a href> links rather than datastar actions: that buys
+// bookmarks, middle-click, the back button and aria-current for nothing, and
+// keeps live updates as the stream's job rather than the router's.
+//
+// The layout deliberately declares NO signals. Signals are global and flattened,
+// and every unprefixed one is sent to the backend on every action — so putting
+// page state here would make every screen pay for every other screen's state.
+//
+// The body and the top-bar actions arrive as components rather than through
+// templ's children mechanism, because there are two slots and children fills
+// exactly one.
+templ PageShell(p Page, actions templ.Component, body templ.Component) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ p.Title } · Warehouse</title>
+			<link rel="stylesheet" href="/assets/app.css"/>
+			<script type="module" src={ DatastarBundle }></script>
+		</head>
+		<body>
+			<a class="skip" href="#main">Skip to content</a>
+			<div class="shell">
+				@sidebar(p)
+				<div class="main">
+					<header class="topbar">
+						<h1>{ p.Title }</h1>
+						<div class="topbar-actions">
+							if actions != nil {
+								@actions
+							}
+						</div>
+					</header>
+					<main id="main" class="content">
+						@body
+					</main>
+				</div>
+			</div>
+			<!--
+			  The modal mount point ships EMPTY. A dialog is rendered by the
+			  backend into this div and morphed in by id; nothing is pre-rendered
+			  and toggled, so the browser never holds dialog state of its own.
+			-->
+			<div id="modal"></div>
+		</body>
+	</html>
+}
+
+templ sidebar(p Page) {
+	<nav class="sidebar" aria-label="Main">
+		<a class="brand" href="/">
+			<span class="brand-mark" aria-hidden="true">W</span>
+			<span>Warehouse</span>
+		</a>
+		<div class="nav">
+			<span class="nav-label" id="nav-work">Work</span>
+			@navLink("/", "dashboard", p.Nav, "Dashboard", 0, false)
+			@navLink("/offers", "offers", p.Nav, "Offers", 0, false)
+			@navLink("/offers?needs_pricing=1", "pricing", p.Nav, "Awaiting pricing", p.NeedsPricing, true)
+			<span class="nav-label">Status</span>
+			for _, s := range core.Statuses() {
+				@navLink(statusHref(s), "status-"+string(s), p.Nav, s.Label(), p.Count(s), true)
+			}
+			<span class="nav-label">Setup</span>
+			@navLink("/warehouse", "warehouse", p.Nav, "Warehouse", 0, false)
+			@navLink("/export", "export", p.Nav, "Export", 0, false)
+			if p.User.IsAdmin {
+				@navLink("/users", "users", p.Nav, "Users", 0, false)
+			}
+		</div>
+		<div class="sidebar-foot">
+			<div class="who">
+				<span class="avatar" aria-hidden="true">{ p.Initial() }</span>
+				<span>
+					<span class="who-name">{ p.User.Name() }</span><br/>
+					<span class="who-role">{ p.Role() }</span>
+				</span>
+			</div>
+			<a class="btn btn-ghost" href="/logout" style="width:100%">Sign out</a>
+		</div>
+	</nav>
+}
+
+// navLink renders one sidebar entry.
+//
+// aria-current carries "which page am I on" and the stylesheet keys off that
+// attribute, so the visible highlight and the value a screen reader announces
+// cannot disagree — a separate .active class is exactly how they drift.
+templ navLink(href, key, current, label string, count int, showCount bool) {
+	if key == current {
+		<a href={ templ.SafeURL(href) } aria-current="page">
+			<span>{ label }</span>
+			if showCount {
+				<span class="nav-count">{ itoa(count) }</span>
+			}
+		</a>
+	} else {
+		<a href={ templ.SafeURL(href) }>
+			<span>{ label }</span>
+			if showCount {
+				<span class="nav-count">{ itoa(count) }</span>
+			}
+		</a>
+	}
+}
+
+// statusHref builds the offers URL filtered to one status.
+func statusHref(s core.Status) string { return "/offers?status=" + string(s) }
+
+// Badge renders an offer's status as a pill.
+//
+// The pill carries a dot as well as a hue, because status is meaning rather than
+// decoration and hue alone fails a colour-blind reader and a greyscale print.
+templ Badge(s core.Status) {
+	<span class={ "badge badge-" + string(s) }>{ s.Label() }</span>
+}
+
+// Message renders an inline result banner. Datastar responses are always 200,
+// so an error is a fragment like this one rather than a status code.
+templ Message(kind, text string) {
+	<div class={ "msg msg-" + kind } role={ alertRole(kind) }>
+		<span>{ text }</span>
+	</div>
+}
+
+// alertRole gives an error banner an assertive role so a screen reader announces
+// it when it is morphed in, while a success banner stays polite.
+func alertRole(kind string) string {
+	if kind == "error" {
+		return "alert"
+	}
+	return "status"
+}
+
+// Empty renders an empty state: what is missing, and what to do about it.
+templ Empty(icon, title, body string) {
+	<div class="empty">
+		<span class="empty-icon" aria-hidden="true">{ icon }</span>
+		<h3>{ title }</h3>
+		<p>{ body }</p>
+		{ children... }
+	</div>
+}
