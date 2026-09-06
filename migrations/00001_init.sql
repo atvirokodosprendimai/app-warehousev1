@@ -130,6 +130,10 @@ CREATE TABLE fx_rates (
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (as_of, quote)
 ) STRICT;
+-- RateOn asks for the newest rate for ONE currency on or before a day, so the
+-- index it needs is ordered by quote first. The primary key is (as_of, quote),
+-- which is ordered by day first and cannot serve that lookup without a scan.
+CREATE INDEX fx_rates_quote_asof_idx ON fx_rates (quote, as_of);
 
 -- +goose StatementEnd
 

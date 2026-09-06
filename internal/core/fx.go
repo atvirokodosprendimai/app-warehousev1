@@ -89,3 +89,32 @@ func roundHalfUp(v *big.Rat) int64 {
 	}
 	return n
 }
+
+// DayLayout is the canonical form of a rate day, and the form stored in the
+// database.
+const DayLayout = "2006-01-02"
+
+// Day renders t as a canonical rate day in UTC.
+func Day(t time.Time) string { return t.UTC().Format(DayLayout) }
+
+// NormalizeDay validates a day string and returns it in canonical form.
+//
+// This carries more weight than it appears to. A rate lookup asks for "the
+// newest rate on or before this day", and that bound is a TEXT comparison in
+// SQL — so an unpadded "2026-9-6" sorts AFTER "2026-09-06" and the query would
+// silently return a rate from the wrong day instead of failing. Rejecting a
+// non-canonical day here is what turns a wrong answer into an error.
+func NormalizeDay(s string) (string, error) {
+	t, err := time.Parse(DayLayout, s)
+	if err != nil {
+		return "", fmt.Errorf("%w: %q is not a YYYY-MM-DD date", ErrInvalid, s)
+	}
+	// time.Parse accepts some non-canonical spellings, so round-trip and compare
+	// rather than treating "it parsed" as "it was written correctly".
+	if got := t.Format(DayLayout); got != s {
+		return "", fmt.Errorf("%w: date %q must be written as %q — a rate lookup "+
+			"compares days as text, so an unpadded date selects the wrong row",
+			ErrInvalid, s, got)
+	}
+	return s, nil
+}
