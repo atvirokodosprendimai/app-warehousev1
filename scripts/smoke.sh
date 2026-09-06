@@ -133,6 +133,18 @@ check "the editor uses the SAME one stream endpoint" "/stream?offer=$OFFER_ID" "
 curl -fsS -b "$COOKIES" "$BASE/offers?needs_pricing=1" -o "$RUN/pricing.html"
 check "unpriced draft is in the pricing queue" "Vintage brass desk lamp" "$RUN/pricing.html"
 
+echo "== the upload control the BROWSER will actually use =="
+# ⚠ The curl upload below builds its own multipart body and therefore proves only
+# that the SERVER accepts one. It says nothing about whether the page can produce
+# one — and for a while it could not: the markup had no <form>, no enctype and no
+# name, so datastar threw FetchFormNotFound and sent nothing at all while every
+# assertion here stayed green. These three lines are that gap, closed on the
+# served page. internal/web/view/upload_contract_test.go covers the same contract
+# at the component level.
+check "the upload sits in a real form" '<form enctype="multipart/form-data"' "$RUN/offer.html"
+check "the file input is named, or FormData omits it" 'type="file" name="photos"' "$RUN/offer.html"
+check "the upload posts as form encoding" "contentType: &#39;form&#39;" "$RUN/offer.html"
+
 echo "== photograph =="
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/photos" \
   -F "file=@$RUN/photo.png" -o "$RUN/photo-post.txt"

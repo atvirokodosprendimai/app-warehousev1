@@ -253,18 +253,24 @@ templ submissionPhotos(d SubmissionDetail) {
 					</figure>
 				}
 				if d.Submission.Status != core.SubmissionAccepted {
-					<label class="drop">
-						<span aria-hidden="true">＋</span>
-						<span>Add</span>
-						<input
-							class="sr-only"
-							type="file"
-							accept="image/jpeg,image/png,image/webp,image/gif"
-							multiple
-							data-bind:sub-files
-							data-on:change={ "@post('/submit/" + d.Submission.ID + "/photos', {contentType: 'form'})" }
-						/>
-					</label>
+					<!-- The same single no-form exception as the offer editor, for the
+					     same three reasons: datastar throws FetchFormNotFound with no
+					     enclosing form, sends urlencoded without the enctype, and
+					     FormData omits an unnamed control. -->
+					<form enctype="multipart/form-data" data-on:submit="evt.preventDefault()">
+						<label class="drop">
+							<span aria-hidden="true">＋</span>
+							<span>Add</span>
+							<input
+								class="sr-only"
+								type="file"
+								name="photos"
+								accept="image/jpeg,image/png,image/webp,image/gif"
+								multiple
+								data-on:change={ "@post('/submit/" + d.Submission.ID + "/photos', {contentType: 'form'})" }
+							/>
+						</label>
+					</form>
 				}
 			</div>
 			if len(d.Submission.Photos) == 0 {

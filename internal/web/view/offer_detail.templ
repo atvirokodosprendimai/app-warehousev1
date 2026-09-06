@@ -241,18 +241,43 @@ templ OfferPhotosCard(d OfferDetail) {
 						>×</button>
 					</figure>
 				}
-				<label class="drop">
-					<span aria-hidden="true">＋</span>
-					<span>Add</span>
-					<input
-						class="sr-only"
-						type="file"
-						accept="image/jpeg,image/png,image/webp,image/gif"
-						multiple
-						data-bind:photo-files
-						data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
-					/>
-				</label>
+				<!--
+				  ⚠ A REAL <form>, and it is the ONE exception to this application's
+				  no-form rule. Every attribute on it is load-bearing, and datastar
+				  v1.0.2's own source says why:
+
+				    let T = l ? document.querySelector(l) : r.closest("form");
+				    if (!T) throw i("FetchFormNotFound", ...);
+				    let A = T.getAttribute("enctype") === "multipart/form-data";
+				    A || (q["Content-Type"] = "application/x-www-form-urlencoded");
+				    let X = new URLSearchParams(F);
+				    if (ot(t)) A ? Y.body = F : Y.body = X;
+
+				  So: with no enclosing form it THROWS and never sends the request —
+				  the control appears dead rather than failing. Without the enctype it
+				  degrades to URLSearchParams, which cannot carry bytes. And FormData
+				  collects only NAMED controls, so the input needs `name`. All three
+				  were missing here, and each one alone is fatal.
+
+				  There is deliberately NO data-bind on the input: the file rides in
+				  the FormData, and binding it would additionally serialise the file's
+				  contents into a page-global signal that then ships on every later
+				  action.
+				-->
+				<form enctype="multipart/form-data" data-on:submit="evt.preventDefault()">
+					<label class="drop">
+						<span aria-hidden="true">＋</span>
+						<span>Add</span>
+						<input
+							class="sr-only"
+							type="file"
+							name="photos"
+							accept="image/jpeg,image/png,image/webp,image/gif"
+							multiple
+							data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+						/>
+					</label>
+				</form>
 			</div>
 			if len(d.Row.Offer.Photos) == 0 {
 				@Message("info", "A marketplace listing without photographs will not sell. Add at least one.")
