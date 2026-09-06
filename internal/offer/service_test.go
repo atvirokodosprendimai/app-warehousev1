@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,11 +19,39 @@ func newService(t *testing.T) (*Service, *Repo, *fakeBlobs) {
 	t.Helper()
 	r := newTestRepo(t)
 	b := newFakeBlobs()
-	return NewService(r, b), r, b
+	return NewService(r, b, &fakeSeq{}), r, b
 }
 
-// generatedSKU is the documented fallback shape: WH-<YYYYMMDD>-<8 hex>.
-var generatedSKU = regexp.MustCompile(`^WH-[0-9]{8}-[0-9A-F]{8}$`)
+// fakeSeq is a counter with no database behind it.
+//
+// The service's job is to ASK for a number and handle a collision; whether two
+// concurrent asks can receive the same number is the allocator's job, and is
+// tested against a real database in internal/sequence.
+type fakeSeq struct {
+	mu sync.Mutex
+	n  int64
+	// err, when set, is returned instead of a number.
+	err error
+	// from, when set, is where counting starts — for driving a collision with a
+	// reference a test has already inserted by hand.
+	from int64
+}
+
+func (f *fakeSeq) NextSequence(context.Context, string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.err != nil {
+		return 0, f.err
+	}
+	if f.n == 0 && f.from != 0 {
+		f.n = f.from - 1
+	}
+	f.n++
+	return f.n, nil
+}
+
+// generatedSKU is the documented shape: WH followed by seven digits.
+var generatedSKU = regexp.MustCompile(`^WH[0-9]{7}$`)
 
 func TestCreateNeedsOnlyATitleAndLeavesTheOfferUnpriced(t *testing.T) {
 	s, r, _ := newService(t)
@@ -46,7 +75,8 @@ func TestCreateNeedsOnlyATitleAndLeavesTheOfferUnpriced(t *testing.T) {
 			got.Shop, got.Owner, got.Sold)
 	}
 	if !generatedSKU.MatchString(got.SKU) {
-		t.Errorf("generated SKU = %q, want the WH-<YYYYMMDD>-<8 hex> scheme", got.SKU)
+		t.Errorf("generated SKU = %q, want the WH0000001 scheme — it is written on a "+
+			"label by hand and typed back into a search box", got.SKU)
 	}
 	if got.ID == "" {
 		t.Error("ID is empty")

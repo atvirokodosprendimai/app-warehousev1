@@ -75,6 +75,7 @@ templ sidebar(p Page) {
 			}
 			<span class="nav-label">Setup</span>
 			@navLink("/warehouse", "warehouse", p.Nav, "Warehouse", 0, false)
+			@navLink("/carts", "carts", p.Nav, "Carts", 0, false)
 			@navLink("/export", "export", p.Nav, "Export", 0, false)
 			if p.User.IsAdmin {
 				@navLink("/users", "users", p.Nav, "Users", 0, false)

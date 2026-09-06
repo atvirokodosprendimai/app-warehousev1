@@ -194,6 +194,47 @@ func (s *Service) Place(ctx context.Context, id string) (core.Placement, error) 
 	return node.Where(ancestors), nil
 }
 
+// UpdateDetails changes what a place IS without changing where it is.
+//
+// ⚠ IT DELIBERATELY IGNORES code, parent and path on the supplied value. Those
+// three are the node's ADDRESS, and changing an address means rewriting every
+// descendant's materialised path in the same transaction — which is what
+// [Service.Rename] and [Service.Move] exist to do. A details update that also
+// wrote a new code would set the path of this node and leave its children
+// pointing at the old one, and nothing would report it: the tree would simply
+// start answering "where is this" with a path that resolves to nothing.
+//
+// City and country matter more than they look: everything beneath inherits them,
+// so correcting a site's city corrects every shelf inside it at once.
+func (s *Service) UpdateDetails(ctx context.Context, id string, d core.Location) error {
+	node, err := s.store.Location(ctx, id)
+	if err != nil {
+		return fmt.Errorf("location: update %s: %w", id, err)
+	}
+
+	node.Label = strings.TrimSpace(d.Label)
+	node.Custodian = strings.TrimSpace(d.Custodian)
+	node.CustodianContact = strings.TrimSpace(d.CustodianContact)
+	node.City = strings.TrimSpace(d.City)
+	node.Country = strings.TrimSpace(d.Country)
+	node.Notes = strings.TrimSpace(d.Notes)
+
+	// Validate against the node's real parent, not a supplied one, so the kind
+	// and city rules are checked against where it actually sits.
+	var parent *core.Location
+	if node.ParentID != "" {
+		p, err := s.store.Location(ctx, node.ParentID)
+		if err != nil {
+			return fmt.Errorf("location: update %s: %w", id, err)
+		}
+		parent = &p
+	}
+	if err := node.Validate(parent); err != nil {
+		return err
+	}
+	return s.store.UpdateLocation(ctx, node)
+}
+
 // parent loads the enclosing node, or nil when parentID is empty. A nil parent
 // is what the domain reads as "this is a site", and [core.Location.ChildPath]
 // and [core.Location.Validate] both accept it.

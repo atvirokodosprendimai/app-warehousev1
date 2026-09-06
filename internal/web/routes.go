@@ -81,6 +81,9 @@ func (a *App) Routes() http.Handler {
 		r.Get("/modal/close", a.GetModalClose)
 
 		r.Get("/carts", a.GetCarts)
+		// Adding from the offers listing, which is where a cart is actually built.
+		r.Post("/carts/add/{offerID}", a.PostCartAdd)
+		r.Post("/carts/active", a.PostCartActive)
 		r.Post("/carts", a.PostCarts)
 		r.Get("/carts/{id}", a.GetCart)
 		r.Post("/carts/{id}/items/{offerID}", a.PostCartItem)
@@ -89,6 +92,11 @@ func (a *App) Routes() http.Handler {
 		r.Get("/warehouse", a.GetWarehouse)
 		r.Get("/warehouse/new", a.GetNewLocation)
 		r.Post("/warehouse", a.PostWarehouse)
+		r.Get("/warehouse/{id}", a.GetPlace)
+		r.Post("/warehouse/{id}/details", a.PostPlaceDetails)
+		r.Post("/warehouse/{id}/rename", a.PostPlaceRename)
+		r.Post("/warehouse/{id}/move", a.PostPlaceMove)
+		r.Post("/warehouse/{id}/delete", a.PostPlaceDelete)
 
 		r.Get("/export", a.GetExport)
 		r.Get("/export/{file}", a.GetExportFile)

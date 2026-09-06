@@ -65,12 +65,13 @@ type Service struct {
 	store  core.SubmissionStore
 	offers OfferWriter
 	blobs  core.BlobStore
+	seq    core.Sequencer
 }
 
 // NewService returns a Service writing submissions through store, converted
 // offers through offers, and photo bytes through blobs.
-func NewService(store core.SubmissionStore, offers OfferWriter, blobs core.BlobStore) *Service {
-	return &Service{store: store, offers: offers, blobs: blobs}
+func NewService(store core.SubmissionStore, offers OfferWriter, blobs core.BlobStore, seq core.Sequencer) *Service {
+	return &Service{store: store, offers: offers, blobs: blobs, seq: seq}
 }
 
 // Submit records a staff user's proposal and puts it in the administrator's
@@ -285,7 +286,23 @@ func (s *Service) Accept(ctx context.Context, admin core.User, id string, c core
 	sku := strings.TrimSpace(terms.SKU)
 	t := now()
 	if sku == "" {
-		sku = generateSKU(t)
+		// The same counter the intake counter draws on, so a converted submission
+		// is indistinguishable from stock taken in over the counter — an operator
+		// reading a label should not be able to tell which door an item came
+		// through. The format lives in core precisely so these two callers cannot
+		// drift apart.
+		//
+		// No retry here, unlike intake. A collision means somebody typed this
+		// reference by hand before the counter reached it, and telling the
+		// administrator to try again — which allocates the next number — is
+		// better than this package reaching into the offer aggregate's error
+		// vocabulary to classify one, which is the coupling OfferWriter exists to
+		// avoid.
+		n, err := s.seq.NextSequence(ctx, core.SequenceOfferSKU)
+		if err != nil {
+			return core.Offer{}, fmt.Errorf("submission %s: allocate reference: %w", id, err)
+		}
+		sku = core.FormatSKU(n)
 	}
 	o := core.Offer{
 		ID:          uuid.NewString(),
@@ -369,20 +386,6 @@ func nextPosition(photos []core.Photo) int {
 		}
 	}
 	return next
-}
-
-// generateSKU builds the fallback SKU for a converted submission:
-// "WH-<YYYYMMDD>-<8 uppercase hex>".
-//
-// The scheme is the warehouse's, matching the one internal/offer mints at
-// intake, so that a converted submission is indistinguishable from stock taken
-// in at the counter — an operator reading a label should not be able to tell
-// which door the item came through. It is duplicated rather than imported
-// because a submission must not depend on the offer package for a string
-// format; if it grows a third caller it belongs in core.
-func generateSKU(t time.Time) string {
-	return fmt.Sprintf("WH-%s-%s", t.UTC().Format("20060102"),
-		strings.ToUpper(uuid.NewString()[:8]))
 }
 
 // now is the write side's clock, truncated to the second because that is the

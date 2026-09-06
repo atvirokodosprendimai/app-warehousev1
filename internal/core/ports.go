@@ -236,6 +236,21 @@ type SubmissionFilter struct {
 	Offset int
 }
 
+// Sequencer hands out monotonic numbers.
+//
+// It is a port rather than a helper because allocation must be ATOMIC: two
+// concurrent intakes asking for a reference at the same moment must not receive
+// the same one, and "read the highest, add one" cannot promise that. The
+// implementation does it in a single statement.
+type Sequencer interface {
+	// NextSequence allocates and returns the next value of a named counter.
+	//
+	// A number is never handed out twice, INCLUDING after the row that used it is
+	// deleted: a reference that has been written on a physical label is spent
+	// whether or not the record survives.
+	NextSequence(ctx context.Context, name string) (int64, error)
+}
+
 // SettingsReader loads the deployment values an administrator can change.
 type SettingsReader interface {
 	// Settings returns the stored values. A fresh installation has none, and

@@ -136,6 +136,13 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 		Total:      len(offers),
 		Currencies: core.KnownCurrencies(),
 	}
+
+	// The cart the Add buttons target. Loaded here rather than in the fragment so
+	// the whole screen is still a function of the request alone.
+	if carts, err := a.Carts.Carts(r.Context()); err == nil {
+		l.Carts = carts
+		l.ActiveCart = a.activeCart(r, carts)
+	}
 	_ = view.PageShell(l.Page, view.NewOfferAction(), view.OffersScreen(l)).Render(r.Context(), w)
 }
 

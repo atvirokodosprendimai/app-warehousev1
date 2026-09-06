@@ -1,0 +1,181 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// PlaceDetail is the edit-a-storage-place screen.
+type PlaceDetail struct {
+	Page  Page
+	Place core.Location
+	// Parents is everywhere this could move to. It deliberately excludes the
+	// place itself and everything beneath it — those are cycles the service
+	// would refuse, and offering a choice that is always rejected is worse than
+	// not offering it.
+	Parents []core.Location
+	// Where is the resolved custodian and city, so the effect of an inherited
+	// value is visible while editing it.
+	Where core.Placement
+	// Children and Stock decide whether deleting is offered at all.
+	Children int
+	Stock    int
+}
+
+// Deletable reports whether this place can be removed.
+func (d PlaceDetail) Deletable() bool { return d.Children == 0 && d.Stock == 0 }
+
+// PlaceScreen is the whole page.
+templ PlaceScreen(d PlaceDetail) {
+	<div class="stack" data-signals={ placeSignals(d) }>
+		<div id="place-flash"></div>
+		@PlaceBody(d)
+	</div>
+}
+
+// placeSignals seeds the form from the place as stored.
+func placeSignals(d PlaceDetail) string {
+	return "{placeCode: " + jsString(d.Place.Code) +
+		", placeParent: " + jsString(d.Place.ParentID) +
+		", placeLabel: " + jsString(d.Place.Label) +
+		", placeCustodian: " + jsString(d.Place.Custodian) +
+		", placeContact: " + jsString(d.Place.CustodianContact) +
+		", placeCity: " + jsString(d.Place.City) +
+		", placeCountry: " + jsString(d.Place.Country) +
+		", placeNotes: " + jsString(d.Place.Notes) + "}"
+}
+
+// PlaceBody is the part that changes, so a rename re-renders the paths beside
+// the children without reloading the page.
+templ PlaceBody(d PlaceDetail) {
+	<div id="place-body" class="grid-2" style="align-items:start">
+		<div class="stack">
+			<div class="card">
+				<div class="card-head">
+					<h2>{ d.Place.Kind.Label() }</h2>
+					<span class="spacer"></span>
+					<span class="code faint">{ d.Place.Path }</span>
+				</div>
+				<div class="card-body stack">
+					<div class="field">
+						<label for="p-label">Description</label>
+						<input id="p-label" class="input" type="text" placeholder="under the window" data-bind:place-label/>
+					</div>
+					<div class="grid-2">
+						<div class="field">
+							<label for="p-cust">Held by</label>
+							<input id="p-cust" class="input" type="text" placeholder="leave blank if it is yours" data-bind:place-custodian/>
+						</div>
+						<div class="field">
+							<label for="p-contact">Their contact</label>
+							<input id="p-contact" class="input" type="text" placeholder="phone or email" data-bind:place-contact/>
+						</div>
+					</div>
+					<div class="grid-2">
+						<div class="field">
+							<label for="p-city">City</label>
+							<input id="p-city" class="input" type="text" data-bind:place-city/>
+						</div>
+						<div class="field">
+							<label for="p-country">Country</label>
+							<input id="p-country" class="input" type="text" data-bind:place-country/>
+						</div>
+					</div>
+					<span class="hint">
+						Everything inside this place inherits its city and who holds it, so
+						correcting them here corrects every shelf below at once.
+						if d.Where.Summary() != "" {
+							Currently resolving to { d.Where.Summary() }.
+						}
+					</span>
+					<div class="field">
+						<label for="p-notes">Notes</label>
+						<textarea id="p-notes" class="textarea" placeholder="access instructions, gate code" data-bind:place-notes></textarea>
+					</div>
+					<div>
+						<button
+							class="btn btn-primary"
+							type="button"
+							data-on:click={ "@post('/warehouse/" + d.Place.ID + "/details')" }
+							data-indicator:_busy
+							data-attr:disabled="$_busy"
+						>
+							<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+							<span>Save details</span>
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="stack">
+			<div class="card">
+				<div class="card-head"><h2>Address</h2></div>
+				<div class="card-body stack">
+					@Message("info", "Renaming or moving this place rewrites the address of everything inside it, in one go. The stock does not move — only what you would write on the label changes.")
+					<div class="field">
+						<label for="p-code">Code</label>
+						<input id="p-code" class="input" type="text" data-bind:place-code/>
+						<span class="hint">What is written on it. No slashes.</span>
+					</div>
+					<div>
+						<button
+							class="btn"
+							type="button"
+							data-on:click={ "@post('/warehouse/" + d.Place.ID + "/rename')" }
+						>Rename</button>
+					</div>
+					if d.Place.Kind != core.KindSite {
+						<div class="field">
+							<label for="p-parent">Inside</label>
+							<select id="p-parent" class="select" data-bind:place-parent>
+								for _, p := range d.Parents {
+									<option value={ p.ID } selected?={ p.ID == d.Place.ParentID }>{ p.Path }</option>
+								}
+							</select>
+							<span class="hint">A place cannot move into itself or into anything it contains, so those are not listed.</span>
+						</div>
+						<div>
+							<button
+								class="btn"
+								type="button"
+								data-on:click={ "@post('/warehouse/" + d.Place.ID + "/move')" }
+							>Move</button>
+						</div>
+					} else {
+						<span class="faint">A site is a root and has nothing to sit inside.</span>
+					}
+				</div>
+			</div>
+			<div class="card">
+				<div class="card-head"><h2>Remove</h2></div>
+				<div class="card-body stack">
+					if d.Deletable() {
+						@Message("info", "This place is empty, so removing it loses nothing.")
+						<div>
+							<button
+								class="btn btn-danger"
+								type="button"
+								data-on:click={ "@post('/warehouse/" + d.Place.ID + "/delete')" }
+							>Remove this place</button>
+						</div>
+					} else {
+						@Message("error", placeBlockedReason(d))
+						<a class="btn btn-ghost" href={ templ.SafeURL("/offers?at=" + d.Place.Path) }>See what is here</a>
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// placeBlockedReason says exactly what is stopping a removal, because "cannot
+// delete" without a reason sends somebody hunting.
+func placeBlockedReason(d PlaceDetail) string {
+	switch {
+	case d.Stock > 0 && d.Children > 0:
+		return "Holding " + itoa(d.Stock) + " item(s) and containing " +
+			itoa(d.Children) + " place(s). Move the stock and empty the places inside first."
+	case d.Stock > 0:
+		return "Holding " + itoa(d.Stock) + " item(s). Move them somewhere else first — " +
+			"emptying a shelf should be a deliberate act, not a side effect of tidying."
+	default:
+		return "Containing " + itoa(d.Children) + " place(s) inside it. Remove or move those first."
+	}
+}

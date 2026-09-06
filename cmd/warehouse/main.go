@@ -22,6 +22,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/fx"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/sequence"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/settings"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/submission"
@@ -84,7 +85,11 @@ func run(log *slog.Logger) error {
 
 	// Services own the write rules.
 	authSvc := auth.NewService(users)
-	offerSvc := offer.NewService(offers, blobs)
+	// One allocator, shared by both places that mint a reference, so intake and a
+	// converted submission draw from the same counter and their labels are
+	// indistinguishable.
+	seq := sequence.NewRepo(db.Write)
+	offerSvc := offer.NewService(offers, blobs, seq)
 	locationSvc := location.NewService(locations)
 	cartSvc := cart.NewService(carts)
 	fxSvc := fx.NewService(rates, fx.NewClient(nil, ""))
@@ -93,7 +98,7 @@ func run(log *slog.Logger) error {
 	// submission package states that collaboration as a two-method interface the
 	// repo already satisfies — so the dependency is exactly as wide as the
 	// collaboration rather than the whole of the offer write side.
-	submissionSvc := submission.NewService(subs, offers, blobs)
+	submissionSvc := submission.NewService(subs, offers, blobs, seq)
 
 	if cfg.FetchRates {
 		ctx, cancel := context.WithCancel(context.Background())

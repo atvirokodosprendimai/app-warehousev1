@@ -181,16 +181,33 @@ func listQuery(f core.OfferFilter) (string, []any) {
 	}
 
 	if q := strings.TrimSpace(f.Query); q != "" {
-		// Full text, not LIKE. A substring match cannot answer "brass lamp" for a
-		// row titled "Lamp, brass" — both words are present, in the wrong order
-		// and split across fields, which is the ordinary shape of a search box
-		// query rather than an edge case. The index is external-content, so it
-		// reads its columns back from `offers` and there is no second copy of
-		// every description to keep honest.
-		join += " JOIN offers_fts fts ON fts.rowid = o.rowid"
-		where = append(where, "offers_fts MATCH ?")
-		args = append(args, ftsQuery(q))
-		ranked = true
+		// ★ A REFERENCE TYPED OFF A LABEL IS MATCHED EXACTLY, and this is half of
+		// what makes a short reference worth having. Somebody reading WH0000042
+		// off a box types "42", or "wh42", and will not reproduce the zero
+		// padding — so the number is normalised back to the canonical reference
+		// and matched against the column directly. The text search still runs
+		// beside it, because "42" might also appear in a description.
+		//
+		// The full-text half is not LIKE: a substring match cannot answer "brass
+		// lamp" for a row titled "Lamp, brass" — both words present, wrong order,
+		// split across fields, which is the ordinary shape of a search box query
+		// rather than an edge case. The index is external-content, so it reads
+		// its columns back from `offers` and keeps no second copy of every
+		// description.
+		if sku := core.NormalizeSKUQuery(q); sku != "" {
+			// A subquery rather than a join, because this arm ORs two conditions
+			// and a joined row would drop anything matching only the reference.
+			where = append(where,
+				`(o.sku = ? OR o.rowid IN (SELECT rowid FROM offers_fts WHERE offers_fts MATCH ?))`)
+			args = append(args, sku, ftsQuery(q))
+			// Recency, not relevance: an exact reference match has no rank to
+			// order by, and there is rarely more than one of them anyway.
+		} else {
+			join += " JOIN offers_fts fts ON fts.rowid = o.rowid"
+			where = append(where, "offers_fts MATCH ?")
+			args = append(args, ftsQuery(q))
+			ranked = true
+		}
 	}
 
 	// A price bound also pins the currency. Minor units are only comparable

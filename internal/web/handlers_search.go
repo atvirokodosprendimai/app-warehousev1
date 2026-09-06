@@ -52,7 +52,10 @@ func (a *App) GetOfferRows(w http.ResponseWriter, r *http.Request) {
 	rows := a.rows(r.Context(), offers)
 
 	sse := render.NewSSE(w, r)
-	_ = sse.PatchElementTempl(view.OfferTable("offer-list", rows, true))
+	// addToCart stays true: this fragment replaces the same table the listing
+	// rendered, so dropping the column would make the Add buttons vanish the
+	// moment somebody typed in the search box.
+	_ = sse.PatchElementTempl(view.OfferTable("offer-list", rows, true, true))
 	// The count travels with the rows so the two cannot disagree — a "42
 	// matching" above eleven rows is worse than no count at all.
 	_ = sse.PatchElementTempl(view.OfferCount(len(rows)))

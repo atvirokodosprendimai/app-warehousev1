@@ -153,6 +153,11 @@ type OfferList struct {
 	Total int
 	// Currencies is the list the price-range filter may choose from.
 	Currencies []string
+	// Carts are the saved carts, for the Add buttons to put things into.
+	Carts []core.Cart
+	// ActiveCart is the one Add currently targets. Empty when none exists yet,
+	// in which case the first Add creates one.
+	ActiveCart string
 }
 
 // RowsPath is the endpoint the live search asks for a new table.

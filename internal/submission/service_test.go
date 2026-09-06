@@ -3,9 +3,8 @@ package submission
 import (
 	"context"
 	"errors"
-	"strings"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 )
@@ -21,7 +20,21 @@ func newTestService(t *testing.T) (*Service, *Repo, *fakeOffers, *fakeBlobs) {
 	r := newTestRepo(t)
 	offers := newDBOffers(r)
 	blobs := newFakeBlobs()
-	return NewService(r, offers, blobs), r, offers, blobs
+	return NewService(r, offers, blobs, &fakeSeq{}), r, offers, blobs
+}
+
+// fakeSeq is a counter with no database behind it; atomicity is the allocator's
+// property and is tested in internal/sequence against a real one.
+type fakeSeq struct {
+	mu sync.Mutex
+	n  int64
+}
+
+func (f *fakeSeq) NextSequence(context.Context, string) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.n++
+	return f.n, nil
 }
 
 // staffAndAdmin seeds the two accounts every service test needs.
@@ -617,21 +630,10 @@ func TestAcceptGeneratesASKUWhenTheAdminGivesNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
-	wantPrefix := "WH-" + time.Now().UTC().Format("20060102") + "-"
-	if !strings.HasPrefix(o.SKU, wantPrefix) {
-		t.Fatalf("SKU = %q, want the prefix %q", o.SKU, wantPrefix)
-	}
-	suffix := strings.TrimPrefix(o.SKU, wantPrefix)
-	if len(suffix) != 8 {
-		t.Fatalf("SKU suffix = %q, want 8 hex digits", suffix)
-	}
-	if strings.ToUpper(suffix) != suffix {
-		t.Fatalf("SKU suffix = %q, want it uppercase — it is typed back off a label", suffix)
-	}
-	for _, c := range suffix {
-		if !strings.ContainsRune("0123456789ABCDEF", c) {
-			t.Fatalf("SKU suffix = %q, want hex only", suffix)
-		}
+	// The same scheme intake mints, so a converted submission is
+	// indistinguishable from stock taken in over the counter.
+	if o.SKU != "WH0000001" {
+		t.Fatalf("SKU = %q, want the first allocated reference WH0000001", o.SKU)
 	}
 }
 
@@ -722,7 +724,7 @@ func TestAcceptRefusesASubmissionAlreadyAccepted(t *testing.T) {
 func TestAcceptLeavesTheSubmissionOpenWhenThePhotoMoveFails(t *testing.T) {
 	r := newTestRepo(t)
 	offers := newDBOffers(r)
-	svc := NewService(failingMove{SubmissionStore: r, err: errBoom}, offers, newFakeBlobs())
+	svc := NewService(failingMove{SubmissionStore: r, err: errBoom}, offers, newFakeBlobs(), &fakeSeq{})
 	ctx := context.Background()
 	staff, admin := staffAndAdmin(t, r)
 	sub := acceptable(t, svc, r, staff)

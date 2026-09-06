@@ -40,12 +40,21 @@ var allowedPhotoTypes = map[string]bool{
 type Service struct {
 	store core.OfferStore
 	blobs core.BlobStore
+	seq   core.Sequencer
 }
+
+// skuAttempts bounds how many references are tried before giving up.
+//
+// A collision is only possible when somebody typed a reference by hand that the
+// counter has not reached yet, so a few attempts walk past any realistic block
+// of them. The UNIQUE constraint — not a lookup beforehand — is what decides,
+// because a lookup could go stale between the check and the insert.
+const skuAttempts = 5
 
 // NewService returns a Service writing offers through store and photo bytes
 // through blobs.
-func NewService(store core.OfferStore, blobs core.BlobStore) *Service {
-	return &Service{store: store, blobs: blobs}
+func NewService(store core.OfferStore, blobs core.BlobStore, seq core.Sequencer) *Service {
+	return &Service{store: store, blobs: blobs, seq: seq}
 }
 
 // Create starts an offer from the intake flow: photograph, title, shelve — and
@@ -56,17 +65,22 @@ func NewService(store core.OfferStore, blobs core.BlobStore) *Service {
 // placeholder, and a placeholder that later reaches a listed status ships to a
 // marketplace as a real price.
 //
-// When sku is empty one is generated as "WH-<YYYYMMDD>-<8 uppercase hex>": the
-// prefix marks it as ours, the intake date makes a drawer of printed labels sort
-// by the day the items arrived, and the eight hex digits come from a fresh UUID
-// so two operators taking stock in at once cannot collide. It is uppercase and
-// hyphenated because it is read off a label and typed back in by hand.
+// When sku is empty one is allocated from a counter as "WH0000001".
+//
+// ⚠ THE FORMAT IS CHOSEN FOR THE HAND, NOT FOR THE DATABASE. It replaced
+// "WH-<date>-<8 hex>", which was unique, unguessable and unusable for the job it
+// actually has: somebody copies it onto a box with a pen and later types it into
+// a search field. Eight hex digits are not memorable, not dictatable over a
+// phone, and easy to mistranscribe — 0 against O, 8 against B — with nothing that
+// would notice. A short ordinal is none of those things, and it sorts by arrival
+// for free.
+//
+// An explicitly supplied sku is used as given and never renumbered: it is the
+// Shopify handle and the eBay custom label, so it belongs to whoever set it.
 func (s *Service) Create(ctx context.Context, title, sku string) (core.Offer, error) {
 	sku = strings.TrimSpace(sku)
 	t := now()
-	if sku == "" {
-		sku = generateSKU(t)
-	}
+
 	o := core.Offer{
 		ID:        uuid.NewString(),
 		SKU:       sku,
@@ -76,13 +90,43 @@ func (s *Service) Create(ctx context.Context, title, sku string) (core.Offer, er
 		CreatedAt: t,
 		UpdatedAt: t,
 	}
-	if err := o.Validate(); err != nil {
-		return core.Offer{}, err
+
+	if sku != "" {
+		if err := o.Validate(); err != nil {
+			return core.Offer{}, err
+		}
+		if err := s.store.CreateOffer(ctx, o); err != nil {
+			return core.Offer{}, err
+		}
+		return o, nil
 	}
-	if err := s.store.CreateOffer(ctx, o); err != nil {
-		return core.Offer{}, err
+
+	var last error
+	for i := 0; i < skuAttempts; i++ {
+		n, err := s.seq.NextSequence(ctx, core.SequenceOfferSKU)
+		if err != nil {
+			return core.Offer{}, err
+		}
+		o.SKU = core.FormatSKU(n)
+		if err := o.Validate(); err != nil {
+			return core.Offer{}, err
+		}
+
+		err = s.store.CreateOffer(ctx, o)
+		if err == nil {
+			return o, nil
+		}
+		if !errors.Is(err, ErrSKUTaken) {
+			return core.Offer{}, err
+		}
+		// Somebody typed this reference by hand before the counter reached it.
+		// The number is spent either way: allocating another is correct, and
+		// re-using it would hand out a reference already on a label.
+		last = err
 	}
-	return o, nil
+	return core.Offer{}, fmt.Errorf("offer: no free reference after %d attempts — "+
+		"references appear to have been entered by hand ahead of the counter: %w",
+		skuAttempts, last)
 }
 
 // Update validates o and persists it, stamping UpdatedAt.
@@ -259,12 +303,6 @@ func nextPosition(photos []core.Photo) int {
 		}
 	}
 	return next
-}
-
-// generateSKU builds the fallback SKU described on [Service.Create].
-func generateSKU(t time.Time) string {
-	return fmt.Sprintf("WH-%s-%s", t.UTC().Format("20060102"),
-		strings.ToUpper(uuid.NewString()[:8]))
 }
 
 // now is the write side's clock, truncated to the second because that is the

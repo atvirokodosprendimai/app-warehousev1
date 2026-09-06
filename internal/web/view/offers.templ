@@ -10,7 +10,7 @@ import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 //
 // The wrapping element carries a stable id: it is the morph target for every
 // SSE patch that changes the list, and datastar matches fragments by id.
-templ OfferTable(id string, rows []OfferRow, showOwner bool) {
+templ OfferTable(id string, rows []OfferRow, showOwner bool, addToCart bool) {
 	<div id={ id }>
 		if len(rows) == 0 {
 			@Empty("📦", "Nothing here yet", "Offers you add will appear in this list.") {
@@ -30,11 +30,14 @@ templ OfferTable(id string, rows []OfferRow, showOwner bool) {
 								<th scope="col" class="num">Owner wants</th>
 								<th scope="col" class="num">Margin</th>
 							}
+							if addToCart {
+								<th scope="col"><span class="sr-only">Add to cart</span></th>
+							}
 						</tr>
 					</thead>
 					<tbody>
 						for _, r := range rows {
-							@offerRow(r, showOwner)
+							@offerRow(r, showOwner, addToCart)
 						}
 					</tbody>
 				</table>
@@ -43,7 +46,7 @@ templ OfferTable(id string, rows []OfferRow, showOwner bool) {
 	</div>
 }
 
-templ offerRow(r OfferRow, showOwner bool) {
+templ offerRow(r OfferRow, showOwner bool, addToCart bool) {
 	<tr>
 		<td>
 			if r.Thumb() != "" {
@@ -76,6 +79,25 @@ templ offerRow(r OfferRow, showOwner bool) {
 		if showOwner {
 			<td class="num muted">{ r.OwnerText() }</td>
 			<td class="num">{ r.MarginText() }</td>
+		}
+		if addToCart {
+			<td>
+				<!--
+				  Adding happens HERE, on the listing, because building a cart is
+				  something you do while looking through stock. It used to be
+				  possible only from a card at the bottom of one offer's page,
+				  reachable only after opening that offer — which is a workflow
+				  nobody found.
+				-->
+				<button
+					class="btn btn-ghost"
+					type="button"
+					aria-label={ "Add " + r.Offer.Title + " to the cart" }
+					data-on:click={ "@post('/carts/add/" + r.Offer.ID + "')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>Add</button>
+			</td>
 		}
 	</tr>
 }
@@ -160,7 +182,47 @@ templ OffersScreen(l OfferList) {
 				</div>
 			</div>
 		</div>
-		@OfferTable("offer-list", l.Rows, true)
+		@CartBar(l)
+		@OfferTable("offer-list", l.Rows, true, true)
+	</div>
+}
+
+// CartBar is the cart the Add buttons put things into.
+//
+// It is a fragment because adding an item changes the count, and — on the first
+// add of a session — which cart is selected, since one is created on the spot.
+templ CartBar(l OfferList) {
+	<div id="cart-bar" class="card">
+		<div class="card-head">
+			<h2>Cart</h2>
+			<span class="spacer"></span>
+			if len(l.Carts) == 0 {
+				<span class="faint">Adding an item starts one</span>
+			} else {
+				<a class="btn btn-ghost" href={ templ.SafeURL("/carts/" + l.ActiveCart) }>Open cart</a>
+			}
+		</div>
+		<div class="card-body">
+			if len(l.Carts) == 0 {
+				<span class="hint">
+					Press Add on any row and a cart is created for you. Name it
+					afterwards; what is in it does not change as stock moves, which is
+					what makes it safe to export.
+				</span>
+			} else {
+				<div class="toolbar">
+					<label class="sr-only" for="cart-pick">Cart to add to</label>
+					<select id="cart-pick" class="select" style="max-width:320px" data-bind:active-cart data-on:change="@post('/carts/active')">
+						for _, c := range l.Carts {
+							<option value={ c.ID } selected?={ c.ID == l.ActiveCart }>
+								{ c.Name } — { itoa(c.Size()) }
+							</option>
+						}
+					</select>
+					<a class="btn btn-ghost" href="/carts">Manage carts</a>
+				</div>
+			}
+		</div>
 	</div>
 }
 
@@ -232,7 +294,7 @@ templ DashboardScreen(d Dashboard) {
 					<span class="spacer"></span>
 					<a class="btn btn-ghost" href="/offers?needs_pricing=1">See all</a>
 				</div>
-				@OfferTable("pricing-queue", d.Pricing, true)
+				@OfferTable("pricing-queue", d.Pricing, true, false)
 			</div>
 		}
 		<div class="card">
@@ -241,7 +303,7 @@ templ DashboardScreen(d Dashboard) {
 				<span class="spacer"></span>
 				<a class="btn btn-ghost" href="/offers">See all</a>
 			</div>
-			@OfferTable("recent-offers", d.Recent, false)
+			@OfferTable("recent-offers", d.Recent, false, false)
 		</div>
 	</div>
 }

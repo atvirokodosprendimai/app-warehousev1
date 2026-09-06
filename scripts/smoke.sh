@@ -116,6 +116,41 @@ curl -fsS -b "$COOKIES" "$BASE/warehouse/new?parent=$LOC_ID" -o "$RUN/newloc.htm
 check "the preselected parent is in the form's signals" "$LOC_ID" "$RUN/newloc.html"
 check "kind defaults to shelf, not the impossible site-inside-a-site" "locKind: &#34;shelf&#34;" "$RUN/newloc.html"
 
+echo "== places are editable =="
+# A shelf inside the site, so a rename can be shown to cascade.
+curl -fsS -b "$COOKIES" -X POST "$BASE/warehouse" \
+  -H 'Content-Type: application/json' \
+  -d "{\"locParent\":\"$LOC_ID\",\"locKind\":\"shelf\",\"locCode\":\"S3\",\"locLabel\":\"by the door\",\"locCustodian\":\"\",\"locContact\":\"\",\"locCity\":\"\",\"locCountry\":\"\"}" \
+  -o /dev/null
+curl -fsS -b "$COOKIES" "$BASE/warehouse" -o "$RUN/wh2.html"
+check "the shelf is listed under the site" "KAUNAS/S3" "$RUN/wh2.html"
+check "a place links to its own editor" "/warehouse/$LOC_ID" "$RUN/wh2.html"
+
+curl -fsS -b "$COOKIES" "$BASE/warehouse/$LOC_ID" -o "$RUN/place.html"
+check "the editor opens" "Held by" "$RUN/place.html"
+check "and /warehouse/new still wins over the id route" "Add a place" "$RUN/newloc.html"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/warehouse/$LOC_ID/details" \
+  -H 'Content-Type: application/json' \
+  -d '{"placeLabel":"the big garage","placeCustodian":"Jonas","placeContact":"+37060000001","placeCity":"Kaunas","placeCountry":"LT","placeNotes":"gate code 1234"}' \
+  -o "$RUN/pdetails.txt"
+check "details save" "Saved" "$RUN/pdetails.txt"
+# ⚠ Assert on the RESOLVED placement, not on the field values. Inputs are bound
+# to signals, so a re-rendered fragment contains empty inputs and the browser's
+# own signals still hold what was typed — the values are deliberately not echoed
+# back into the HTML. What the server does render is what the change MEANS.
+check "the custodian now resolves through the tree" "held by Jonas" "$RUN/pdetails.txt"
+
+# ★ Renaming a place rewrites the address of everything inside it. If that ever
+# stops happening, the tree answers "where is this" with a path resolving to
+# nothing — and nothing else would report it.
+curl -fsS -b "$COOKIES" -X POST "$BASE/warehouse/$LOC_ID/rename" \
+  -H 'Content-Type: application/json' -d '{"placeCode":"KAUNAS-GARAGE"}' -o "$RUN/prename.txt"
+check "rename succeeds" "Renamed" "$RUN/prename.txt"
+curl -fsS -b "$COOKIES" "$BASE/warehouse" -o "$RUN/wh3.html"
+check "the child's address followed the rename" "KAUNAS-GARAGE/S3" "$RUN/wh3.html"
+absent "and the old address is gone" "KAUNAS/S3" "$RUN/wh3.html"
+
 echo "== intake: title only, no price =="
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
   -H 'Content-Type: application/json' \
@@ -127,6 +162,18 @@ echo "  offer id: $OFFER_ID"
 
 curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer.html"
 check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
+# ★ The reference is written on a box by hand and typed back into a search field,
+# so it is a short ordinal rather than a dated hex string.
+check "the first reference is WH0000001" "WH0000001" "$RUN/offer.html"
+absent "no dated hex reference survives" "WH-2026" "$RUN/offer.html"
+
+echo "== a reference is findable the way it is typed =="
+for q in WH0000001 wh0000001 WH1 1; do
+  curl -fsS -b "$COOKIES" "$BASE/offers/rows" \
+    --get --data-urlencode "datastar={\"searchQuery\":\"$q\",\"priceMin\":\"\",\"priceMax\":\"\",\"priceCurrency\":\"EUR\"}" \
+    -o "$RUN/find-$q.txt"
+  check "searching \"$q\" finds it" "Vintage brass desk lamp" "$RUN/find-$q.txt"
+done
 check "unpriced draft says so" "pricing queue" "$RUN/offer.html"
 check "the editor uses the SAME one stream endpoint" "/stream?offer=$OFFER_ID" "$RUN/offer.html"
 
@@ -201,15 +248,39 @@ curl -fsS -b "$COOKIES" "$BASE/offers/rows" \
   -o "$RUN/price-cur.txt"
 check "a range in another currency does not match a EUR price" "Nothing here yet" "$RUN/price-cur.txt"
 
-echo "== batches =="
+echo "== carts are reachable and buildable from the listing =="
+# The feature was unusable because nothing linked to it: no nav entry, and Add
+# lived only on a card at the bottom of an already-opened offer.
+curl -fsS -b "$COOKIES" "$BASE/offers" -o "$RUN/offers.html"
+check "the sidebar links to carts" 'href="/carts"' "$RUN/offers.html"
+check "the listing carries a cart bar" 'id="cart-bar"' "$RUN/offers.html"
+check "and an Add control per row" "/carts/add/$OFFER_ID" "$RUN/offers.html"
+
+# ★ No cart exists yet. Adding must CREATE one rather than refusing, which is the
+# flow as described: collect things, then name what you collected.
+curl -fsS -b "$COOKIES" -X POST "$BASE/carts/add/$OFFER_ID" \
+  -H 'Content-Type: application/json' -d '{"activeCart":""}' -o "$RUN/cartadd1.txt"
+check "adding with no cart creates one" "Cart " "$RUN/cartadd1.txt"
+CART_ID=$(curl -fsS -b "$COOKIES" "$BASE/carts" | grep -o '/carts/[0-9a-f-]\{36\}' | head -1 | cut -d/ -f3)
+echo "  cart id: $CART_ID"
+
+curl -fsS -b "$COOKIES" "$BASE/carts/$CART_ID" -o "$RUN/cartpage.html"
+check "the item is in the cart" "Vintage brass desk lamp" "$RUN/cartpage.html"
+
+# A second add must reuse the same cart, not mint another.
+curl -fsS -b "$COOKIES" -X POST "$BASE/carts/add/$OFFER_ID" \
+  -H 'Content-Type: application/json' -d "{\"activeCart\":\"$CART_ID\"}" -o /dev/null
+if [ "$(curl -fsS -b "$COOKIES" "$BASE/carts" | grep -o '/carts/[0-9a-f-]\{36\}' | sort -u | wc -l)" = "1" ]; then
+  echo "  ok   a second add reuses the same cart"
+else
+  echo "  FAIL a second add created another cart"
+  fail=$((fail + 1))
+fi
+
 curl -fsS -b "$COOKIES" -X POST "$BASE/carts" \
   -H 'Content-Type: application/json' \
-  -d '{"cartName":"eBay September","cartNote":"first batch"}' -o "$RUN/cart.txt"
-check "batch created" "eBay September" "$RUN/cart.txt"
-CART_ID=$(curl -fsS -b "$COOKIES" "$BASE/carts" | grep -o '/carts/[0-9a-f-]\{36\}' | head -1 | cut -d/ -f3)
-curl -fsS -b "$COOKIES" -X POST "$BASE/carts/$CART_ID/items/$OFFER_ID" \
-  -H 'Content-Type: application/json' -d '{}' -o "$RUN/cartadd.txt"
-check "offer added to the batch" "eBay September" "$RUN/cartadd.txt"
+  -d '{"cartName":"eBay September","cartNote":"first cart"}' -o "$RUN/cart.txt"
+check "a cart can also be created and named up front" "eBay September" "$RUN/cart.txt"
 
 echo "== export =="
 curl -fsS -b "$COOKIES" "$BASE/export" -o "$RUN/export.html"

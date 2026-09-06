@@ -92,7 +92,7 @@ templ WarehouseScreen(t LocationTree) {
 							for _, n := range t.Nodes {
 								<tr>
 									<td style={ n.Indent() }>
-										<span class="code">{ n.Location.Code }</span>
+										<a class="row-title code" href={ templ.SafeURL("/warehouse/" + n.Location.ID) }>{ n.Location.Code }</a>
 										if n.Location.Label != "" {
 											<div class="row-sub">{ n.Location.Label }</div>
 										}
