@@ -153,7 +153,7 @@ Run `templ generate` after editing a `.templ` file, and never edit a `*_templ.go
 
 Templates must be regenerated first if a `.templ` changed.
 
-`scripts/smoke.sh` is worth reading before the handlers: it is 63 assertions over
+`scripts/smoke.sh` is worth reading before the handlers: it is 94 assertions over
 a real running binary — bootstrap, the permanently closed registration, intake,
 photograph upload and anonymous fetch, pricing, search, price ranges, batches,
 both export profiles, the submissions inbox end to end, and the auth boundary. It
@@ -162,3 +162,10 @@ document it cannot go stale without going red.
 
 Two things it deliberately cannot check: how the pages look, and whether datastar
 hydrates. Those need a browser.
+
+## Why it is like this
+
+`docs/adr/` holds fourteen decision records — what was decided, what was rejected
+and why, and for each one the check that goes red when the decision is violated.
+Every one of those checks was verified by breaking the mechanism it names and
+watching the test fail. Start at [docs/adr/README.md](docs/adr/README.md).

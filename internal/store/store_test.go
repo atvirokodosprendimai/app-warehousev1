@@ -152,3 +152,39 @@ func TestReaderHandleCannotWrite(t *testing.T) {
 		t.Errorf("reader write failed, but not as a readonly refusal: %v", err)
 	}
 }
+
+// TestTheWriterDSNCarriesTheImmediateTxlock pins the application's OWN writer
+// configuration, which the contention test above does not reach.
+//
+// TestTxlockImmediateIsHonouredByTheDriver builds its DSNs itself, through
+// openContended. It therefore proves the DRIVER acts on _txlock and says nothing
+// about whether [Open]'s writer uses it. Measured 2026-09-06 by mutation:
+// removing "immediate" from writerDSN left this whole package green. This test
+// is what goes red instead.
+//
+// It asserts the DSN string rather than the behaviour because the behaviour is
+// masked here: the writer pool is capped at one connection, so two read-then-write
+// transactions cannot overlap on it and no upgrade conflict can be provoked
+// through Open at all. The knob is what keeps the property true on the day
+// somebody widens that pool for throughput — which is exactly the day nothing
+// else would notice it had gone.
+func TestTheWriterDSNCarriesTheImmediateTxlock(t *testing.T) {
+	const path = "/tmp/warehouse-dsn-test.db"
+
+	w := writerDSN(path)
+	if !strings.Contains(w, "_txlock=immediate") {
+		t.Errorf("writerDSN = %q, want it to carry _txlock=immediate so the write lock is "+
+			"taken at BEGIN; without it a read-then-write must upgrade, and an upgrade "+
+			"conflict is returned as SQLITE_BUSY without consulting busy_timeout", w)
+	}
+
+	r := readerDSN(path)
+	if strings.Contains(r, "_txlock") {
+		t.Errorf("readerDSN = %q, want no _txlock at all: the read handle never opens a "+
+			"write transaction, and a lock mode there would only be misleading", r)
+	}
+	if !strings.Contains(r, "query_only") {
+		t.Errorf("readerDSN = %q, want query_only so the driver itself refuses a write on "+
+			"the read path", r)
+	}
+}
