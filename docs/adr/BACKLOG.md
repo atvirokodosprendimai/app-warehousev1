@@ -226,6 +226,37 @@ rather than a mystery.
 **What would make this real:** somebody being confused by it, or a page where two
 slow actions can genuinely be in flight at once.
 
+### Allegro's and Shopify's own category settings and resolution
+
+**Deferred by:** ADR-016 (marketplace configuration is data)
+
+ADR-016 builds the mechanism — per-profile defaults in `settings`, per-offer
+overrides in `offer_categories` — and wires only eBay through it, because eBay is
+the profile that produced the reported error. Shopify's product type and
+Allegro's "Main category / Subcategory" pair are the same shape and are not
+wired.
+
+⚠ Allegro's is **not a number**: its bulk template asks for a main category and a
+subcategory written as NAMES, checked against Allegro's own help page on
+2026-09-07. The `offer_categories.category` column is TEXT so it can hold either,
+but the UI and any validation will need to know the difference.
+
+**What would make this real:** the Allegro profile landing (ADR-018), or somebody
+wanting Shopify product types set per item.
+
+### A category picker or taxonomy browser
+
+**Deferred by:** ADR-016 (marketplace configuration is data)
+
+Today a category is a string an operator types or pastes. eBay's taxonomy has
+tens of thousands of numbers and Allegro's has its own tree, and nothing here
+helps you find the right one or tells you when you have typed a wrong one —
+ADR-016 records that validating against a live taxonomy needs an authenticated
+API call this application does not make.
+
+**What would make this real:** somebody mis-filing enough items that hunting
+numbers by hand stops being tolerable.
+
 ## Operations
 
 ### Barcode or QR generation for a reference
