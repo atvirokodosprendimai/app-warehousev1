@@ -99,24 +99,49 @@ func assertFormUploadContract(t *testing.T, name, html string) {
 				name, openTag)
 		}
 
-		// A file input inside that form, carrying a name — FormData ignores
-		// unnamed controls, so without one the body arrives empty.
-		fi := strings.Index(form, `type="file"`)
-		if fi < 0 {
+		// EVERY file input inside that form, each carrying a name — FormData
+		// ignores unnamed controls, so without one the body arrives empty.
+		//
+		// ⚠ THIS USED TO CHECK ONLY THE FIRST ONE. That was indistinguishable from
+		// correct while the upload had exactly one input; the moment a second was
+		// added for the camera (2026-09-07), the first was checked and the second
+		// shipped unasserted. An assertion named for a class while probing one
+		// member is the failure this loop exists to remove.
+		inputs := fileInputs(form)
+		if len(inputs) == 0 {
 			t.Errorf("%s: no <input type=\"file\"> inside the upload form", name)
 			continue
 		}
-		inputStart := strings.LastIndex(form[:fi], "<input")
-		inputEnd := strings.Index(form[fi:], ">")
-		if inputStart < 0 || inputEnd < 0 {
-			t.Errorf("%s: malformed file input", name)
-			continue
+		for _, input := range inputs {
+			if !strings.Contains(input, `name="`) {
+				t.Errorf("%s: a file input has no name attribute, so new FormData(form) "+
+					"omits it entirely and the request carries no file. Input: %s", name, input)
+			}
 		}
-		input := form[inputStart : fi+inputEnd]
-		if !strings.Contains(input, `name="`) {
-			t.Errorf("%s: the file input has no name attribute, so new FormData(form) "+
-				"omits it entirely and the request carries no file. Input: %s", name, input)
+	}
+}
+
+// fileInputs returns every `<input …type="file"…>` tag in html, in order.
+//
+// It exists so a check written for "the file input" cannot quietly become a
+// check of "the first file input" the day a second one appears — which is
+// exactly what happened when the camera control was added beside the gallery
+// one, and what both callers below were silently doing until then.
+func fileInputs(html string) []string {
+	var out []string
+	for idx := 0; ; {
+		i := strings.Index(html[idx:], `type="file"`)
+		if i < 0 {
+			return out
 		}
+		at := idx + i
+		start := strings.LastIndex(html[:at], "<input")
+		end := strings.Index(html[at:], ">")
+		if start < 0 || end < 0 {
+			return out
+		}
+		out = append(out, html[start:at+end])
+		idx = at + end
 	}
 }
 
@@ -280,27 +305,25 @@ func TestPhotoUploadShowsABusyState(t *testing.T) {
 	sig := uploadIndicatorSignal
 
 	for name, html := range uploadSurfaces(t) {
-		fi := strings.Index(html, `type="file"`)
-		if fi < 0 {
+		// Every file input, not the first: the camera and the gallery controls are
+		// two separate inputs on the same form, and an upload that gives feedback
+		// from one of them and silence from the other is the defect ADR-015 exists
+		// to prevent, half-fixed.
+		inputs := fileInputs(html)
+		if len(inputs) == 0 {
 			t.Errorf("%s: no <input type=\"file\"> at all — this test is asserting nothing", name)
 			continue
 		}
-		start := strings.LastIndex(html[:fi], "<input")
-		end := strings.Index(html[fi:], ">")
-		if start < 0 || end < 0 {
-			t.Errorf("%s: malformed file input", name)
-			continue
-		}
-		input := html[start : fi+end]
-
-		if !strings.Contains(input, "data-indicator:"+sig) {
-			t.Errorf("%s: the file input carries no data-indicator:%s, so nothing creates the "+
-				"in-flight signal and the upload gives no feedback on a slow connection. "+
-				"Input: %s", name, sig, input)
-		}
-		if !strings.Contains(input, `data-attr:disabled="$`+sig+`"`) {
-			t.Errorf("%s: the file input is not disabled while $%s is true, so a second tap "+
-				"during a slow upload starts a duplicate one. Input: %s", name, sig, input)
+		for _, input := range inputs {
+			if !strings.Contains(input, "data-indicator:"+sig) {
+				t.Errorf("%s: a file input carries no data-indicator:%s, so nothing creates the "+
+					"in-flight signal and that control gives no feedback on a slow connection. "+
+					"Input: %s", name, sig, input)
+			}
+			if !strings.Contains(input, `data-attr:disabled="$`+sig+`"`) {
+				t.Errorf("%s: a file input is not disabled while $%s is true, so a second tap "+
+					"during a slow upload starts a duplicate one. Input: %s", name, sig, input)
+			}
 		}
 		if !strings.Contains(html, `data-show="$`+sig+`"`) {
 			t.Errorf("%s: nothing reads $%s, so the indicator is wired to NOTHING — the "+

@@ -349,38 +349,83 @@ templ OfferPhotosCard(d OfferDetail) {
 				  action.
 				-->
 				<form enctype="multipart/form-data" data-on:submit="evt.preventDefault()">
-					<label class="drop">
-						<!--
-						  ADR-015. The idle half and the busy half of the same 104px
-						  square. Until this, choosing a file changed nothing on screen —
-						  and this is the longest request the application makes, so on a
-						  phone a slow upload was indistinguishable from a dead control.
+					<!--
+					  TWO controls, not one, because on a phone "add a photograph" is two
+					  different acts. Reported by M on 2026-09-07: the upload "needs to
+					  choose if on mobile, want to make few photos or choose from gallery".
 
-						  `_uploading` is all lowercase ON PURPOSE. The indicator puts its
-						  signal name in the ATTRIBUTE NAME, and HTML lowercases attribute
-						  names, so a camelCase name would have datastar create one signal
-						  while every line here reads another — which is a defect that has
-						  already taken a sibling project's page down. It is
-						  underscore-prefixed so it stays in the browser instead of riding
-						  to the backend on every later action, and it is deliberately NOT
-						  `_busy`: signals are global, so sharing that name would spin
-						  every other spinner on this page during an upload.
+					  ⚠ WHY ONE INPUT COULD NOT DO BOTH. A single input's behaviour is
+					  decided by `accept` and `capture`, and the operating system — not
+					  this markup — decides what sheet to show. `capture` opens the camera
+					  and REMOVES the gallery as an option; omitting it leaves the choice
+					  to the OS, and an `accept` naming specific MIME types (which this
+					  upload has always used, and still does for the gallery) is exactly
+					  what makes iOS drop "Take Photo" from that sheet. So the choice M
+					  wants cannot be expressed on one input at all. Two inputs make it
+					  explicit and stop depending on OS heuristics.
+					-->
+					<div class="drop-row">
+						<!--
+						  Camera. `image/*` rather than the explicit list because a capture
+						  returns whatever the camera produces and the SERVER is the real
+						  gate anyway — internal/web/upload.go sniffs the magic bytes and
+						  accepts only jpeg/png/webp/gif, so a browser-side accept is a
+						  convenience, never the check.
+
+						  No `multiple`: a capture is one photograph, and every platform
+						  ignores `multiple` alongside `capture`. Taking "a few" is tapping
+						  this a few times, which is also how a camera app behaves.
 						-->
-						<span data-show="!$_uploading" aria-hidden="true">＋</span>
-						<span data-show="!$_uploading">Add</span>
-						<span data-show="$_uploading" style="display:none" class="spinner" aria-hidden="true"></span>
-						<span data-show="$_uploading" style="display:none" aria-live="polite">Uploading…</span>
-						<input
-							class="sr-only"
-							type="file"
-							name="photos"
-							accept="image/jpeg,image/png,image/webp,image/gif"
-							multiple
-							data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
-							data-indicator:_uploading
-							data-attr:disabled="$_uploading"
-						/>
-					</label>
+						<label class="drop drop-camera" data-show="!$_uploading">
+							<span aria-hidden="true">📷</span>
+							<span>Take photo</span>
+							<input
+								class="sr-only"
+								type="file"
+								name="photos"
+								accept="image/*"
+								capture="environment"
+								data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+								data-indicator:_uploading
+								data-attr:disabled="$_uploading"
+							/>
+						</label>
+						<!--
+						  Gallery, and the only control on a desktop. Keeps the explicit
+						  MIME list it has always had: narrowing the picker to what the
+						  server accepts is worth more here than it is for a capture,
+						  because this is where somebody can reach a file that is not a
+						  photograph at all.
+						-->
+						<label class="drop drop-gallery" data-show="!$_uploading">
+							<span aria-hidden="true">＋</span>
+							<span>Choose photos</span>
+							<input
+								class="sr-only"
+								type="file"
+								name="photos"
+								accept="image/jpeg,image/png,image/webp,image/gif"
+								multiple
+								data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+								data-indicator:_uploading
+								data-attr:disabled="$_uploading"
+							/>
+						</label>
+						<!--
+						  ADR-015's busy half, now shared. It REPLACES both controls rather
+						  than sitting beside them: two spinners for one upload would read
+						  as two uploads. `_uploading` is all lowercase ON PURPOSE — the
+						  signal name lives in the ATTRIBUTE NAME and HTML lowercases those,
+						  so a camelCase name would have datastar create one signal while
+						  every line here reads another. It is underscore-prefixed to stay
+						  in the browser, and deliberately NOT `_busy`: signals are global,
+						  so sharing that name would spin every other control on this page.
+						-->
+						<div class="drop drop-busy" data-show="$_uploading" style="display:none">
+							<span class="spinner" aria-hidden="true"></span>
+							<span aria-live="polite">Uploading…</span>
+						</div>
+					</div>
 				</form>
 			</div>
 			if len(d.Row.Offer.Photos) == 0 {

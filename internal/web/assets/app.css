@@ -899,6 +899,21 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+/* Two ways to add a photograph, side by side (M, 2026-09-07). */
+.drop-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ⚠ The camera control is offered ONLY to a touch pointer, and this rule must
+   stay after `.drop` — same specificity, so order is what decides it.
+
+   `capture` on a desktop browser is honoured inconsistently: some open a webcam,
+   most fall back to the ordinary file dialog, which would put two controls that
+   do the same thing side by side. A coarse pointer is the honest proxy for
+   "there is a camera here worth opening". */
+.drop-camera { display: none; }
+@media (pointer: coarse) {
+  .drop-camera { display: flex; }
+}
+
 /* ---------- misc ---------- */
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

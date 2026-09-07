@@ -655,20 +655,33 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<!--\n\t\t\t\t  ⚠ A REAL <form>, and it is the ONE exception to this application's\n\t\t\t\t  no-form rule. Every attribute on it is load-bearing, and datastar\n\t\t\t\t  v1.0.2's own source says why:\n\n\t\t\t\t    let T = l ? document.querySelector(l) : r.closest(\"form\");\n\t\t\t\t    if (!T) throw i(\"FetchFormNotFound\", ...);\n\t\t\t\t    let A = T.getAttribute(\"enctype\") === \"multipart/form-data\";\n\t\t\t\t    A || (q[\"Content-Type\"] = \"application/x-www-form-urlencoded\");\n\t\t\t\t    let X = new URLSearchParams(F);\n\t\t\t\t    if (ot(t)) A ? Y.body = F : Y.body = X;\n\n\t\t\t\t  So: with no enclosing form it THROWS and never sends the request —\n\t\t\t\t  the control appears dead rather than failing. Without the enctype it\n\t\t\t\t  degrades to URLSearchParams, which cannot carry bytes. And FormData\n\t\t\t\t  collects only NAMED controls, so the input needs `name`. All three\n\t\t\t\t  were missing here, and each one alone is fatal.\n\n\t\t\t\t  There is deliberately NO data-bind on the input: the file rides in\n\t\t\t\t  the FormData, and binding it would additionally serialise the file's\n\t\t\t\t  contents into a page-global signal that then ships on every later\n\t\t\t\t  action.\n\t\t\t\t--><form enctype=\"multipart/form-data\" data-on:submit=\"evt.preventDefault()\"><label class=\"drop\"><!--\n\t\t\t\t\t\t  ADR-015. The idle half and the busy half of the same 104px\n\t\t\t\t\t\t  square. Until this, choosing a file changed nothing on screen —\n\t\t\t\t\t\t  and this is the longest request the application makes, so on a\n\t\t\t\t\t\t  phone a slow upload was indistinguishable from a dead control.\n\n\t\t\t\t\t\t  `_uploading` is all lowercase ON PURPOSE. The indicator puts its\n\t\t\t\t\t\t  signal name in the ATTRIBUTE NAME, and HTML lowercases attribute\n\t\t\t\t\t\t  names, so a camelCase name would have datastar create one signal\n\t\t\t\t\t\t  while every line here reads another — which is a defect that has\n\t\t\t\t\t\t  already taken a sibling project's page down. It is\n\t\t\t\t\t\t  underscore-prefixed so it stays in the browser instead of riding\n\t\t\t\t\t\t  to the backend on every later action, and it is deliberately NOT\n\t\t\t\t\t\t  `_busy`: signals are global, so sharing that name would spin\n\t\t\t\t\t\t  every other spinner on this page during an upload.\n\t\t\t\t\t\t--><span data-show=\"!$_uploading\" aria-hidden=\"true\">＋</span> <span data-show=\"!$_uploading\">Add</span> <span data-show=\"$_uploading\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span data-show=\"$_uploading\" style=\"display:none\" aria-live=\"polite\">Uploading…</span> <input class=\"sr-only\" type=\"file\" name=\"photos\" accept=\"image/jpeg,image/png,image/webp,image/gif\" multiple data-on:change=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "<!--\n\t\t\t\t  ⚠ A REAL <form>, and it is the ONE exception to this application's\n\t\t\t\t  no-form rule. Every attribute on it is load-bearing, and datastar\n\t\t\t\t  v1.0.2's own source says why:\n\n\t\t\t\t    let T = l ? document.querySelector(l) : r.closest(\"form\");\n\t\t\t\t    if (!T) throw i(\"FetchFormNotFound\", ...);\n\t\t\t\t    let A = T.getAttribute(\"enctype\") === \"multipart/form-data\";\n\t\t\t\t    A || (q[\"Content-Type\"] = \"application/x-www-form-urlencoded\");\n\t\t\t\t    let X = new URLSearchParams(F);\n\t\t\t\t    if (ot(t)) A ? Y.body = F : Y.body = X;\n\n\t\t\t\t  So: with no enclosing form it THROWS and never sends the request —\n\t\t\t\t  the control appears dead rather than failing. Without the enctype it\n\t\t\t\t  degrades to URLSearchParams, which cannot carry bytes. And FormData\n\t\t\t\t  collects only NAMED controls, so the input needs `name`. All three\n\t\t\t\t  were missing here, and each one alone is fatal.\n\n\t\t\t\t  There is deliberately NO data-bind on the input: the file rides in\n\t\t\t\t  the FormData, and binding it would additionally serialise the file's\n\t\t\t\t  contents into a page-global signal that then ships on every later\n\t\t\t\t  action.\n\t\t\t\t--><form enctype=\"multipart/form-data\" data-on:submit=\"evt.preventDefault()\"><!--\n\t\t\t\t\t  TWO controls, not one, because on a phone \"add a photograph\" is two\n\t\t\t\t\t  different acts. Reported by M on 2026-09-07: the upload \"needs to\n\t\t\t\t\t  choose if on mobile, want to make few photos or choose from gallery\".\n\n\t\t\t\t\t  ⚠ WHY ONE INPUT COULD NOT DO BOTH. A single input's behaviour is\n\t\t\t\t\t  decided by `accept` and `capture`, and the operating system — not\n\t\t\t\t\t  this markup — decides what sheet to show. `capture` opens the camera\n\t\t\t\t\t  and REMOVES the gallery as an option; omitting it leaves the choice\n\t\t\t\t\t  to the OS, and an `accept` naming specific MIME types (which this\n\t\t\t\t\t  upload has always used, and still does for the gallery) is exactly\n\t\t\t\t\t  what makes iOS drop \"Take Photo\" from that sheet. So the choice M\n\t\t\t\t\t  wants cannot be expressed on one input at all. Two inputs make it\n\t\t\t\t\t  explicit and stop depending on OS heuristics.\n\t\t\t\t\t--><div class=\"drop-row\"><!--\n\t\t\t\t\t\t  Camera. `image/*` rather than the explicit list because a capture\n\t\t\t\t\t\t  returns whatever the camera produces and the SERVER is the real\n\t\t\t\t\t\t  gate anyway — internal/web/upload.go sniffs the magic bytes and\n\t\t\t\t\t\t  accepts only jpeg/png/webp/gif, so a browser-side accept is a\n\t\t\t\t\t\t  convenience, never the check.\n\n\t\t\t\t\t\t  No `multiple`: a capture is one photograph, and every platform\n\t\t\t\t\t\t  ignores `multiple` alongside `capture`. Taking \"a few\" is tapping\n\t\t\t\t\t\t  this a few times, which is also how a camera app behaves.\n\t\t\t\t\t\t--><label class=\"drop drop-camera\" data-show=\"!$_uploading\"><span aria-hidden=\"true\">📷</span> <span>Take photo</span> <input class=\"sr-only\" type=\"file\" name=\"photos\" accept=\"image/*\" capture=\"environment\" data-on:change=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 379, Col: 95}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 388, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "\" data-indicator:_uploading data-attr:disabled=\"$_uploading\"></label></form></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "\" data-indicator:_uploading data-attr:disabled=\"$_uploading\"></label><!--\n\t\t\t\t\t\t  Gallery, and the only control on a desktop. Keeps the explicit\n\t\t\t\t\t\t  MIME list it has always had: narrowing the picker to what the\n\t\t\t\t\t\t  server accepts is worth more here than it is for a capture,\n\t\t\t\t\t\t  because this is where somebody can reach a file that is not a\n\t\t\t\t\t\t  photograph at all.\n\t\t\t\t\t\t--><label class=\"drop drop-gallery\" data-show=\"!$_uploading\"><span aria-hidden=\"true\">＋</span> <span>Choose photos</span> <input class=\"sr-only\" type=\"file\" name=\"photos\" accept=\"image/jpeg,image/png,image/webp,image/gif\" multiple data-on:change=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var28 string
+		templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 409, Col: 96}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "\" data-indicator:_uploading data-attr:disabled=\"$_uploading\"></label><!--\n\t\t\t\t\t\t  ADR-015's busy half, now shared. It REPLACES both controls rather\n\t\t\t\t\t\t  than sitting beside them: two spinners for one upload would read\n\t\t\t\t\t\t  as two uploads. `_uploading` is all lowercase ON PURPOSE — the\n\t\t\t\t\t\t  signal name lives in the ATTRIBUTE NAME and HTML lowercases those,\n\t\t\t\t\t\t  so a camelCase name would have datastar create one signal while\n\t\t\t\t\t\t  every line here reads another. It is underscore-prefixed to stay\n\t\t\t\t\t\t  in the browser, and deliberately NOT `_busy`: signals are global,\n\t\t\t\t\t\t  so sharing that name would spin every other control on this page.\n\t\t\t\t\t\t--><div class=\"drop drop-busy\" data-show=\"$_uploading\" style=\"display:none\"><span class=\"spinner\" aria-hidden=\"true\"></span> <span aria-live=\"polite\">Uploading…</span></div></div></form></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -678,35 +691,35 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<details><summary class=\"faint\">Public image URLs</summary><div class=\"stack\" style=\"margin-top:8px\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<details><summary class=\"faint\">Public image URLs</summary><div class=\"stack\" style=\"margin-top:8px\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, p := range d.Row.Offer.Photos {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<code class=\"photo-url\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "<code class=\"photo-url\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var28 string
-				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(p.PublicURL(d.PublicBase))
+				var templ_7745c5c3_Var29 string
+				templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(p.PublicURL(d.PublicBase))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 393, Col: 58}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 438, Col: 58}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</code>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</code>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "</div><p class=\"hint\">Shopify and eBay fetch these from their own servers, so they must be reachable from the public internet.</p></details>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</div><p class=\"hint\">Shopify and eBay fetch these from their own servers, so they must be reachable from the public internet.</p></details>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -739,103 +752,103 @@ func offerLocationCard(d OfferDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var29 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var29 == nil {
-			templ_7745c5c3_Var29 = templ.NopComponent
+		templ_7745c5c3_Var30 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var30 == nil {
+			templ_7745c5c3_Var30 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "<div class=\"card\" id=\"offer-location\"><div class=\"card-head\"><h2>Where it lives</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-loc\">Location</label> <select id=\"o-loc\" class=\"select\" data-bind:offer-location><option value=\"\">Not shelved</option> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"card\" id=\"offer-location\"><div class=\"card-head\"><h2>Where it lives</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-loc\">Location</label> <select id=\"o-loc\" class=\"select\" data-bind:offer-location><option value=\"\">Not shelved</option> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, l := range d.Locations {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<option value=\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var30 string
-			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.ID)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 424, Col: 26}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "<option value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var31 string
-			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(l.Path)
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 424, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 469, Col: 26}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</option>")
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</select></div>")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		if d.Row.Where.Summary() != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<span class=\"muted\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var32 string
-			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.Summary())
+			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(l.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 429, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 469, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "</span> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</option>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		if d.Row.Where.Offsite() && d.Row.Where.CustodianContact != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<span class=\"faint\">Contact: ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</select></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if d.Row.Where.Summary() != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<span class=\"muted\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var33 string
-			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.CustodianContact)
+			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.Summary())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 432, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 474, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "</span> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<div><button class=\"btn\" type=\"button\" data-on:click=\"")
+		if d.Row.Where.Offsite() && d.Row.Where.CustodianContact != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<span class=\"faint\">Contact: ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var34 string
+			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.CustodianContact)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 477, Col: 63}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<div><button class=\"btn\" type=\"button\" data-on:click=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var34 string
-		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/location')")
+		var templ_7745c5c3_Var35 string
+		templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/location')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 438, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 483, Col: 71}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "\" data-indicator:_busy data-attr:disabled=\"$_busy\">Move</button></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "\" data-indicator:_busy data-attr:disabled=\"$_busy\">Move</button></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -864,87 +877,87 @@ func SoldDialog(d OfferDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var35 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var35 == nil {
-			templ_7745c5c3_Var35 = templ.NopComponent
+		templ_7745c5c3_Var36 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var36 == nil {
+			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<div id=\"modal\"><div class=\"modal-scrim\" data-on:click=\"@get('/modal/close')\"><div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"sold-title\" data-on:click=\"evt.stopPropagation()\" data-signals=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var36 string
-		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue("{soldAmount: '', soldCurrency: " + jsString(currencyOr(d.Row.Offer.Shop, core.BaseCurrency)) + ", soldDate: " + jsString(today()) + "}")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 461, Col: 155}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "\"><div class=\"modal-head\"><h2 id=\"sold-title\">Record a sale</h2><span class=\"spacer\"></span> <button class=\"btn btn-ghost\" type=\"button\" aria-label=\"Close\" data-on:click=\"@get('/modal/close')\">×</button></div><div class=\"modal-body\"><div id=\"sold-msg\"></div><p class=\"muted\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "<div id=\"modal\"><div class=\"modal-scrim\" data-on:click=\"@get('/modal/close')\"><div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"sold-title\" data-on:click=\"evt.stopPropagation()\" data-signals=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var37 string
-		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Offer.Title)
+		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue("{soldAmount: '', soldCurrency: " + jsString(currencyOr(d.Row.Offer.Shop, core.BaseCurrency)) + ", soldDate: " + jsString(today()) + "}")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 470, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 506, Col: 155}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</p><div class=\"field\"><label for=\"sold-amt\">Sold for</label><div class=\"money-row\"><input id=\"sold-amt\" class=\"input\" type=\"text\" inputmode=\"decimal\" placeholder=\"0.00\" data-bind:sold-amount> <select class=\"select\" aria-label=\"Sale currency\" data-bind:sold-currency>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "\"><div class=\"modal-head\"><h2 id=\"sold-title\">Record a sale</h2><span class=\"spacer\"></span> <button class=\"btn btn-ghost\" type=\"button\" aria-label=\"Close\" data-on:click=\"@get('/modal/close')\">×</button></div><div class=\"modal-body\"><div id=\"sold-msg\"></div><p class=\"muted\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var38 string
+		templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Offer.Title)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 515, Col: 41}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "</p><div class=\"field\"><label for=\"sold-amt\">Sold for</label><div class=\"money-row\"><input id=\"sold-amt\" class=\"input\" type=\"text\" inputmode=\"decimal\" placeholder=\"0.00\" data-bind:sold-amount> <select class=\"select\" aria-label=\"Sale currency\" data-bind:sold-currency>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, c := range d.Currencies {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<option value=\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var38 string
-			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 477, Col: 26}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<option value=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var39 string
-			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(c)
+			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 477, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 522, Col: 26}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "</option>")
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var40 string
+			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(c)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 522, Col: 32}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</option>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "</select></div><span class=\"hint\">The price actually paid, which may be less than the shop price.</span></div><div class=\"field\"><label for=\"sold-date\">Sale date</label> <input id=\"sold-date\" class=\"input\" type=\"date\" data-bind:sold-date> <span class=\"hint\">Reports attribute the revenue to this date, and convert at that day's rate.</span></div></div><div class=\"modal-foot\"><button class=\"btn\" type=\"button\" data-on:click=\"@get('/modal/close')\">Cancel</button> <button class=\"btn btn-primary\" type=\"button\" data-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "</select></div><span class=\"hint\">The price actually paid, which may be less than the shop price.</span></div><div class=\"field\"><label for=\"sold-date\">Sale date</label> <input id=\"sold-date\" class=\"input\" type=\"date\" data-bind:sold-date> <span class=\"hint\">Reports attribute the revenue to this date, and convert at that day's rate.</span></div></div><div class=\"modal-foot\"><button class=\"btn\" type=\"button\" data-on:click=\"@get('/modal/close')\">Cancel</button> <button class=\"btn btn-primary\" type=\"button\" data-on:click=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var40 string
-		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/sold')")
+		var templ_7745c5c3_Var41 string
+		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/sold')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 494, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 539, Col: 68}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>Record sale</span></button></div></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>Record sale</span></button></div></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -970,12 +983,12 @@ func CloseModal() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var41 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var41 == nil {
-			templ_7745c5c3_Var41 = templ.NopComponent
+		templ_7745c5c3_Var42 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var42 == nil {
+			templ_7745c5c3_Var42 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<div id=\"modal\"></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<div id=\"modal\"></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1010,38 +1023,38 @@ func offerMarketplaceCard(d OfferDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var42 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var42 == nil {
-			templ_7745c5c3_Var42 = templ.NopComponent
+		templ_7745c5c3_Var43 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var43 == nil {
+			templ_7745c5c3_Var43 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "<div class=\"card\" id=\"offer-marketplace\"><div class=\"card-head\"><h2>Marketplace</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-ebay-cat\">eBay category</label> <input id=\"o-ebay-cat\" class=\"input\" type=\"text\" inputmode=\"numeric\" spellcheck=\"false\" placeholder=\"Leave empty to use the default\" data-bind:offer-ebay-category data-on:keydown=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var43 string
-		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue("evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')")
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 538, Col: 96}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "\"> <span class=\"hint\">Only for this item. Empty means the default set at Settings.</span></div><div><button class=\"btn\" type=\"button\" data-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<div class=\"card\" id=\"offer-marketplace\"><div class=\"card-head\"><h2>Marketplace</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-ebay-cat\">eBay category</label> <input id=\"o-ebay-cat\" class=\"input\" type=\"text\" inputmode=\"numeric\" spellcheck=\"false\" placeholder=\"Leave empty to use the default\" data-bind:offer-ebay-category data-on:keydown=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var44 string
-		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/category')")
+		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue("evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 548, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 583, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>Save category</span></button></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "\"> <span class=\"hint\">Only for this item. Empty means the default set at Settings.</span></div><div><button class=\"btn\" type=\"button\" data-on:click=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var45 string
+		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/category')")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 593, Col: 71}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>Save category</span></button></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
