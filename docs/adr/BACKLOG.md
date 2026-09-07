@@ -432,3 +432,29 @@ requirement. A scannable label is the natural next step and is not built.
 The `settings` table stores a value and an `updated_at`, and not who changed it
 or what it was before. With one setting and a handful of administrators that is
 tolerable.
+
+### Starter templates in the operator's own language
+
+**Deferred by:** ADR-021 T5 (a trade arrives in one press)
+
+The two shipped templates are labelled in English, which M chose on 2026-09-07
+over Lithuanian: a field label becomes a CSV column header, and those go to eBay,
+Allegro and Shopify. The people filing the parts speak Lithuanian, so the labels
+an operator reads and the headers a marketplace reads may want to be different
+strings — which the field carries no room for today.
+
+**What would make this real:** a second operator who does not read English.
+
+### The taxonomy's refusals reach the operator
+
+**Deferred by:** ADR-021 T5 (a trade arrives in one press)
+
+`App.userMessage` maps the sentinels of `auth`, `offer`, `location` and `export`
+and NOT those of `taxonomy`, so a duplicate category code renders as "Something
+went wrong. The details are in the server log." and is logged as an unexpected
+error. T5 answers its own duplicate-root case in the handler; the hand-typed path
+that T2 shipped still falls through.
+
+**What would make this real:** it is four identifiers on one existing list, and
+was left out of T5 only because changing messages on handlers T5 does not touch
+is not what M asked for.

@@ -128,6 +128,10 @@ func (a *App) Routes() http.Handler {
 		// can say about itself, which is the same standing as changing a setting.
 		r.Get("/categories", a.GetTaxonomy)
 		r.Post("/categories", a.PostCategories)
+		// One press builds a whole starter tree, so it is a POST on its own path
+		// rather than a variant of the create above: what it does to the taxonomy
+		// is not what typing one category does.
+		r.Post("/categories/template/{code}", a.PostCategoryTemplate)
 		r.Post("/categories/{id}", a.PostCategory)
 		r.Post("/categories/{id}/delete", a.PostCategoryDelete)
 		r.Post("/categories/{id}/fields", a.PostCategoryFields)

@@ -7,6 +7,7 @@ import (
 	"github.com/a-h/templ"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 )
 
 // taxonomyFixture is a two-level tree with the deeper node selected, one own
@@ -257,5 +258,62 @@ func TestTheEmptyTaxonomyScreenSaysWhatToDo(t *testing.T) {
 	if !strings.Contains(html, `data-on:click="@post('/categories')"`) {
 		t.Error("the empty screen offers no way to make the first category, which " +
 			"is the only thing anybody can do from it")
+	}
+}
+
+// TestAStarterTemplateIsOfferedOnTheScreenSomebodyStartsFrom is M's ask: one
+// press that writes a trade's whole question set.
+//
+// ⚠ THE EMPTY SCREEN IS THE ONE THAT MATTERS. A template is for the operator who
+// has nothing yet, and that is exactly the state in which a control tucked
+// beside an existing tree would not be rendered at all.
+func TestAStarterTemplateIsOfferedOnTheScreenSomebodyStartsFrom(t *testing.T) {
+	empty := Taxonomy{Kinds: core.FieldKinds(), Templates: taxonomy.Templates()}
+	html := renderString(t, TaxonomyScreen(empty))
+
+	for _, want := range []string{"Car parts", "PC parts"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("a brand-new installation is not offered the %q template", want)
+		}
+	}
+	for _, code := range []string{"CAR", "PC"} {
+		if !strings.Contains(html, postAttr("/categories/template/"+code)) {
+			t.Errorf("nothing on the screen applies the %s template", code)
+		}
+	}
+}
+
+// TestATemplateSaysHowMuchItIsAboutToBuild pins the sentence under the button.
+//
+// Pressing an unfamiliar control that writes thirty rows into your own taxonomy
+// is a leap; saying the size first is what makes it a decision instead.
+func TestATemplateSaysHowMuchItIsAboutToBuild(t *testing.T) {
+	f := taxonomyFixture()
+	f.Templates = taxonomy.Templates()
+	html := renderString(t, TaxonomyScreen(f))
+
+	for _, tpl := range f.Templates {
+		// Computed from the template rather than typed here: a test carrying its
+		// own copy of the count stops agreeing the moment a question is added,
+		// and then it is the test that is wrong.
+		if !strings.Contains(html, plural(tpl.Nodes(), "category", "categories")) {
+			t.Errorf("the %s template does not say how many categories it makes", tpl.Code)
+		}
+		if !strings.Contains(html, plural(tpl.Questions(), "question", "questions")) {
+			t.Errorf("the %s template does not say how many questions it writes", tpl.Code)
+		}
+		if !strings.Contains(html, tpl.Summary) {
+			t.Errorf("the %s template does not say what it is for", tpl.Code)
+		}
+	}
+
+	// ⚠ Singular where it is one. The car template makes exactly one category,
+	// and "1 categories" on the control that is asking for somebody's trust is
+	// the same carelessness as the "1 answers" this screen already carried once.
+	if !strings.Contains(html, "1 category,") {
+		t.Error(`the one-node template announces itself as "1 categories"`)
+	}
+	if strings.Contains(html, "1 categories") {
+		t.Error(`the plural leaked back in: "1 categories"`)
 	}
 }

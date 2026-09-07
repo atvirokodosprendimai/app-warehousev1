@@ -16,6 +16,7 @@ file, the task file wins and the README must be regenerated.
 | 2 | T2 | T1 |
 | 2 | T3 | T1 |
 | 3 | T4 | T1, T3 |
+| 4 | T5 | T1, T2 |
 
 T2 and T3 are independent of each other and may land in either order: T2 is how
 a tree comes to exist, T3 is how an offer answers it. Neither is useful without
@@ -31,6 +32,7 @@ fields whether or not the admin screen exists yet.
 | T2 | An operator can shape the tree and the questions it asks | done | — | `go test ./internal/web/... && scripts/smoke.sh` |
 | T3 | An offer is asked its category's questions, root first | done | — | `go test ./internal/web/... && scripts/smoke.sh` |
 | T4 | A field can be exported, and the CSV's columns are the union over the batch | done | — | `go test ./internal/export/... && scripts/smoke.sh` |
+| T5 | A trade's whole question set arrives in one press | done | — | `go test ./internal/taxonomy/ ./internal/web/view/ && scripts/smoke.sh` |
 
 Status: `pending` | `partial` | `blocked` | `done`.
 

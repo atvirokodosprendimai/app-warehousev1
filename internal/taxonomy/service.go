@@ -57,6 +57,11 @@ type Store interface {
 	// MoveSubtree re-addresses c — which already carries its new ParentID, Code
 	// and Path — together with every node beneath oldPath, in one transaction.
 	MoveSubtree(ctx context.Context, c core.Category, oldPath string) error
+
+	// CreateTree inserts several categories and their questions in one
+	// transaction. A starter tree is many statements and half of one is worse
+	// than none, because it looks finished.
+	CreateTree(ctx context.Context, cats []core.Category, fields []core.CategoryField) error
 }
 
 // Service is the write side of the taxonomy. It owns the rules that keep a
@@ -96,6 +101,82 @@ func (s *Service) Create(ctx context.Context, parentID string, c core.Category) 
 		return core.Category{}, err
 	}
 	return c, nil
+}
+
+// ApplyTemplate creates a starter tree — a root, one level of children, and
+// every question each of them asks — in a single transaction.
+//
+// ⚠ IT REFUSES RATHER THAN MERGES when the root's code is already taken. A
+// template is identified by its root, so "apply it again" can only mean one of
+// two things: a second tree at an address that holds exactly one node, or a
+// merge into a tree the operator has since edited. The first is impossible and
+// the second would rewrite somebody's own taxonomy without being asked, so the
+// refusal is the honest answer and the caller turns it into a sentence.
+//
+// What it creates is ordinary data with nothing marking it as generated. That is
+// deliberate: the operator owns it from the moment it lands, and a template that
+// left a claim on its own output would be a schema wearing a disguise.
+func (s *Service) ApplyTemplate(ctx context.Context, t core.CategoryTemplate) error {
+	root := core.Category{
+		ID:   uuid.NewString(),
+		Code: strings.ToUpper(strings.TrimSpace(t.Code)),
+		Name: strings.TrimSpace(t.Name),
+	}
+	root.Path = root.Code
+	if err := root.Validate(); err != nil {
+		return fmt.Errorf("taxonomy: template %q: %w", t.Code, err)
+	}
+	cats := []core.Category{root}
+	fields, err := templateFields(root, t.Fields)
+	if err != nil {
+		return err
+	}
+
+	for i, child := range t.Children {
+		c := core.Category{
+			ID:       uuid.NewString(),
+			ParentID: root.ID,
+			Code:     strings.ToUpper(strings.TrimSpace(child.Code)),
+			Name:     strings.TrimSpace(child.Name),
+			Position: i,
+		}
+		c.Path = root.ChildPath(c.Code)
+		if err := c.Validate(); err != nil {
+			return fmt.Errorf("taxonomy: template %q: %w", t.Code, err)
+		}
+		cats = append(cats, c)
+
+		cf, err := templateFields(c, child.Fields)
+		if err != nil {
+			return err
+		}
+		fields = append(fields, cf...)
+	}
+	return s.store.CreateTree(ctx, cats, fields)
+}
+
+// templateFields stamps a template's questions with an id, their owner and their
+// order, and refuses one the domain would not accept.
+//
+// ⚠ POSITION COMES FROM THE SLICE INDEX, never from the template data. The order
+// the questions are written in IS the order they should be asked in, and a
+// hand-kept column of numbers beside them is a second copy of that fact — one
+// that silently stops agreeing the first time somebody inserts a question in the
+// middle.
+func templateFields(owner core.Category, in []core.CategoryField) ([]core.CategoryField, error) {
+	out := make([]core.CategoryField, 0, len(in))
+	for i, f := range in {
+		f.ID = uuid.NewString()
+		f.CategoryID = owner.ID
+		f.Code = strings.ToLower(strings.TrimSpace(f.Code))
+		f.Label = strings.TrimSpace(f.Label)
+		f.Position = i
+		if err := f.Validate(); err != nil {
+			return nil, fmt.Errorf("taxonomy: template question %q on %q: %w", f.Code, owner.Path, err)
+		}
+		out = append(out, f)
+	}
+	return out, nil
 }
 
 // Rename changes a node's own code and re-addresses everything beneath it.

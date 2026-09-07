@@ -482,6 +482,48 @@ func (r *Repo) MoveSubtree(ctx context.Context, c core.Category, oldPath string)
 	return nil
 }
 
+// CreateTree inserts a whole starter tree — every category and every question
+// they ask — in ONE transaction.
+//
+// ⚠ ALL OR NOTHING IS THE WHOLE POINT. A template is thirty-odd statements, and
+// a half-applied one looks exactly like a finished one: the operator would have
+// to work out which of seven categories and twenty-three questions had arrived
+// before they could safely try again. The refusal that actually happens here is
+// a duplicate root, which fails on the first statement — but only a transaction
+// makes that true of the thirty after it as well.
+//
+// Categories must arrive PARENTS FIRST. Each row carries a path composed from
+// its parent's, so the ordering is the caller's to get right; there is no second
+// pass here that could fix it up.
+func (r *Repo) CreateTree(ctx context.Context, cats []core.Category, fields []core.CategoryField) error {
+	tx, err := r.write.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("taxonomy: begin tree of %d categories: %w", len(cats), err)
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op once Commit has succeeded
+
+	for _, c := range cats {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO categories (`+categoryColumns+`) VALUES (?,?,?,?,?,?)`,
+			c.ID, parentValue(c.ParentID), c.Code, c.Path, c.Name, c.Position); err != nil {
+			return fmt.Errorf("taxonomy: insert %q: %w", c.Path, uniqueViolation(err))
+		}
+	}
+	for _, f := range fields {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO category_fields (`+fieldColumns+`) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+			f.ID, f.CategoryID, f.Code, f.Label, string(f.Kind), f.Unit, f.Options,
+			boolInt(f.Required), boolInt(f.Export), f.Position); err != nil {
+			return fmt.Errorf("taxonomy: insert question %q: %w", f.Code, uniqueViolation(err))
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("taxonomy: commit tree of %d categories: %w", len(cats), err)
+	}
+	return nil
+}
+
 // affectedOne turns "no such row" into [core.ErrNotFound]. A write that matched
 // nothing is a failure the caller has to hear about: silently succeeding is how a
 // double-submitted delete reads as a delete that worked.

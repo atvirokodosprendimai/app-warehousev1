@@ -91,6 +91,25 @@ func answerCount(n int) string {
 	return itoa(n) + " answers"
 }
 
+// templateSummary is the line under a template's button: the size of what it
+// builds, then what it is for.
+//
+// The size comes first because it is the question somebody actually has before
+// pressing an unfamiliar button — "how much is about to appear in my taxonomy?"
+// — and because it is the number they will check afterwards.
+func templateSummary(t core.CategoryTemplate) string {
+	return plural(t.Nodes(), "category", "categories") + ", " +
+		plural(t.Questions(), "question", "questions") + " — " + t.Summary
+}
+
+// plural renders a count with the right form of its noun.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return itoa(n) + " " + many
+}
+
 // kindOr defaults an empty kind, so the add form opens on something valid.
 func kindOr(k core.FieldKind, fallback core.FieldKind) string {
 	if k == "" {
@@ -117,8 +136,9 @@ templ taxonomyTreeCard(t Taxonomy) {
 		<div class="card-body">
 			if len(t.Tree) == 0 {
 				<p class="empty">
-					Nothing yet. Make a root below — "Car parts", "PC parts" — and grow it
-					as you find you need to.
+					Nothing yet. Take a template below to start with a trade's questions
+					already written, or make a root of your own — "Car parts", "PC parts" —
+					and grow it as you find you need to.
 				</p>
 			} else {
 				<ul class="tree">
@@ -175,6 +195,37 @@ templ taxonomyNewCard(t Taxonomy) {
 					<span>Add category</span>
 				</button>
 			</div>
+			if len(t.Templates) > 0 {
+				<!--
+				  ⚠ BELOW THE FORM, NOT ABOVE IT. A first-time operator wants these
+				  and an experienced one never presses them again, so they belong
+				  where they can be found rather than in front of the control
+				  somebody opened this card to use.
+
+				  Every class here already exists in the stylesheet. Inventing a
+				  .template-row would have rendered unstyled while every test,
+				  smoke run and browser walk passed — which is exactly how ADR-021's
+				  first two screens shipped looking like a plain document.
+				-->
+				<div class="field-group">
+					<h3 class="field-group-head">Or start from a template</h3>
+					for _, tpl := range t.Templates {
+						<div class="field">
+							<button
+								class="btn"
+								type="button"
+								data-on:click={ "@post('/categories/template/" + tpl.Code + "')" }
+								data-indicator:_busy
+								data-attr:disabled="$_busy"
+							>
+								<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+								<span>{ tpl.Name }</span>
+							</button>
+							<span class="hint">{ templateSummary(tpl) }</span>
+						</div>
+					}
+				</div>
+			}
 		</div>
 	</div>
 }

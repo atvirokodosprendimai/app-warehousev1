@@ -235,6 +235,50 @@ check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
 check "the first reference is WH0000001" "WH0000001" "$RUN/offer.html"
 absent "no dated hex reference survives" "WH-2026" "$RUN/offer.html"
 
+echo "== a starter template builds a whole trade in one press =="
+# ⚠ PC, NOT CAR. The section below builds a CAR tree by hand, and a template
+# refuses to touch a root that already exists — so applying the car template here
+# would prove nothing about the success path. The refusal is asserted at the end
+# of this block, where CAR *is* taken.
+
+# ⚠ THE EMPTY SCREEN FIRST, AND THIS ASSERTION EARNED ITS PLACE. taxonomyScreen
+# has three exits — no selection, a stale bookmark, and the full read — and the
+# first build filled the template list in beside the LAST one, so the buttons
+# rendered on every screen except the one a new installation opens on. No Go test
+# could see it: internal/web has none, and the view tests build the read model by
+# hand. A browser walk caught it; this is the half that lives in the repository.
+curl -fsS -b "$COOKIES" "$BASE/categories" -o "$RUN/tpl-empty.html"
+check "an empty taxonomy offers the templates" "/categories/template/PC" "$RUN/tpl-empty.html"
+check "and the other one" "/categories/template/CAR" "$RUN/tpl-empty.html"
+check "saying how much each builds" "7 categories, 23 questions" "$RUN/tpl-empty.html"
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/template/PC" \
+  -o "$RUN/tpl-pc.html"
+check "a template can be applied in one press" "PC parts added" "$RUN/tpl-pc.html"
+check "and it says how many categories it built" "7 categories" "$RUN/tpl-pc.html"
+check "and how many questions it wrote" "23 questions" "$RUN/tpl-pc.html"
+
+curl -fsS -b "$COOKIES" "$BASE/categories" -o "$RUN/tpl-tree.html"
+check "the template's root is in the tree" ">PC<" "$RUN/tpl-tree.html"
+check "with its subcategories beneath it" ">PC/GPU<" "$RUN/tpl-tree.html"
+check "all six of them" ">PC/PSU<" "$RUN/tpl-tree.html"
+
+# The questions landed on the right levels: the root's are inherited by a child
+# that never defined them, which is the whole reason this template has children.
+PC_GPU_ID=$(grep -o 'at=[0-9a-f-]\{36\}"[^>]*>*<span class="code">PC/GPU' "$RUN/tpl-tree.html" \
+  | head -1 | grep -o '[0-9a-f-]\{36\}')
+curl -fsS -b "$COOKIES" "$BASE/categories?at=$PC_GPU_ID" -o "$RUN/tpl-gpu.html"
+check "a template's child asks its own question" "VRAM" "$RUN/tpl-gpu.html"
+check "and inherits the root's" "Manufacturer part number" "$RUN/tpl-gpu.html"
+check "labelled as inherited, not as its own" "Inherited" "$RUN/tpl-gpu.html"
+
+# ⚠ THE SECOND PRESS. A root's path holds exactly one node, so applying the same
+# template again cannot mean anything but a refusal — and the operator has to be
+# told which code is in the way rather than handed a UNIQUE constraint message.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/template/PC" \
+  -o "$RUN/tpl-again.html"
+check "applying a template twice is refused in words" "There is already a PC category" "$RUN/tpl-again.html"
+absent "and the refusal does not leak the database's own message" "UNIQUE constraint" "$RUN/tpl-again.html"
+
 echo "== the operator's own taxonomy, and the questions it asks (ADR-021) =="
 # ⚠ THIS IS NOT THE MARKETPLACE CATEGORY. offer_categories (ADR-016) says where
 # to LIST a thing on eBay; this tree says what the thing IS. The two are

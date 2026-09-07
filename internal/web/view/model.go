@@ -317,6 +317,10 @@ type Taxonomy struct {
 	Editing core.CategoryField
 	// Kinds is the list a field's kind may be chosen from.
 	Kinds []core.FieldKind
+	// Templates are the starter trees on offer. They are read-only descriptions
+	// here: what a press of one produces is ordinary categories and questions,
+	// indistinguishable afterwards from ones somebody typed.
+	Templates []core.CategoryTemplate
 }
 
 // Deletable reports whether the selected node can be removed.

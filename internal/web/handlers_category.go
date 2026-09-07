@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/starfederation/datastar-go/datastar"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/render"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/view"
 )
@@ -69,6 +71,13 @@ func (a *App) taxonomyScreen(r *http.Request) (view.Taxonomy, error) {
 		Tree:        tree,
 		Kinds:       core.FieldKinds(),
 		ValueCounts: map[string]int{},
+		// ⚠ SET HERE, IN THE LITERAL, AND NOT BESIDE THE LAST RETURN. This
+		// function has THREE exits — no selection, a stale bookmark, and the full
+		// read — and the templates are wanted most on the first of them, which is
+		// the empty screen a new installation opens on. Filling this in further
+		// down left the button rendered on every screen except the one it exists
+		// for, and no Go test could see it: they build this struct by hand.
+		Templates: taxonomy.Templates(),
 	}
 
 	at := strings.TrimSpace(r.URL.Query().Get("at"))
@@ -116,6 +125,45 @@ func (a *App) taxonomyScreen(r *http.Request) (view.Taxonomy, error) {
 		}
 	}
 	return t, nil
+}
+
+// PostCategoryTemplate takes a whole starter tree in one press.
+//
+// ⚠ THE DUPLICATE-ROOT REFUSAL IS ANSWERED HERE RATHER THAN LEFT TO
+// userMessage, because it is the one an operator will actually meet — pressing
+// the button twice, or pressing it on a warehouse that already trades in cars —
+// and the generic path would hand them a wrapped SQLite UNIQUE message. A
+// refusal somebody is expected to act on has to say what to do next.
+func (a *App) PostCategoryTemplate(w http.ResponseWriter, r *http.Request) {
+	t, ok := taxonomy.Template(param(r, "code"))
+	if !ok {
+		a.flash(w, r, "cat-flash", "error", "No such template.")
+		return
+	}
+	if err := a.Taxonomy.ApplyTemplate(r.Context(), t); err != nil {
+		if errors.Is(err, taxonomy.ErrPathTaken) || errors.Is(err, taxonomy.ErrCodeTaken) {
+			a.flash(w, r, "cat-flash", "error", "There is already a "+t.Code+
+				" category, and a template only ever creates a new tree — nothing was "+
+				"changed. Rename or remove that one first if you want to start over.")
+			return
+		}
+		a.flash(w, r, "cat-flash", "error", a.userMessage(err))
+		return
+	}
+	a.repaintTaxonomy(w, r, t.Name+" added — "+
+		count(t.Nodes(), "category", "categories")+" and "+
+		count(t.Questions(), "question", "questions")+
+		". All of it is yours now: rename it, delete what you do not ask, add what is missing.")
+}
+
+// count renders a number with the right form of its noun, because "1 questions"
+// in a message about what just happened to somebody's data reads as carelessness
+// exactly where they are deciding whether to trust it.
+func count(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
 }
 
 // PostCategories creates a node.
