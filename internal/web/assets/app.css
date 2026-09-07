@@ -395,6 +395,85 @@ button, input, select, textarea { font: inherit; color: inherit; }
   body:has(.nav-scrim.open) { overflow: hidden; }
 
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
+
+  /* ---------- the offers listing stops being a table on a phone ----------
+
+     Measured in Chromium at 390x844: the listing table is 802px wide — eight
+     columns for an administrator — so `documentElement.scrollWidth` came back
+     738 against a 390px client width and the LOCATION column sat off the right
+     edge entirely. `.table-wrap`'s `overflow-x: auto` scrolls the table, but
+     the PAGE still overflowed, and the same measurement with Chromium's mobile
+     emulation switched OFF returned 737 — so this was the layout, not an
+     artefact of the harness.
+
+     Below 860px each row therefore becomes a stacked card. The markup does not
+     change shape: the cells carry their own wording in `data-label`, which the
+     header row supplies on a wider screen. ⚠ The explicit `role` attributes in
+     offers.templ are what make this safe — setting `display` to anything other
+     than `table*` strips a table's implicit ARIA semantics. */
+  .table-wrap { overflow-x: visible; }
+  table, tbody, tr, td { display: block; width: auto; }
+  thead { display: none; }
+
+  /* Each row becomes a card in its own right. On the page background a
+     borderless row reads as loose text rather than as one item among several,
+     and the rest of this interface is built from cards, so a listing that is
+     not looks like an unstyled fragment. */
+  tbody tr {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 4px;
+    align-items: start;
+    padding: 14px;
+    margin-bottom: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  tbody tr:last-child { margin-bottom: 0; }
+  tbody td { padding: 0; border-bottom: 0; min-width: 0; }
+
+  /* The photograph rides beside the name it belongs to; everything else is a
+     full-width label/value line, which is what makes a row scannable without
+     column headings above it. */
+  .cell-photo { grid-column: 1; grid-row: 1 / span 2; }
+  .cell-item { grid-column: 2; grid-row: 1; }
+  .cell-status { grid-column: 2; grid-row: 2; }
+  .cell-where,
+  .cell-price,
+  .cell-owner,
+  .cell-margin {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 2px;
+  }
+  td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  /* A deep shelf path is the one value long enough to force the row wide
+     again, so it wraps inside its own column rather than pushing the page. */
+  .cell-val { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+
+  /* A full-width control, because a 63px "Add" is not a touch target. It also
+     takes a visible border here: `.btn-ghost` is transparent until hover, and a
+     phone has no hover, so the button read as a line of centred text. */
+  .cell-add { grid-column: 1 / -1; margin-top: 12px; }
+  .cell-add .btn {
+    width: 100%;
+    min-height: 44px;
+    border-color: var(--border);
+    color: var(--text);
+  }
 }
 
 /* ---------- stat tiles ---------- */

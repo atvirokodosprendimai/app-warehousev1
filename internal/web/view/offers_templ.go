@@ -80,23 +80,23 @@ func OfferTable(id string, rows []OfferRow, showOwner bool, addToCart bool) temp
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"table-wrap\"><table><thead><tr><th scope=\"col\"><span class=\"sr-only\">Photo</span></th><th scope=\"col\">Item</th><th scope=\"col\">Status</th><th scope=\"col\">Location</th><th scope=\"col\" class=\"num\">Shop price</th>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 4, "<div class=\"table-wrap\"><table role=\"table\"><thead role=\"rowgroup\"><tr role=\"row\"><th scope=\"col\" role=\"columnheader\"><span class=\"sr-only\">Photo</span></th><th scope=\"col\" role=\"columnheader\">Item</th><th scope=\"col\" role=\"columnheader\">Status</th><th scope=\"col\" role=\"columnheader\">Location</th><th scope=\"col\" role=\"columnheader\" class=\"num\">Shop price</th>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if showOwner {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<th scope=\"col\" class=\"num\">Owner wants</th><th scope=\"col\" class=\"num\">Margin</th>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<th scope=\"col\" role=\"columnheader\" class=\"num\">Owner wants</th><th scope=\"col\" role=\"columnheader\" class=\"num\">Margin</th>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 			if addToCart {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<th scope=\"col\"><span class=\"sr-only\">Add to cart</span></th>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 6, "<th scope=\"col\" role=\"columnheader\"><span class=\"sr-only\">Add to cart</span></th>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</tr></thead> <tbody>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "</tr></thead> <tbody role=\"rowgroup\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -140,7 +140,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<tr><td>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<!--\n\t  Every cell carries an explicit role and a `data-label`, and neither is\n\t  decoration. Below 860px the stylesheet lays this row out as a stacked card\n\t  because eight columns do not fit a phone — and setting `display` to\n\t  anything other than `table*` STRIPS a table's implicit ARIA semantics, so\n\t  the roles are what stop a screen reader being handed eight anonymous\n\t  blocks per offer. `data-label` is where the hidden header row's wording\n\t  goes, so a value is never left without its name.\n\t--><tr role=\"row\"><td role=\"cell\" class=\"cell-photo\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -152,7 +152,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Thumb())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 53, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 62, Col: 38}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 			if templ_7745c5c3_Err != nil {
@@ -168,7 +168,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</td><td><!--\n\t\t\t  An untitled offer is a normal state since ADR-019: one person\n\t\t\t  photographs a thing, another names it later. Rendered as an empty cell\n\t\t\t  it reads as a RENDERING FAULT and gets reported as one, so it carries\n\t\t\t  the word instead — and the photograph count beside the reference,\n\t\t\t  because with no title those two are all a cataloguer has to tell one\n\t\t\t  waiting group from another.\n\t\t\t-->")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "</td><td role=\"cell\" class=\"cell-item\"><!--\n\t\t\t  An untitled offer is a normal state since ADR-019: one person\n\t\t\t  photographs a thing, another names it later. Rendered as an empty cell\n\t\t\t  it reads as a RENDERING FAULT and gets reported as one, so it carries\n\t\t\t  the word instead — and the photograph count beside the reference,\n\t\t\t  because with no title those two are all a cataloguer has to tell one\n\t\t\t  waiting group from another.\n\t\t\t-->")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -180,7 +180,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var6 templ.SafeURL
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/offers/" + r.Offer.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 68, Col: 79}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 77, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -193,7 +193,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r.Offer.SKU)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 69, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 78, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -206,7 +206,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.PhotoCountText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 70, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 79, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -224,7 +224,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var9 templ.SafeURL
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/offers/" + r.Offer.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 72, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 81, Col: 70}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -237,7 +237,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var10 string
 			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(r.Offer.Title)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 72, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 81, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
@@ -250,7 +250,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var11 string
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(r.Offer.SKU)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 73, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 82, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -261,7 +261,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</td><td>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</td><td role=\"cell\" class=\"cell-status\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -275,7 +275,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</td><td>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "</td><td role=\"cell\" class=\"cell-where\" data-label=\"Location\"><div class=\"cell-val\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -287,7 +287,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(r.LocationPath)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 84, Col: 38}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 94, Col: 39}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 			if templ_7745c5c3_Err != nil {
@@ -311,7 +311,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(r.Where.Summary())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 89, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 99, Col: 45}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -322,14 +322,14 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</td><td class=\"num\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "</div></td><td role=\"cell\" class=\"num cell-price\" data-label=\"Shop price\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var14 string
 		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(r.PriceText())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 92, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 103, Col: 80}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
@@ -340,27 +340,27 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if showOwner {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<td class=\"num muted\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<td role=\"cell\" class=\"num muted cell-owner\" data-label=\"Owner wants\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var15 string
 			templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(r.OwnerText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 94, Col: 40}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 105, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</td><td class=\"num\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</td><td role=\"cell\" class=\"num cell-margin\" data-label=\"Margin\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(r.MarginText())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 95, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 106, Col: 79}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -372,14 +372,14 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			}
 		}
 		if addToCart {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<td><!--\n\t\t\t\t  Adding happens HERE, on the listing, because building a cart is\n\t\t\t\t  something you do while looking through stock. It used to be\n\t\t\t\t  possible only from a card at the bottom of one offer's page,\n\t\t\t\t  reachable only after opening that offer — which is a workflow\n\t\t\t\t  nobody found.\n\t\t\t\t--><button class=\"btn btn-ghost\" type=\"button\" aria-label=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "<td role=\"cell\" class=\"cell-add\"><!--\n\t\t\t\t  Adding happens HERE, on the listing, because building a cart is\n\t\t\t\t  something you do while looking through stock. It used to be\n\t\t\t\t  possible only from a card at the bottom of one offer's page,\n\t\t\t\t  reachable only after opening that offer — which is a workflow\n\t\t\t\t  nobody found.\n\t\t\t\t--><button class=\"btn btn-ghost\" type=\"button\" aria-label=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var17 string
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.ResolveAttributeValue("Add " + r.Offer.Title + " to the cart")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 109, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 120, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var17)
 			if templ_7745c5c3_Err != nil {
@@ -392,7 +392,7 @@ func offerRow(r OfferRow, showOwner bool, addToCart bool) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/carts/add/" + r.Offer.ID + "')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 110, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 121, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 			if templ_7745c5c3_Err != nil {
@@ -446,7 +446,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.ResolveAttributeValue(searchSignals(l))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 127, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 138, Col: 51}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var20)
 		if templ_7745c5c3_Err != nil {
@@ -459,7 +459,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(itoa(l.Total))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 132, Col: 56}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 143, Col: 56}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
@@ -472,7 +472,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('" + l.RowsPath() + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 144, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 155, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 		if templ_7745c5c3_Err != nil {
@@ -485,7 +485,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('" + l.RowsPath() + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 162, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 173, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 		if templ_7745c5c3_Err != nil {
@@ -498,7 +498,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var24 string
 		templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('" + l.RowsPath() + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 175, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 186, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 		if templ_7745c5c3_Err != nil {
@@ -511,7 +511,7 @@ func OffersScreen(l OfferList) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('" + l.RowsPath() + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 177, Col: 137}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 188, Col: 137}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 		if templ_7745c5c3_Err != nil {
@@ -529,7 +529,7 @@ func OffersScreen(l OfferList) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 179, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 190, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -542,7 +542,7 @@ func OffersScreen(l OfferList) templ.Component {
 			var templ_7745c5c3_Var27 string
 			templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 179, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 190, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 			if templ_7745c5c3_Err != nil {
@@ -637,7 +637,7 @@ func CartBar(l OfferList) templ.Component {
 			var templ_7745c5c3_Var29 templ.SafeURL
 			templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("/carts/" + l.ActiveCart))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 217, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 228, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 			if templ_7745c5c3_Err != nil {
@@ -670,7 +670,7 @@ func CartBar(l OfferList) templ.Component {
 				var templ_7745c5c3_Var30 string
 				templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(c.ID)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 232, Col: 27}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 243, Col: 27}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 				if templ_7745c5c3_Err != nil {
@@ -693,7 +693,7 @@ func CartBar(l OfferList) templ.Component {
 				var templ_7745c5c3_Var31 string
 				templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 233, Col: 16}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 244, Col: 16}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 				if templ_7745c5c3_Err != nil {
@@ -706,7 +706,7 @@ func CartBar(l OfferList) templ.Component {
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(itoa(c.Size()))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 233, Col: 39}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 244, Col: 39}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 				if templ_7745c5c3_Err != nil {
@@ -788,7 +788,7 @@ func OfferCount(n int) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(itoa(n))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 275, Col: 47}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 286, Col: 47}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 		if templ_7745c5c3_Err != nil {
@@ -835,7 +835,7 @@ func filterChip(href, label string, active bool) templ.Component {
 			var templ_7745c5c3_Var36 templ.SafeURL
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 284, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 295, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 			if templ_7745c5c3_Err != nil {
@@ -848,7 +848,7 @@ func filterChip(href, label string, active bool) templ.Component {
 			var templ_7745c5c3_Var37 string
 			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 284, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 295, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 			if templ_7745c5c3_Err != nil {
@@ -866,7 +866,7 @@ func filterChip(href, label string, active bool) templ.Component {
 			var templ_7745c5c3_Var38 templ.SafeURL
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 286, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 297, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 			if templ_7745c5c3_Err != nil {
@@ -879,7 +879,7 @@ func filterChip(href, label string, active bool) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 286, Col: 75}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 297, Col: 75}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
@@ -1023,7 +1023,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var42 templ.SafeURL
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(href))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 329, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 340, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -1036,7 +1036,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 330, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 341, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 			if templ_7745c5c3_Err != nil {
@@ -1049,7 +1049,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 331, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 342, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1062,7 +1062,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var45 string
 			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(note)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 332, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 343, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
 			if templ_7745c5c3_Err != nil {
@@ -1080,7 +1080,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var46 string
 			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 336, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 347, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
 			if templ_7745c5c3_Err != nil {
@@ -1093,7 +1093,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 337, Col: 35}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 348, Col: 35}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 			if templ_7745c5c3_Err != nil {
@@ -1106,7 +1106,7 @@ func tile(href, label, value, note string) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(note)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 338, Col: 33}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 349, Col: 33}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 			if templ_7745c5c3_Err != nil {
@@ -1162,7 +1162,7 @@ func rateTile(r core.Rate) templ.Component {
 			var templ_7745c5c3_Var50 string
 			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(r.Rate)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 353, Col: 36}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 364, Col: 36}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 			if templ_7745c5c3_Err != nil {
@@ -1175,7 +1175,7 @@ func rateTile(r core.Rate) templ.Component {
 			var templ_7745c5c3_Var51 string
 			templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(r.AsOf)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 354, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offers.templ`, Line: 365, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 			if templ_7745c5c3_Err != nil {

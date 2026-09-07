@@ -18,24 +18,24 @@ templ OfferTable(id string, rows []OfferRow, showOwner bool, addToCart bool) {
 			}
 		} else {
 			<div class="table-wrap">
-				<table>
-					<thead>
-						<tr>
-							<th scope="col"><span class="sr-only">Photo</span></th>
-							<th scope="col">Item</th>
-							<th scope="col">Status</th>
-							<th scope="col">Location</th>
-							<th scope="col" class="num">Shop price</th>
+				<table role="table">
+					<thead role="rowgroup">
+						<tr role="row">
+							<th scope="col" role="columnheader"><span class="sr-only">Photo</span></th>
+							<th scope="col" role="columnheader">Item</th>
+							<th scope="col" role="columnheader">Status</th>
+							<th scope="col" role="columnheader">Location</th>
+							<th scope="col" role="columnheader" class="num">Shop price</th>
 							if showOwner {
-								<th scope="col" class="num">Owner wants</th>
-								<th scope="col" class="num">Margin</th>
+								<th scope="col" role="columnheader" class="num">Owner wants</th>
+								<th scope="col" role="columnheader" class="num">Margin</th>
 							}
 							if addToCart {
-								<th scope="col"><span class="sr-only">Add to cart</span></th>
+								<th scope="col" role="columnheader"><span class="sr-only">Add to cart</span></th>
 							}
 						</tr>
 					</thead>
-					<tbody>
+					<tbody role="rowgroup">
 						for _, r := range rows {
 							@offerRow(r, showOwner, addToCart)
 						}
@@ -47,15 +47,24 @@ templ OfferTable(id string, rows []OfferRow, showOwner bool, addToCart bool) {
 }
 
 templ offerRow(r OfferRow, showOwner bool, addToCart bool) {
-	<tr>
-		<td>
+	<!--
+	  Every cell carries an explicit role and a `data-label`, and neither is
+	  decoration. Below 860px the stylesheet lays this row out as a stacked card
+	  because eight columns do not fit a phone — and setting `display` to
+	  anything other than `table*` STRIPS a table's implicit ARIA semantics, so
+	  the roles are what stop a screen reader being handed eight anonymous
+	  blocks per offer. `data-label` is where the hidden header row's wording
+	  goes, so a value is never left without its name.
+	-->
+	<tr role="row">
+		<td role="cell" class="cell-photo">
 			if r.Thumb() != "" {
 				<img class="thumb" src={ r.Thumb() } alt="" loading="lazy" width="40" height="40"/>
 			} else {
 				<span class="thumb thumb-empty" aria-hidden="true">📷</span>
 			}
 		</td>
-		<td>
+		<td role="cell" class="cell-item">
 			<!--
 			  An untitled offer is a normal state since ADR-019: one person
 			  photographs a thing, another names it later. Rendered as an empty cell
@@ -73,29 +82,31 @@ templ offerRow(r OfferRow, showOwner bool, addToCart bool) {
 				<div class="row-sub code">{ r.Offer.SKU }</div>
 			}
 		</td>
-		<td>
+		<td role="cell" class="cell-status">
 			@Badge(r.Offer.Status)
 			if r.Offer.NeedsPricing() {
 				<div class="flag-nopricing">Needs pricing</div>
 			}
 		</td>
-		<td>
-			if r.LocationPath != "" {
-				<div class="code">{ r.LocationPath }</div>
-			} else {
-				<div class="faint">Not shelved</div>
-			}
-			if r.Where.Summary() != "" {
-				<div class="row-sub">{ r.Where.Summary() }</div>
-			}
+		<td role="cell" class="cell-where" data-label="Location">
+			<div class="cell-val">
+				if r.LocationPath != "" {
+					<div class="code">{ r.LocationPath }</div>
+				} else {
+					<div class="faint">Not shelved</div>
+				}
+				if r.Where.Summary() != "" {
+					<div class="row-sub">{ r.Where.Summary() }</div>
+				}
+			</div>
 		</td>
-		<td class="num">{ r.PriceText() }</td>
+		<td role="cell" class="num cell-price" data-label="Shop price">{ r.PriceText() }</td>
 		if showOwner {
-			<td class="num muted">{ r.OwnerText() }</td>
-			<td class="num">{ r.MarginText() }</td>
+			<td role="cell" class="num muted cell-owner" data-label="Owner wants">{ r.OwnerText() }</td>
+			<td role="cell" class="num cell-margin" data-label="Margin">{ r.MarginText() }</td>
 		}
 		if addToCart {
-			<td>
+			<td role="cell" class="cell-add">
 				<!--
 				  Adding happens HERE, on the listing, because building a cart is
 				  something you do while looking through stock. It used to be
