@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -380,5 +381,36 @@ func TestExportersAreSafeForConcurrentUse(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestTheRegistryMatchesTheProfilesCoreKnows refuses the drift ADR-016 creates.
+//
+// The profile names live in TWO places on purpose: this package registers the
+// exporters, and core.KnownExportProfiles is what internal/offer validates a
+// per-offer category against — and no package here imports a sibling, so the
+// offer aggregate cannot ask this one.
+//
+// Two sources of truth is a drift risk, and this is the check that makes the
+// drift loud instead of silent. Without it, adding a profile here and forgetting
+// core would mean every category stored against the new marketplace is refused
+// as a typo; adding it to core and forgetting here would mean categories stored
+// against a marketplace that cannot be exported.
+func TestTheRegistryMatchesTheProfilesCoreKnows(t *testing.T) {
+	registered := Names()
+	known := core.KnownExportProfiles()
+
+	sort.Strings(registered)
+	sort.Strings(known)
+
+	if len(registered) != len(known) {
+		t.Fatalf("export registers %v; core.KnownExportProfiles is %v — add the profile in "+
+			"BOTH places, or a category stored against it is either refused as a typo or "+
+			"stored for a marketplace nothing can export", registered, known)
+	}
+	for i := range registered {
+		if registered[i] != known[i] {
+			t.Errorf("profile %d: export has %q, core has %q", i, registered[i], known[i])
+		}
 	}
 }

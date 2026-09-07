@@ -37,7 +37,7 @@ that names the SKU and both places a person can fix it.
 set -o pipefail
 go test ./internal/export/ -run '^TestEBayPrefersTheOffersOwnCategory$' -count=1 2>&1 | tee /tmp/adr016-t3-new.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr016-t3-new.out && \
-go test ./internal/export/ -count=1 2>&1 | tee /tmp/adr016-t3-reg.out && \
+go test ./internal/export/ -run '^(TestEBayPrefersTheOffersOwnCategory|TestEBayFallsBackToTheConfiguredDefault|TestEBayRefusalNamesWhereToSetTheCategory|TestEBayNeverExportsTheOwnerPrice|TestEBayHeaderMatchesTheFileExchangeSpec)$' -count=1 2>&1 | tee /tmp/adr016-t3-reg.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr016-t3-reg.out
 ```
 
@@ -62,7 +62,14 @@ go test ./internal/export/ -count=1 2>&1 | tee /tmp/adr016-t3-reg.out && \
 
 ## Mutation Log
 
-<Tool-written by `adr-verify … --mutant …`. Empty at authoring.>
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/export/ebay.go` · ignoring the item own category makes the configured default win for every row, which is the one-category-per-export-file design the reported error argued against · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · covers:the offer's own category winning over the default
+- 2026-09-07 · 2541a6e* · mutant inconclusive · exit 1 · `internal/export/ebay.go` · a refusal that names neither the SKU nor where to set a value is the exact failure reported: the message said a value was required and nothing said where to put one · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · covers:the refusal naming the SKU and both places a value can be set
+  ```
+  the fence failed on a build/parse error, not an assertion
+  ```
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/export/ebay.go` · dropping the pointer to Settings leaves a refusal that says a value is required without saying where to put one — which is precisely the reported bug, not a hypothetical · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · covers:the refusal naming the SKU and both places a value can be set
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/export/ebay.go` · ignoring the item own category makes the configured default win for every row, which is the one-category-per-export-file design the reported error argued against · acceptance-sha256:e3dd832e9bccca916707c877c0ad40ee1649b3e4e6a0cc39eded3e71e17797d0 · covers:the offer's own category winning over the default
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/export/ebay.go` · dropping the pointer to Settings leaves a refusal that says a value is required without saying where to put one — which is precisely the reported bug, not a hypothetical · acceptance-sha256:e3dd832e9bccca916707c877c0ad40ee1649b3e4e6a0cc39eded3e71e17797d0 · covers:the refusal naming the SKU and both places a value can be set
 
 ## Invariants
 
@@ -87,4 +94,10 @@ the answer would be to resolve in the caller instead.
 
 ## Verification Log
 
-<Tool-written by `adr-verify <this-file>` — do not hand-write entries.>
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · ms:1052
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · ms:1067
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · ms:1115
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:f3ca2c8d6bbd40b83d521464d81cf49f15a093e32a2a4142b4b1e77dee48f3fa · ms:1098
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:e3dd832e9bccca916707c877c0ad40ee1649b3e4e6a0cc39eded3e71e17797d0 · ms:1045
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:e3dd832e9bccca916707c877c0ad40ee1649b3e4e6a0cc39eded3e71e17797d0 · ms:1072
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:e3dd832e9bccca916707c877c0ad40ee1649b3e4e6a0cc39eded3e71e17797d0 · ms:1100

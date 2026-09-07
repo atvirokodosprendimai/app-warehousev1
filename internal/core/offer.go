@@ -124,6 +124,16 @@ type Offer struct {
 	LocationID string
 	// Photos are the offer's images in display order. The first is the primary.
 	Photos []Photo
+	// Categories is the marketplace category this item should be listed under,
+	// keyed by export profile name ("ebay", "shopify"). A missing entry means
+	// "use the configured default for that profile", which is the ordinary case:
+	// requiring a taxonomy number at intake would block the photograph-title-
+	// shelve flow this type deliberately permits.
+	//
+	// The values are not interchangeable between profiles. eBay's is a number
+	// from its own taxonomy; Allegro's is a category NAME. That is why this is a
+	// map keyed by profile rather than one field.
+	Categories map[string]string
 	// CreatedAt and UpdatedAt are UTC timestamps.
 	CreatedAt time.Time
 	UpdatedAt time.Time

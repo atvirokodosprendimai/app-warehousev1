@@ -101,6 +101,12 @@ func (r *Repo) oneOffer(ctx context.Context, where string, arg any) (core.Offer,
 		return core.Offer{}, err
 	}
 	o.Photos = photos[o.ID]
+
+	cats, err := r.categoriesByOffer(ctx, []string{o.ID})
+	if err != nil {
+		return core.Offer{}, err
+	}
+	o.Categories = cats[o.ID]
 	return o, nil
 }
 
@@ -141,8 +147,14 @@ func (r *Repo) Offers(ctx context.Context, f core.OfferFilter) ([]core.Offer, er
 	if err != nil {
 		return nil, err
 	}
+	// And one category query for the whole page, for the same reason.
+	catsByOffer, err := r.categoriesByOffer(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	for i := range out {
 		out[i].Photos = byOffer[out[i].ID]
+		out[i].Categories = catsByOffer[out[i].ID]
 	}
 	return out, nil
 }
@@ -620,4 +632,87 @@ func writeErr(op, sku string, err error) error {
 		return fmt.Errorf("offer: %s %q: %w", op, sku, ErrSKUTaken)
 	}
 	return fmt.Errorf("offer: %s: %w", op, err)
+}
+
+// categoriesByOffer loads the marketplace categories of every listed offer in
+// ONE query and groups them by offer id, then by profile.
+//
+// One query for the page, never one per offer — the same rule photosByOffer
+// follows, and for the same reason: an N+1 is invisible on the ten rows a
+// developer tests with and becomes several hundred round trips once the
+// warehouse is real.
+//
+// An offer with no categories is simply absent from the map. Reading a missing
+// key yields a nil map, and reading a missing key from THAT yields "", which is
+// exactly what the export resolution wants — no category means fall back to the
+// configured default.
+func (r *Repo) categoriesByOffer(ctx context.Context, offerIDs []string) (map[string]map[string]string, error) {
+	out := make(map[string]map[string]string, len(offerIDs))
+	if len(offerIDs) == 0 {
+		return out, nil
+	}
+
+	ph := make([]string, len(offerIDs))
+	args := make([]any, len(offerIDs))
+	for i, id := range offerIDs {
+		ph[i] = "?"
+		args[i] = id
+	}
+	q := `SELECT offer_id, profile, category FROM offer_categories WHERE offer_id IN (` +
+		strings.Join(ph, ", ") + `)`
+
+	rows, err := r.read.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("offer: load categories: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var offerID, profile, category string
+		if err := rows.Scan(&offerID, &profile, &category); err != nil {
+			return nil, fmt.Errorf("offer: load categories: %w", err)
+		}
+		if out[offerID] == nil {
+			out[offerID] = make(map[string]string, 2)
+		}
+		out[offerID][profile] = category
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("offer: load categories: %w", err)
+	}
+	return out, nil
+}
+
+// SetCategory records the marketplace category an offer should be listed under
+// for one export profile.
+//
+// An EMPTY category deletes the row rather than storing a blank. Clearing an
+// override and never having set one must be the same state — otherwise the
+// export resolution would have to distinguish "explicitly nothing" from "not
+// set", and both mean the same thing: use the configured default.
+//
+// It writes through the write handle, which carries _txlock=immediate; the
+// upsert is one statement, so there is no read-then-write to conflict over.
+func (r *Repo) SetCategory(ctx context.Context, offerID, profile, category string) error {
+	profile = strings.ToLower(strings.TrimSpace(profile))
+	category = strings.TrimSpace(category)
+
+	if category == "" {
+		_, err := r.write.ExecContext(ctx,
+			`DELETE FROM offer_categories WHERE offer_id = ? AND profile = ?`,
+			offerID, profile)
+		if err != nil {
+			return fmt.Errorf("offer %s: clear %s category: %w", offerID, profile, err)
+		}
+		return nil
+	}
+
+	_, err := r.write.ExecContext(ctx, `
+		INSERT INTO offer_categories (offer_id, profile, category) VALUES (?, ?, ?)
+		ON CONFLICT (offer_id, profile) DO UPDATE SET category = excluded.category`,
+		offerID, profile, category)
+	if err != nil {
+		return fmt.Errorf("offer %s: set %s category: %w", offerID, profile, err)
+	}
+	return nil
 }

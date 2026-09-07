@@ -857,3 +857,149 @@ func TestLikeEscape(t *testing.T) {
 		}
 	}
 }
+
+// TestOfferRoundTripsItsPerProfileCategories pins ADR-016's per-offer half.
+//
+// eBay's and Allegro's categories are per ITEM, so one category per export run
+// means one export per category — which is what M's own error message argued
+// when it said a warehouse that sells anything has no defensible default.
+func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	o := newOffer("o1", "WH0000001", "Brass desk lamp", baseTime)
+	if err := r.CreateOffer(ctx, o); err != nil {
+		t.Fatalf("CreateOffer: %v", err)
+	}
+
+	// A fresh offer has none, and that is a valid state: it exports on the
+	// configured default rather than refusing.
+	got, err := r.Offer(ctx, "o1")
+	if err != nil {
+		t.Fatalf("Offer: %v", err)
+	}
+	if len(got.Categories) != 0 {
+		t.Errorf("a new offer has categories %v, want none — a category must not be "+
+			"required at intake", got.Categories)
+	}
+
+	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if err := r.SetCategory(ctx, "o1", "shopify", "Lighting"); err != nil {
+		t.Fatalf("SetCategory (shopify): %v", err)
+	}
+
+	got, err = r.Offer(ctx, "o1")
+	if err != nil {
+		t.Fatalf("Offer: %v", err)
+	}
+	if got.Categories["ebay"] != "11450" {
+		t.Errorf("Categories[ebay] = %q, want %q", got.Categories["ebay"], "11450")
+	}
+	// Two profiles, two different KINDS of value on one offer — a number and a
+	// name. That is why this is a table with a TEXT column and not one column.
+	if got.Categories["shopify"] != "Lighting" {
+		t.Errorf("Categories[shopify] = %q, want %q", got.Categories["shopify"], "Lighting")
+	}
+
+	// Setting it again replaces rather than duplicating.
+	if err := r.SetCategory(ctx, "o1", "ebay", "20081"); err != nil {
+		t.Fatalf("SetCategory (replace): %v", err)
+	}
+	got, _ = r.Offer(ctx, "o1")
+	if got.Categories["ebay"] != "20081" {
+		t.Errorf("Categories[ebay] = %q after replacing, want %q", got.Categories["ebay"], "20081")
+	}
+
+	// An empty value CLEARS it, so an operator can go back to the default
+	// without a second verb.
+	if err := r.SetCategory(ctx, "o1", "ebay", ""); err != nil {
+		t.Fatalf("SetCategory (clear): %v", err)
+	}
+	got, _ = r.Offer(ctx, "o1")
+	if _, ok := got.Categories["ebay"]; ok {
+		t.Errorf("Categories still holds ebay after clearing: %v", got.Categories)
+	}
+}
+
+// TestOffersLoadEveryRowsCategoriesInOneQuery refuses the N+1 the list path
+// would otherwise grow, mirroring how photos are already loaded.
+func TestOffersLoadEveryRowsCategoriesInOneQuery(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	for i, id := range []string{"o1", "o2", "o3"} {
+		o := newOffer(id, "WH000000"+itoaTest(i+1), "Item "+id, baseTime.Add(time.Duration(i)*time.Minute))
+		if err := r.CreateOffer(ctx, o); err != nil {
+			t.Fatalf("CreateOffer %s: %v", id, err)
+		}
+	}
+	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if err := r.SetCategory(ctx, "o3", "ebay", "20081"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+
+	got, err := r.Offers(ctx, core.OfferFilter{})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("Offers returned %d, want 3", len(got))
+	}
+
+	byID := map[string]core.Offer{}
+	for _, o := range got {
+		byID[o.ID] = o
+	}
+	if byID["o1"].Categories["ebay"] != "11450" {
+		t.Errorf("o1 ebay = %q, want %q", byID["o1"].Categories["ebay"], "11450")
+	}
+	if byID["o3"].Categories["ebay"] != "20081" {
+		t.Errorf("o3 ebay = %q, want %q", byID["o3"].Categories["ebay"], "20081")
+	}
+	// The offer in the middle has none, and must not inherit a neighbour's — the
+	// failure a per-row loop or a bad join produces.
+	if len(byID["o2"].Categories) != 0 {
+		t.Errorf("o2 has categories %v, want none", byID["o2"].Categories)
+	}
+}
+
+// TestDeletingAnOfferCascadesItsCategories proves the row does not outlive the
+// offer it describes.
+//
+// It asserts behaviourally rather than by querying the table: an orphaned row
+// would be picked up by the NEXT offer to be created with the same id, which is
+// the consequence that actually matters and the one a foreign key without
+// CASCADE would produce.
+func TestDeletingAnOfferCascadesItsCategories(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	if err := r.CreateOffer(ctx, newOffer("o1", "WH0000001", "First", baseTime)); err != nil {
+		t.Fatalf("CreateOffer: %v", err)
+	}
+	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
+		t.Fatalf("SetCategory: %v", err)
+	}
+	if err := r.DeleteOffer(ctx, "o1"); err != nil {
+		t.Fatalf("DeleteOffer: %v", err)
+	}
+
+	if err := r.CreateOffer(ctx, newOffer("o1", "WH0000002", "Second", baseTime)); err != nil {
+		t.Fatalf("CreateOffer (reuse): %v", err)
+	}
+	got, err := r.Offer(ctx, "o1")
+	if err != nil {
+		t.Fatalf("Offer: %v", err)
+	}
+	if len(got.Categories) != 0 {
+		t.Errorf("a new offer reusing a deleted id inherited %v — the category row "+
+			"outlived the offer it described", got.Categories)
+	}
+}
+
+// itoaTest is a local digit helper so the table above reads as data.
+func itoaTest(n int) string { return string(rune('0' + n)) }

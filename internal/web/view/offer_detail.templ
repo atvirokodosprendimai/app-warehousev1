@@ -29,6 +29,7 @@ templ OfferScreen(d OfferDetail) {
 				@OfferPhotosCard(d)
 				@offerLocationCard(d)
 				@OfferCartsCard(d)
+				@offerMarketplaceCard(d)
 			</div>
 		</div>
 	</div>
@@ -49,7 +50,8 @@ func offerSignals(d OfferDetail) string {
 		"shopCurrency: " + jsString(currencyOr(o.Shop, core.BaseCurrency)) + ", " +
 		"ownerAmount: " + jsString(decimalOrEmpty(o.Owner)) + ", " +
 		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
-		"offerLocation: " + jsString(o.LocationID) +
+		"offerLocation: " + jsString(o.LocationID) + ", " +
+		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
 		"}"
 }
 
@@ -453,4 +455,51 @@ templ SoldDialog(d OfferDetail) {
 // div by id is how the server closes something it opened.
 templ CloseModal() {
 	<div id="modal"></div>
+}
+
+// offerMarketplaceCard carries what a marketplace needs about THIS item rather
+// than about the warehouse.
+//
+// eBay's categories are per item — a lamp and a chair are not the same number —
+// so a single value for a whole export file would mean one export per category.
+// Leaving this empty is the ordinary case: the offer then uses the default set
+// at Settings, and demanding a taxonomy number at intake would block the
+// photograph-title-shelve flow ADR-004 protects.
+//
+// Only eBay appears here because only eBay's resolution is wired; Shopify's and
+// Allegro's are deferred in docs/adr/BACKLOG.md.
+templ offerMarketplaceCard(d OfferDetail) {
+	<div class="card" id="offer-marketplace">
+		<div class="card-head"><h2>Marketplace</h2></div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="o-ebay-cat">eBay category</label>
+				<input
+					id="o-ebay-cat"
+					class="input"
+					type="text"
+					inputmode="numeric"
+					spellcheck="false"
+					placeholder="Leave empty to use the default"
+					data-bind:offer-ebay-category
+					data-on:keydown={ "evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')" }
+				/>
+				<span class="hint">
+					Only for this item. Empty means the default set at Settings.
+				</span>
+			</div>
+			<div>
+				<button
+					class="btn"
+					type="button"
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/category')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Save category</span>
+				</button>
+			</div>
+		</div>
+	</div>
 }

@@ -200,16 +200,27 @@ func (a *App) GetExport(w http.ResponseWriter, r *http.Request) {
 	send, held := a.catalogue(r)
 
 	_ = view.PageShell(p, nil,
-		view.ExportScreen(a.exportProfiles(r.Context()), base, absolute, carts, len(send), held)).Render(r.Context(), w)
+		view.ExportScreen(a.exportProfiles(r.Context(), send), base, absolute, carts, len(send), held)).Render(r.Context(), w)
 }
 
 // exportOptions builds the marketplace settings for an export run.
+//
+// Every value an administrator can change is resolved HERE, per request, rather
+// than read once at start-up: a.Cfg holds the start-up defaults and the stored
+// settings win over them field by field (ADR-014 for the origin, ADR-016 for
+// eBay's). Resolving at start-up is what made the reported failure unfixable
+// without a restart.
 func (a *App) exportOptions(ctx context.Context) export.Options {
 	opt := a.Cfg.Export
 	if opt.Currency == "" {
 		opt.Currency = core.BaseCurrency
 	}
 	opt.BaseURL = a.publicBase(ctx)
+
+	m := a.ebayMarketplace(ctx)
+	opt.Category = m.Category
+	opt.ConditionID = m.ConditionID
+	opt.Location = m.Location
 	return opt
 }
 
@@ -226,7 +237,13 @@ func (a *App) exportOptions(ctx context.Context) export.Options {
 // copy goes stale the first time a profile gains a required field: the page
 // would go on offering a download that then fails with a raw 400, which is the
 // exact defect this replaces.
-func (a *App) exportProfiles(ctx context.Context) []view.ExportProfile {
+// ⚠ It is handed the offers a download would ACTUALLY publish, not nil. That
+// changed with ADR-016: eBay's category moved from an options-time check to a
+// per-offer one, so an export rendered over no offers can no longer discover a
+// missing category — the screen would have reported eBay as ready and the
+// download would then have failed. Rendering the real catalogue to io.Discard
+// asks exactly the question the button answers.
+func (a *App) exportProfiles(ctx context.Context, offers []core.Offer) []view.ExportProfile {
 	opt := a.exportOptions(ctx)
 	out := make([]view.ExportProfile, 0, len(export.Names()))
 
@@ -236,7 +253,7 @@ func (a *App) exportProfiles(ctx context.Context) []view.ExportProfile {
 			continue
 		}
 		p := view.ExportProfile{Name: name, Ready: true}
-		if err := exp.Write(io.Discard, nil, opt); err != nil {
+		if err := exp.Write(io.Discard, offers, opt); err != nil {
 			p.Ready = false
 			p.Problem = err.Error()
 		}

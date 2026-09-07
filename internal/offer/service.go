@@ -290,6 +290,28 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// SetCategory records the marketplace category this offer should be listed
+// under for one export profile, or clears it when category is empty.
+//
+// The profile is validated against [core.KnownExportProfiles] rather than
+// accepted as free text. A typo'd profile would otherwise store a row no export
+// ever reads: the operator would set a category, see no error, and find it
+// silently ignored — which is the same shape of silent failure as an export
+// whose photo origin nobody could set.
+//
+// The offer is loaded first so that setting a category on something that does
+// not exist is core.ErrNotFound rather than a foreign-key error from the driver.
+func (s *Service) SetCategory(ctx context.Context, id, profile, category string) error {
+	if !core.ValidExportProfile(profile) {
+		return fmt.Errorf("%w: %q is not a marketplace this application exports to; "+
+			"a category stored against it would never be read", core.ErrInvalid, profile)
+	}
+	if _, err := s.store.Offer(ctx, id); err != nil {
+		return err
+	}
+	return s.store.SetCategory(ctx, id, profile, category)
+}
+
 // nextPosition returns the first free display position after the photos an offer
 // already has.
 //

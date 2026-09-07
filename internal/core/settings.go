@@ -21,6 +21,33 @@ const (
 	SettingEbayLocation    = "ebay.location"
 )
 
+// KnownExportProfiles names every marketplace this application can produce a
+// file for, lower case, as the export package registers them.
+//
+// ⚠ It lives in core rather than in internal/export because the offer aggregate
+// has to validate a profile name and no package here imports a sibling. That
+// makes two places that know the list, which is a drift risk — so
+// internal/export carries a test asserting its registry matches this exactly.
+// Add a profile in both, or that test goes red.
+func KnownExportProfiles() []string {
+	return []string{"ebay", "shopify"}
+}
+
+// ValidExportProfile reports whether name is a profile this application knows.
+//
+// A typo'd profile is refused rather than stored: it would mint a category row
+// that no export will ever read, and nothing would report it — the operator
+// would simply see their category ignored for ever.
+func ValidExportProfile(name string) bool {
+	name = strings.ToLower(strings.TrimSpace(name))
+	for _, p := range KnownExportProfiles() {
+		if p == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Marketplace is the per-profile configuration an export needs beyond the
 // offers themselves.
 //

@@ -24,8 +24,8 @@ the reported error; T2 alone is inert until T3 reads it.
 | ID | Title | Status | Covers | Acceptance |
 |----|-------|--------|--------|------------|
 | T1 | Marketplace defaults are settings, editable without a restart | done | — | `go test ./internal/settings/... ./internal/core/...` |
-| T2 | An offer carries a per-profile category | pending | — | `go test ./internal/offer/...` |
-| T3 | The exporter resolves per offer and refuses by naming where to set it | pending | — | `go test ./internal/export/...` |
+| T2 | An offer carries a per-profile category | done | — | `go test ./internal/offer/...` |
+| T3 | The exporter resolves per offer and refuses by naming where to set it | done | — | `go test ./internal/export/...` |
 
 Status: `pending` | `partial` | `blocked` | `done`.
 

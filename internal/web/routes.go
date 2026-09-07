@@ -73,6 +73,7 @@ func (a *App) Routes() http.Handler {
 		r.Get("/offers/{id}/sold-dialog", a.GetSoldDialog)
 		r.Post("/offers/{id}/sold", a.PostSold)
 		r.Post("/offers/{id}/location", a.PostOfferLocation)
+		r.Post("/offers/{id}/category", a.PostOfferCategory)
 		r.Post("/offers/{id}/photos", a.PostPhotos)
 		// One SSE endpoint for the whole application. The query says what this
 		// page needs beyond what every page needs; the server decides the rest.

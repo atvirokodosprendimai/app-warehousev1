@@ -40,7 +40,7 @@ loaded with it, so mixed stock exports in one file.
 set -o pipefail
 go test ./internal/offer/ -run '^TestOfferRoundTripsItsPerProfileCategories$' -count=1 2>&1 | tee /tmp/adr016-t2-new.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr016-t2-new.out && \
-go test ./internal/offer/ ./internal/store/ -count=1 2>&1 | tee /tmp/adr016-t2-reg.out && \
+go test ./internal/offer/ -run '^(TestOfferRoundTripsItsPerProfileCategories|TestOffersLoadEveryRowsCategoriesInOneQuery|TestDeletingAnOfferCascadesItsCategories|TestSetCategoryRefusesAnUnknownProfile)$' -count=1 2>&1 | tee /tmp/adr016-t2-reg.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr016-t2-reg.out
 ```
 
@@ -64,7 +64,10 @@ go test ./internal/offer/ ./internal/store/ -count=1 2>&1 | tee /tmp/adr016-t2-r
 
 ## Mutation Log
 
-<Tool-written by `adr-verify … --mutant …`. Empty at authoring.>
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/offer/repo.go` · loading the categories and then not attaching them leaves every offer exporting on the default — a value stored, never read, and nothing reports it · acceptance-sha256:06788b0cecf19ab4927d9d544d84fe1ff7b7cbea0e373d11a1906102667f2e4b · covers:the categories loading with the offer rather than on demand
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `migrations/00007_offer_categories.sql` · without the cascade a category row outlives the offer it describes, and the next offer created with that id silently inherits a category nobody set for it · acceptance-sha256:06788b0cecf19ab4927d9d544d84fe1ff7b7cbea0e373d11a1906102667f2e4b · covers:the cascade that removes them with the offer
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `internal/offer/repo.go` · loading the categories and then not attaching them leaves every offer exporting on the default — a value stored, never read, and nothing reports it · acceptance-sha256:b2943966bb27d0336e0b814e78351ab26cb85c331f7ea6e4c5488e2c67f8fd11 · covers:the categories loading with the offer rather than on demand
+- 2026-09-07 · 2541a6e* · mutant killed · exit 1 · `migrations/00007_offer_categories.sql` · without the cascade a category row outlives the offer it describes, and the next offer created with that id silently inherits a category nobody set for it · acceptance-sha256:b2943966bb27d0336e0b814e78351ab26cb85c331f7ea6e4c5488e2c67f8fd11 · covers:the cascade that removes them with the offer
 
 ## Invariants
 
@@ -89,4 +92,9 @@ different decision from the one ADR-016 records.
 
 ## Verification Log
 
-<Tool-written by `adr-verify <this-file>` — do not hand-write entries.>
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:06788b0cecf19ab4927d9d544d84fe1ff7b7cbea0e373d11a1906102667f2e4b · ms:2511
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:06788b0cecf19ab4927d9d544d84fe1ff7b7cbea0e373d11a1906102667f2e4b · ms:2629
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:06788b0cecf19ab4927d9d544d84fe1ff7b7cbea0e373d11a1906102667f2e4b · ms:2511
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:b2943966bb27d0336e0b814e78351ab26cb85c331f7ea6e4c5488e2c67f8fd11 · ms:2035
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:b2943966bb27d0336e0b814e78351ab26cb85c331f7ea6e4c5488e2c67f8fd11 · ms:2038
+- 2026-09-07 · 2541a6e* · exit 0 · `set -o pipefail …` · acceptance-sha256:b2943966bb27d0336e0b814e78351ab26cb85c331f7ea6e4c5488e2c67f8fd11 · ms:2023

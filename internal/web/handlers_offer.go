@@ -290,6 +290,13 @@ type offerSignals struct {
 	SoldAmount    string `json:"soldAmount"`
 	SoldCurrency  string `json:"soldCurrency"`
 	SoldDate      string `json:"soldDate"`
+	// EbayCategory is this offer's own eBay category, overriding the default
+	// configured at Settings. Empty means "use the default" — clearing it and
+	// never having set one are deliberately the same state (ADR-016).
+	//
+	// Only eBay has one today because only eBay's resolution is wired; Shopify's
+	// and Allegro's are deferred in docs/adr/BACKLOG.md.
+	EbayCategory string `json:"offerEbayCategory"`
 }
 
 // PostOffer saves the editable text of an offer.
@@ -353,6 +360,34 @@ func (a *App) PostPrices(w http.ResponseWriter, r *http.Request) {
 	_ = sse.PatchElementTempl(view.Flash("offer-flash", "ok", "Prices saved."))
 	_ = sse.PatchElementTempl(view.MarginLine(d.Row))
 	_ = sse.PatchElementTempl(view.OfferStatusCard(d))
+}
+
+// PostOfferCategory records this offer's own eBay category, or clears it.
+//
+// It exists because eBay's categories are per ITEM: a lamp and a chair are not
+// the same number, so a single value for a whole export file would mean one
+// export per category. The default set at Settings covers everything that does
+// not name its own (ADR-016).
+func (a *App) PostOfferCategory(w http.ResponseWriter, r *http.Request) {
+	var in offerSignals
+	if err := datastar.ReadSignals(r, &in); err != nil {
+		a.flash(w, r, "offer-flash", "error", "Could not read the form.")
+		return
+	}
+	id := param(r, "id")
+
+	if err := a.Offer.SetCategory(r.Context(), id, "ebay", in.EbayCategory); err != nil {
+		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+		return
+	}
+	a.Broadcast(id)
+
+	msg := "eBay category saved."
+	if strings.TrimSpace(in.EbayCategory) == "" {
+		msg = "eBay category cleared — this offer will use the default from Settings."
+	}
+	sse := render.NewSSE(w, r)
+	_ = sse.PatchElementTempl(view.Flash("offer-flash", "ok", msg))
 }
 
 // parsePrice reads one money field. An empty amount is a CLEARED price, not an

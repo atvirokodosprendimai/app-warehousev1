@@ -115,14 +115,21 @@ func TestEBayThreePhotosProduceOneRowWithTwoPipes(t *testing.T) {
 	}
 }
 
+// TestEBayRequiresTheOptionsOnlyTheOperatorKnows covers the settings that are
+// still per RUN and have no defensible default.
+//
+// ⚠ The category used to be one of them and deliberately is not any more.
+// ADR-016 moved it from options-time to row-time, because eBay's categories are
+// per item and an offer may name its own — so "no category" is now a property of
+// an OFFER (ErrIncomplete, naming the SKU) rather than of the run (ErrOptions).
+// TestEBayRefusalNamesWhereToSetTheCategory covers that case. The location is
+// unchanged: it is a property of the seller, not of the item.
 func TestEBayRequiresTheOptionsOnlyTheOperatorKnows(t *testing.T) {
 	tests := []struct {
 		name     string
 		mutate   func(*Options)
 		wantText string
 	}{
-		{"no category", func(o *Options) { o.Category = "" }, "category"},
-		{"blank category", func(o *Options) { o.Category = "   " }, "category"},
 		{"no location", func(o *Options) { o.Location = "" }, "location"},
 		{"blank location", func(o *Options) { o.Location = "\t" }, "location"},
 	}
@@ -196,5 +203,85 @@ func TestEBayNeverExportsTheOwnerPrice(t *testing.T) {
 				t.Errorf("owner price in column %q", header[i])
 			}
 		}
+	}
+}
+
+// TestEBayPrefersTheOffersOwnCategory is ADR-016's Enforced-by.
+//
+// eBay's categories are per ITEM. One category for a whole export file means one
+// export per category, which is what the reported error argued when it said a
+// warehouse that sells anything has no defensible default. An offer that names
+// its own must therefore beat the configured one.
+func TestEBayPrefersTheOffersOwnCategory(t *testing.T) {
+	o := testOffer("LAMP-01", 1)
+	o.Categories = map[string]string{"ebay": "11450"}
+
+	opt := testOptions() // its Category is "20081"
+	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
+
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want header + 1 row", len(recs))
+	}
+	// Column 2 is *Category.
+	if recs[1][2] != "11450" {
+		t.Errorf("*Category = %q, want the offer's own %q rather than the default %q",
+			recs[1][2], "11450", opt.Category)
+	}
+}
+
+// TestEBayFallsBackToTheConfiguredDefault keeps the ordinary case working: most
+// offers name no category and must still export.
+func TestEBayFallsBackToTheConfiguredDefault(t *testing.T) {
+	o := testOffer("LAMP-01", 1) // no Categories at all
+	opt := testOptions()
+
+	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want header + 1 row", len(recs))
+	}
+	if recs[1][2] != opt.Category {
+		t.Errorf("*Category = %q, want the configured default %q", recs[1][2], opt.Category)
+	}
+
+	// A category for a DIFFERENT profile must not be picked up: the values are
+	// not interchangeable — Shopify's is a product type, eBay's is a number.
+	o.Categories = map[string]string{"shopify": "Lighting"}
+	recs = records(t, render(t, EBay{}, []core.Offer{o}, opt))
+	if recs[1][2] != opt.Category {
+		t.Errorf("*Category = %q after setting only a shopify category, want eBay's default %q",
+			recs[1][2], opt.Category)
+	}
+}
+
+// TestEBayRefusalNamesWhereToSetTheCategory pins the half of ADR-016 that is
+// about the MESSAGE rather than the mechanism.
+//
+// The reported failure was not that a value was missing. It was that the error
+// said a value was required and nothing anywhere said where to put one — the
+// variable was undocumented and there was no screen for it. So the refusal has
+// to name the offer it is about and both places a person can act.
+func TestEBayRefusalNamesWhereToSetTheCategory(t *testing.T) {
+	o := testOffer("LAMP-01", 1)
+	opt := testOptions()
+	opt.Category = "" // nothing configured, and the offer names none either
+
+	var buf bytes.Buffer
+	err := EBay{}.Write(&buf, []core.Offer{o}, opt)
+	if err == nil {
+		t.Fatal("Write with no category anywhere returned nil; want a refusal")
+	}
+	if !errors.Is(err, ErrIncomplete) && !errors.Is(err, ErrOptions) {
+		t.Errorf("error = %v, want it to wrap ErrIncomplete or ErrOptions", err)
+	}
+
+	msg := err.Error()
+	for _, want := range []string{"LAMP-01", "Settings", "offer"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal does not mention %q, so it does not tell the operator where to "+
+				"act. Message: %s", want, msg)
+		}
+	}
+	if buf.Len() != 0 {
+		t.Errorf("a refused export wrote %d bytes; it must leave w untouched", buf.Len())
 	}
 }

@@ -59,11 +59,14 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	if err := opt.validateCommon(); err != nil {
 		return fmt.Errorf("ebay: %w", err)
 	}
-	if strings.TrimSpace(opt.Category) == "" {
-		return fmt.Errorf("ebay: %w: a category id is required; the numbers are eBay's own "+
-			"taxonomy and a warehouse that sells anything has no defensible default",
-			ErrOptions)
-	}
+	// ⚠ The category is NOT checked here, deliberately. It is resolved PER OFFER
+	// below, because eBay's categories are per item: a lamp and a chair are not
+	// the same number, so one value for a whole file would mean one export per
+	// category. [Options.Category] is the DEFAULT for offers that name none.
+	//
+	// The trade is that a wholly unconfigured export now fails on its first
+	// offer rather than before any work — which is what lets the message name
+	// the offer, and naming it is the point (ADR-016).
 	if strings.TrimSpace(opt.Location) == "" {
 		return fmt.Errorf("ebay: %w: an item location is required; eBay prints it on every "+
 			"listing and quotes postage from it", ErrOptions)
@@ -81,6 +84,23 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	rows := make([][]string, 0, len(items))
 	var problems []error
 	for _, o := range items {
+		// The offer's own category wins; the configured one is the fallback.
+		category := strings.TrimSpace(o.Categories[EBay{}.Name()])
+		if category == "" {
+			category = strings.TrimSpace(opt.Category)
+		}
+		if category == "" {
+			// Naming BOTH places is the whole point of this message. The reported
+			// bug was not a missing value — it was that the error said one was
+			// required and nothing anywhere said where to put it.
+			problems = append(problems, fmt.Errorf(
+				"%w: %s: no eBay category. Set one on the offer, or set a default at "+
+					"Settings → eBay. The numbers are eBay's own taxonomy and a warehouse "+
+					"that sells anything has no defensible default",
+				ErrIncomplete, o.SKU))
+			continue
+		}
+
 		price, err := o.Shop.Decimal()
 		if err != nil {
 			problems = append(problems, fmt.Errorf("%w: %s: %w", ErrIncomplete, o.SKU, err))
@@ -89,7 +109,7 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 		rows = append(rows, []string{
 			"Add",         // *Action
 			o.SKU,         // CustomLabel
-			opt.Category,  // *Category
+			category,      // *Category — this offer's own, or the configured default
 			o.Title,       // *Title
 			o.Description, // Description
 			strings.Join(photoURLs(o, opt.BaseURL), "|"), // PicURL — all of them, one cell
