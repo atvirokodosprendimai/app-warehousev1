@@ -19,14 +19,25 @@ templ OfferScreen(d OfferDetail) {
 		data-signals={ offerSignals(d) }
 	>
 		<div id="offer-flash"></div>
-		<div class="grid-2" style="align-items:start">
+		<!--
+		  Card order IS the flow, and on a phone it is the only thing that decides
+		  what you meet first: .cols is one column below 861px, so the page becomes
+		  these two stacks read end to end.
+
+		  Photographs therefore sit directly under Details — describing a thing and
+		  photographing it is one task — and Pricing follows them instead of
+		  separating them. ADR-004 makes the price a later, researched step, so the
+		  previous order put the one card the domain says to defer between an
+		  operator and the camera, four cards down a phone screen.
+		-->
+		<div class="cols">
 			<div class="stack">
 				@offerDetailsCard(d)
+				@OfferPhotosCard(d)
 				@offerPricingCard(d)
 			</div>
 			<div class="stack">
 				@OfferStatusCard(d)
-				@OfferPhotosCard(d)
 				@offerLocationCard(d)
 				@OfferCartsCard(d)
 				@offerMarketplaceCard(d)

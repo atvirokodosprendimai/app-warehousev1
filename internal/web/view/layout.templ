@@ -8,9 +8,12 @@ import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 // bookmarks, middle-click, the back button and aria-current for nothing, and
 // keeps live updates as the stream's job rather than the router's.
 //
-// The layout deliberately declares NO signals. Signals are global and flattened,
-// and every unprefixed one is sent to the backend on every action — so putting
-// page state here would make every screen pay for every other screen's state.
+// The layout declares exactly ONE signal, `_nav`, and the underscore is the
+// whole reason it can afford to. Signals are global and flattened, and every
+// UNPREFIXED one is sent to the backend on every action — so ordinary page state
+// here would make every screen pay for every other screen's state. `_nav` never
+// leaves the browser, and whether a drawer is open is a fact about this viewport
+// rather than about the warehouse, so there is nothing for the server to know.
 //
 // The body and the top-bar actions arrive as components rather than through
 // templ's children mechanism, because there are two slots and children fills
@@ -25,13 +28,47 @@ templ PageShell(p Page, actions templ.Component, body templ.Component) {
 			<link rel="stylesheet" href="/assets/app.css"/>
 			<script type="module" src={ DatastarBundle }></script>
 		</head>
-		<body data-init={ "@get('" + p.StreamPath + "')" }>
+		<body
+			data-signals="{_nav: false}"
+			data-init={ "@get('" + p.StreamPath + "')" }
+			data-on:keydown__window="evt.key === 'Escape' && ($_nav = false)"
+		>
 			<a class="skip" href="#main">Skip to content</a>
 			@InboxBanner(p.InboxOpen)
 			<div class="shell">
+				<!--
+				  The scrim sits BEFORE the drawer in source order so a tap that misses
+				  the panel lands on it and dismisses the menu. Above 860px it is
+				  display:none — the sidebar is a permanent column there and there is
+				  nothing to dismiss — so the same markup serves every viewport and a
+				  rotation needs no round trip.
+				-->
+				<div class="nav-scrim" data-class:open="$_nav" data-on:click="$_nav = false"></div>
 				@sidebar(p)
 				<div class="main">
 					<header class="topbar">
+						<!--
+						  The menu button exists only below 860px, where the sidebar is an
+						  off-canvas drawer. It is the FIRST thing in the top bar because it
+						  is the only way back to navigation on a phone.
+
+						  aria-expanded goes through data-attr rather than data-class because
+						  it is state a screen reader reads, not appearance. It is written as
+						  an explicit 'true'/'false' STRING on purpose: data-attr REMOVES an
+						  attribute whose expression is boolean false, and a disclosure button
+						  with no aria-expanded announces nothing at all rather than
+						  "collapsed".
+						-->
+						<button
+							class="navtoggle"
+							type="button"
+							aria-controls="sidebar"
+							aria-label="Main menu"
+							data-attr:aria-expanded="$_nav ? 'true' : 'false'"
+							data-on:click="$_nav = !$_nav"
+						>
+							<span aria-hidden="true"></span>
+						</button>
 						<h1>{ p.Title }</h1>
 						<div class="topbar-actions">
 							if actions != nil {
@@ -55,7 +92,12 @@ templ PageShell(p Page, actions templ.Component, body templ.Component) {
 }
 
 templ sidebar(p Page) {
-	<nav class="sidebar" aria-label="Main">
+	<nav
+		class="sidebar"
+		id="sidebar"
+		aria-label="Main"
+		data-class:open="$_nav"
+	>
 		<a class="brand" href="/">
 			<span class="brand-mark" aria-hidden="true">W</span>
 			<span>Warehouse</span>

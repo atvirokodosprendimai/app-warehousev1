@@ -289,26 +289,111 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .topbar h1 { font-size: 19px; font-weight: 650; letter-spacing: -.015em; }
 .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
+/* The menu button and its scrim belong to the narrow layout only. They are
+   hidden here and switched on inside the 860px query rather than rendered
+   conditionally, so one markup tree serves every viewport. */
+.navtoggle { display: none; }
+.nav-scrim { display: none; }
+
 .content { padding: 26px; display: flex; flex-direction: column; gap: 22px; }
 
 /* ---------- responsive ---------- */
 
 @media (max-width: 860px) {
   .shell { grid-template-columns: 1fr; }
-  .sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
+
+  /* The only way into the drawer, so it gets the full 44px target regardless of
+     pointer type — unlike .btn, which earns its 44px only on a coarse pointer. */
+  .navtoggle {
+    display: inline-flex;
     align-items: center;
-    gap: 14px;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
-    padding: 10px 14px;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex: none;
+    margin-left: -10px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
   }
-  .nav { flex-direction: row; }
-  .nav-label, .sidebar-foot, .nav-count { display: none; }
-  .nav a { white-space: nowrap; }
+  .navtoggle:hover { background: var(--surface-2); }
+
+  /* Three bars from one element: the middle bar is the span, the outer two are
+     its pseudo-elements. No icon font and no inline SVG to keep in step. */
+  .navtoggle > span,
+  .navtoggle > span::before,
+  .navtoggle > span::after {
+    content: "";
+    display: block;
+    width: 18px;
+    height: 2px;
+    border-radius: 2px;
+    background: currentColor;
+  }
+  .navtoggle > span { position: relative; }
+  .navtoggle > span::before { position: absolute; top: -6px; }
+  .navtoggle > span::after { position: absolute; top: 6px; }
+
+  /* The sidebar becomes an off-canvas drawer and KEEPS its full vertical
+     layout. What it replaces was a horizontal scrolling strip, and to fit that
+     strip the group labels, the per-status counts and the entire footer were
+     set to display:none — the footer being where the signed-in identity and
+     "Sign out" live, which are reachable from nowhere else in the interface.
+     A phone therefore could not sign out at all.
+
+     visibility, not transform alone: a panel translated off-screen keeps its
+     place in the tab order and is still read aloud, so a closed drawer would
+     hand a keyboard or screen-reader user fifteen invisible links. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: auto;
+    width: min(84vw, 300px);
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform .18s ease, visibility .18s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    visibility: visible;
+  }
+
+  /* Measured in Chromium at 390x844: the drawer's own content is taller than a
+     phone once every group is present, so something has to scroll. Let the LINK
+     LIST scroll and pin the footer, rather than scrolling the panel as a whole —
+     otherwise "Sign out" sits below fifteen links you must scroll past, which is
+     the same defect as hiding it, one step less severe. */
+  .sidebar { overflow-y: hidden; }
+  .sidebar .nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar-foot { flex: none; }
+
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(28, 26, 23, .45);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .18s ease, visibility .18s ease;
+  }
+  .nav-scrim.open { opacity: 1; visibility: visible; }
+
+  /* Hold the page still behind an open drawer, so a scroll gesture that lands
+     on the scrim does not carry the content away underneath it. */
+  body:has(.nav-scrim.open) { overflow: hidden; }
+
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
 }
 
@@ -510,6 +595,16 @@ tbody tr:hover { background: var(--surface-2); }
 .input[aria-invalid="true"] { border-color: var(--danger); }
 
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+
+/* Two columns of CARDS, which is a different job from .grid-2's pairs of fields
+   and needs a different rule. auto-fit on a card column splits at any width
+   wide enough for the minimum, so a 480px phone got two 220px columns of
+   stacked cards; these split only above 860px, where the sidebar has already
+   stopped taking a column of its own. */
+.cols { display: grid; grid-template-columns: 1fr; gap: 22px; align-items: start; }
+@media (min-width: 861px) {
+  .cols { grid-template-columns: 1fr 1fr; }
+}
 
 .money-row { display: grid; grid-template-columns: 1fr 96px; gap: 8px; }
 
