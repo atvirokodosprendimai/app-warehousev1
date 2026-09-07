@@ -364,6 +364,58 @@ API call this application does not make.
 **What would make this real:** somebody mis-filing enough items that hunting
 numbers by hand stops being tolerable.
 
+### A shared marketplace field as a real column on an offer
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+Brand, GTIN/EAN, MPN and weight are asked for by every marketplace, not by one
+kind of thing. Modelling them as custom fields means every operator re-creates
+them on every tree they build, and an exporter can never rely on them being
+there. The alternative is real columns on `offers`. ADR-021 does not decide it,
+because the custom-field mechanism has to exist before the question is even
+answerable.
+
+**What would make this real:** the first export that needs a GTIN, or an
+operator who has typed "Brand" into three separate categories.
+
+### Filtering or searching the offers listing by a custom field's value
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+ADR-021 makes `number` a distinct field kind precisely so a mileage can one day
+be range-filtered, and then filters nothing. The listing searches title,
+description and reference through the index the database maintains (ADR-012),
+and a custom value lives in `offer_field_values`, where that index cannot see
+it.
+
+**What would make this real:** enough stock under one category that "which
+turbochargers are under 100k km" stops being a question you answer by reading.
+
+### A field whose options depend on another field's answer
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+The recar.lt reference screenshots show a quality list whose entries change with
+the A/B/C condition grade — a conditional taxonomy. ADR-021's fields are
+independent of one another by design, because a dependency between two fields is
+a rule that has to be authored somewhere, and nothing here is that somewhere.
+
+**What would make this real:** an operator maintaining one option list in three
+places because only part of it applies at a time.
+
+### Renaming `Offer.Categories` to end the word collision
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+ADR-016's `Offer.Categories` is where to list an item on each marketplace;
+ADR-021's `Offer.CategoryID` is what the item IS. Two different things wearing
+one word, mitigated today only by doc comments that point at each other. The
+rename is mechanical and reaches the exporter, the handlers and the templates,
+so it is its own change rather than a rider on this one.
+
+**What would make this real:** the first bug where somebody reads one and means
+the other.
+
 ## Operations
 
 ### Barcode or QR generation for a reference
