@@ -74,6 +74,26 @@ templ PageShell(p Page, actions templ.Component, body templ.Component) {
 							if actions != nil {
 								@actions
 							}
+							<!--
+							  ⚠ NEW OFFER IS RENDERED HERE, IN THE SHELL, NOT PASSED IN BY A
+							  HANDLER — so it is on EVERY signed-in page without exception.
+
+							  Reported by M on 2026-09-07: "new offer should be visible on all
+							  pages, because i created photo and aditional clicks to create new
+							  ones". Photographing a shelf is a LOOP — create, shoot, create,
+							  shoot — and the button used to be passed only by the dashboard and
+							  the offers listing, so finishing one item stranded the operator on
+							  the editor and cost a navigation before the next one.
+
+							  It goes LAST so its position is identical on every page: a page
+							  with its own action (Add place) puts that first and this stays
+							  where the hand expects it.
+
+							  Safe on every page this shell renders, because POST /offers sits
+							  in the plain signed-in route group — no admin gate — so anyone who
+							  can see this shell can already use it.
+							-->
+							@NewOfferAction()
 						</div>
 					</header>
 					<main id="main" class="content">

@@ -8,7 +8,7 @@
 **Consumes:** `offer.Service.Create` and `offer.Repo.UpdateOffer` (both pre-existing and unchanged)
 **Data dependency:** hermetic
 **Proof map:** v1
-**Rests-on:** `the New offer control creating rather than navigating`, `the create endpoint requiring no input`, `the camera-first card order`, `the status-last card order`, `the reference editable after creation`
+**Rests-on:** `the New offer control creating rather than navigating`, `the create endpoint requiring no input`, `the camera-first card order`, `the status-last card order`, `the reference editable after creation`, `the New offer control on every page`
 
 ## Goal
 
@@ -45,6 +45,7 @@ next. Both are what the tests below assert.>
 7. [S7] Retire the two tests that render the deleted screen, in place, naming their successor.
 8. [S8] Regenerate the committed `*_templ.go`. [proof: acceptance]
 9. [S9] Rewrite the smoke walk to create then name, and assert the create endpoint needs no body. [proof: acceptance]
+10. [S10] ⚠ **CORRECTION, 2026-09-07, after M reported it.** Render `NewOfferAction` in the SHELL rather than passing it from a handler, and stop passing it from the dashboard and the offers listing so it is not rendered twice. [proof: acceptance]
 
 ## Acceptance
 
@@ -53,7 +54,7 @@ set -o pipefail
 go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate && \
 go test ./internal/web/view/ -run '^TestCreatingAnOfferAsksNothingFirst$' -count=1 2>&1 | tee /tmp/adr020t1-new.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr020t1-new.out && \
-go test ./internal/web/view/ -run '^(TestCreatingAnOfferAsksNothingFirst|TestTheCameraIsTheFirstCard|TestStatusIsTheLastCard|TestTheReferenceIsEditableAfterCreation|TestNoFormsOutsideFileUpload|TestEveryIndicatorSignalHasAConsumer)$' -count=1 2>&1 | tee /tmp/adr020t1-named.out && \
+go test ./internal/web/view/ -run '^(TestCreatingAnOfferAsksNothingFirst|TestEveryPageCarriesTheNewOfferControl|TestTheCameraIsTheFirstCard|TestStatusIsTheLastCard|TestTheReferenceIsEditableAfterCreation|TestNoFormsOutsideFileUpload|TestEveryIndicatorSignalHasAConsumer)$' -count=1 2>&1 | tee /tmp/adr020t1-named.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr020t1-named.out && \
 go test ./... -count=1 2>&1 | tee /tmp/adr020t1-reg.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr020t1-reg.out && \
@@ -76,6 +77,7 @@ only an HTTP request proves the route behind it needs nothing.
 | `TestTheReferenceIsEditableAfterCreation` | `internal/web/view/intake_contract_test.go` | The Details card carries a bound reference input, so the capability the deleted screen held still exists | — | S1, S6 |
 | `TestNoFormsOutsideFileUpload` | `internal/web/view/upload_contract_test.go` | The new button introduced no `<form>` (ADR-008) | — | S4, S7 |
 | `TestEveryIndicatorSignalHasAConsumer` | `internal/web/view/upload_contract_test.go` | Any indicator added here is wired to something | — | S4, S7 |
+| `TestEveryPageCarriesTheNewOfferControl` | `internal/web/view/intake_contract_test.go` | The shell renders the control on a page that passes no actions of its own, exactly once, without displacing a page's own action | — | S10 |
 
 ## Reachability
 
@@ -83,7 +85,7 @@ only an HTTP request proves the route behind it needs nothing.
 |------|------------------------|
 | 1 — exists | `TestCreatingAnOfferAsksNothingFirst` renders the chrome and finds the posting control |
 | 2 — something selects it | The smoke run POSTs `/offers` with no body and gets an offer id back |
-| 3 — the caller can discover it | The control is in the top bar on every page, which is the only route to creating an offer now that `/offers/new` is gone |
+| 3 — the caller can discover it | `TestEveryPageCarriesTheNewOfferControl` renders the shell with no page actions and finds the control. ⚠ **THIS ROW WAS WRONG WHEN IT WAS FIRST WRITTEN.** It claimed "the control is in the top bar on every page" and nothing asserted it: the button was passed in by the DASHBOARD and the OFFERS LISTING handlers only, so every other page — including the offer editor an operator lands on immediately after creating — had none. M found it by doing the job on 2026-09-07: *"new offer should be visible on all pages, because i created photo and aditional clicks to create new ones"*. Photographing a shelf is a LOOP, and the loop was broken at exactly the point it repeats. Corrected by moving the control into the shell, where no handler can forget it, and pinned by the test named here. |
 | 4 — it is used | The smoke run walks it end to end: create with nothing, name it afterwards, find it by that name |
 
 ## Mutation Log
@@ -95,6 +97,12 @@ acceptance digest of the run that killed it.
 - 2026-09-07 · 2883131* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · the keyboard comes back before the camera, so an operator who has just pressed New offer and is still holding the object meets a title field first — the exact step M asked to remove · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · covers:the camera-first card order
 - 2026-09-07 · 2883131* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · Status stops being the last block, so on a phone the publish/sold decision sits above the marketplace card again instead of at the end where M put it · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · covers:the status-last card order
 - 2026-09-07 · 2883131* · mutant killed · exit 43 · `internal/web/handlers_offer.go` · the create endpoint demands a title again, so the top-bar button — which sends no body from any page — creates nothing and the one-click flow is dead everywhere while every view test still passes · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · covers:the create endpoint requiring no input
+- 2026-09-07 · c25f529* · mutant killed · exit 1 · `internal/web/view/fragments.templ` · the New offer control links to the deleted intake screen again, so the first thing a new installation offers is a 404 and nothing can be created at all · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the New offer control creating rather than navigating
+- 2026-09-07 · c25f529* · mutant killed · exit 47 · `internal/web/handlers_offer.go` · the create endpoint demands a title again, so the top-bar button — which sends no body from any page — creates nothing and the one-click flow is dead everywhere while every view test still passes · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the create endpoint requiring no input
+- 2026-09-07 · c25f529* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · the keyboard comes back before the camera, so an operator who has just pressed New offer and is still holding the object meets a title field first — the exact step M asked to remove · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the camera-first card order
+- 2026-09-07 · c25f529* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · Status stops being the last block, so on a phone the publish/sold decision sits above the marketplace card again instead of at the end where M put it · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the status-last card order
+- 2026-09-07 · c25f529* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · the reference binds a camelCase attribute that the HTML parser lowercases to offersku — a DIFFERENT signal than the handler reads, so editing the reference silently saves nothing and no error is raised anywhere · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the reference editable after creation
+- 2026-09-07 · c25f529* · mutant killed · exit 1 · `internal/web/view/layout.templ` · somebody decides two buttons is clutter and hides New offer wherever a page has its own action, so it disappears from the warehouse page again — the control is back to being present on some pages and not others, which is precisely what M reported · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · covers:the New offer control on every page
 
 ## Invariants
 
@@ -130,3 +138,11 @@ To be completed by `adr-verify` during execution.
 - 2026-09-07 · 2883131* · exit 0 · `set -o pipefail …` · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · ms:13769
 - 2026-09-07 · 2883131* · exit 0 · `set -o pipefail …` · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · ms:12982
 - 2026-09-07 · 2883131* · exit 0 · `set -o pipefail …` · acceptance-sha256:7c3a73abe40cbff2feff5ca3aeb05562a4c62679d4b1e86ad59ed01dc7d8cb9c · ms:14408
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:14502
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:14253
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:14112
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:14056
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:13688
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:13896
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:14086
+- 2026-09-07 · c25f529* · exit 0 · `set -o pipefail …` · acceptance-sha256:8f0b094541789bf2f92808fa710e998f038837ce0bde3477bc2fc8226327edf6 · ms:13783

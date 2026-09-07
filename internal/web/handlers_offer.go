@@ -55,7 +55,9 @@ func (a *App) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_ = view.PageShell(d.Page, view.NewOfferAction(), view.DashboardScreen(d)).Render(ctx, w)
+	// The New offer button is rendered by the shell itself, on every page, so
+	// passing it here would render it twice.
+	_ = view.PageShell(d.Page, nil, view.DashboardScreen(d)).Render(ctx, w)
 }
 
 // stockTotals sums what listed stock is priced at and what is owed on it.
@@ -146,7 +148,7 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 		l.Carts = carts
 		l.ActiveCart = a.activeCart(r, carts)
 	}
-	_ = view.PageShell(l.Page, view.NewOfferAction(), view.OffersScreen(l)).Render(r.Context(), w)
+	_ = view.PageShell(l.Page, nil, view.OffersScreen(l)).Render(r.Context(), w)
 }
 
 // offerFilterFrom reads a listing filter out of the query string.

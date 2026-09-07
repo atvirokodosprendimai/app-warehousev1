@@ -396,6 +396,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
 
+  /* ---------- the top bar carries two actions now ----------
+
+     Measured in Chromium at 390x844: with "New offer" rendered by the shell on
+     EVERY page, the warehouse page shows "Add a place" and "New offer" beside a
+     title and a 44px menu button, and that overflowed — 390px of room, more than
+     390px of controls.
+
+     Wrapping is the answer rather than shrinking: a narrower button means a
+     smaller touch target, and a truncated label means guessing what a control
+     does. So the actions drop onto a second row WHEN THEY DO NOT FIT and stay on
+     the first when they do — a page with one action is unchanged. The title is
+     allowed to shrink and break, since it is the only element here that can lose
+     width without losing meaning. */
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .topbar h1 { min-width: 0; overflow-wrap: anywhere; }
+  .topbar-actions { flex-wrap: wrap; }
+
   /* ---------- the offers listing stops being a table on a phone ----------
 
      Measured in Chromium at 390x844: the listing table is 802px wide — eight

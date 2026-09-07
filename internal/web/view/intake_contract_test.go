@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/a-h/templ"
+
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 )
 
@@ -78,6 +80,49 @@ func TestCreatingAnOfferAsksNothingFirst(t *testing.T) {
 	if strings.Contains(empty, `href="/offers/new"`) {
 		t.Error("the empty state still links to /offers/new, an address ADR-020 deletes, so " +
 			"the first thing a new installation offers is a 404")
+	}
+}
+
+// TestEveryPageCarriesTheNewOfferControl pins the word "every".
+//
+// ⚠ THIS TEST EXISTS BECAUSE THE CLAIM WAS MADE BEFORE IT WAS TRUE. ADR-020-T1's
+// Reachability table said "the control is in the top bar on every page", and
+// nothing asserted it: the button was passed in by the DASHBOARD and the OFFERS
+// LISTING handlers only, so every other page — including the offer editor an
+// operator lands on straight after creating — had none.
+//
+// M found it by doing the job: "new offer should be visible on all pages,
+// because i created photo and aditional clicks to create new ones". Photographing
+// a shelf is a loop, and the loop was broken at exactly the point it repeats.
+//
+// The fix is that the SHELL renders it, so it cannot be forgotten by a handler.
+// This test renders the shell the way the pages that lacked it do — with no
+// actions of their own — which is the case that was broken.
+func TestEveryPageCarriesTheNewOfferControl(t *testing.T) {
+	// A page that passes no actions of its own: the offer editor, the cart, the
+	// inbox, settings, users — everything except two.
+	bare := renderString(t, PageShell(Page{Title: "Any page"}, nil, templ.NopComponent))
+	if !strings.Contains(bare, "@post('/offers')") {
+		t.Error("a page that passes no actions of its own has no New offer button, so " +
+			"finishing one item strands the operator and the next one costs a navigation " +
+			"— which is the whole complaint")
+	}
+
+	// A page that DOES pass an action must show both, and must not lose its own.
+	withAction := renderString(t, PageShell(Page{Title: "Warehouse"}, AddPlaceAction(""), templ.NopComponent))
+	if !strings.Contains(withAction, "@post('/offers')") {
+		t.Error("a page with its own action lost the New offer button, so the control is " +
+			"present on some pages and not others again")
+	}
+	if !strings.Contains(withAction, "Add place") {
+		t.Error("adding the global button displaced the page's own action")
+	}
+
+	// Exactly once. A handler that also passes it would render two buttons, which
+	// is the failure mode of moving a control into the shell without removing it
+	// from the call sites.
+	if n := strings.Count(bare, "@post('/offers')"); n != 1 {
+		t.Errorf("the New offer action appears %d times on a bare page, want exactly 1", n)
 	}
 }
 
