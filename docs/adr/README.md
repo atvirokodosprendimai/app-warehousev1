@@ -88,16 +88,20 @@ Neither was visible from reading the records. Both took one mutation each.
 
 ## What is not covered
 
-Three gaps, all in BACKLOG.md, and the first is the largest thing wrong with this
+Four gaps, all in BACKLOG.md, and the first is the largest thing wrong with this
 repository:
 
 1. **There is no CI.** Every check runs only when a person chooses to run it.
    GitHub's default-setup CodeQL reports green, which puts a tick against commits
    whose actual checks nobody ran.
-2. **Nobody has opened the application in a browser.** Six defects were found by a
-   person after the server-side suite was green, every one invisible to it by
-   construction.
-3. **Down migrations have never been run.**
+2. **Nobody has opened the application in a browser.** Seven defects have now been
+   found by a person after the server-side suite was green, every one invisible to
+   it by construction.
+3. **Four packages still build their own test schema** — `internal/fx`,
+   `internal/location`, `internal/cart` and `internal/auth`, nine copied
+   `CREATE TABLE` statements between them. ADR-013 claimed there were none for a
+   day before this was noticed.
+4. **Down migrations have never been run.**
 
 ## Checking these records
 

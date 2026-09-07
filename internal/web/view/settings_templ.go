@@ -8,7 +8,11 @@ package view
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "time"
+import (
+	"time"
+
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+)
 
 // SettingsView is the deployment-settings screen.
 type SettingsView struct {
@@ -28,6 +32,15 @@ type SettingsView struct {
 	Reachable bool
 	// Note is a message to show after a save.
 	Note string
+	// EbayStored is what has been saved for eBay, field by field. An empty field
+	// means "fall back to the start-up default", exactly as PublicBaseURL does.
+	EbayStored core.Marketplace
+	// EbayFromEnv is the start-up default, shown so it is obvious which fields
+	// the stored values are actually overriding.
+	EbayFromEnv core.Marketplace
+	// EbayEffective is what an export will actually use — the resolution of the
+	// two above, computed with the SAME rule the exporter uses.
+	EbayEffective core.Marketplace
 }
 
 // Source describes where the effective value came from, in one phrase.
@@ -65,9 +78,9 @@ func SettingsScreen(s SettingsView) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue("{setPublicBase: " + jsString(settingsBoxValue(s)) + "}")
+		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(settingsSignals(s))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 35, Col: 91}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 48, Col: 53}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 		if templ_7745c5c3_Err != nil {
@@ -101,6 +114,25 @@ func settingsBoxValue(s SettingsView) string {
 		return s.Stored
 	}
 	return s.Current
+}
+
+// settingsSignals is the whole screen's initial signal state.
+//
+// Every box starts on the EFFECTIVE value rather than the stored one, for the
+// same reason the domain box does: a blank field over a working configuration
+// reads as "nothing is set" when something is, and pre-filling makes the
+// commonest edit a change rather than a retype.
+//
+// ⚠ All four ride to the backend on every action, because none is underscore
+// prefixed — which is deliberate here. PostSettings performs a whole-struct
+// save, so a signal that did not arrive would be saved as empty.
+func settingsSignals(s SettingsView) string {
+	return "{" +
+		"setPublicBase: " + jsString(settingsBoxValue(s)) + ", " +
+		"setEbayCategory: " + jsString(s.EbayEffective.Category) + ", " +
+		"setEbayCondition: " + jsString(s.EbayEffective.ConditionID) + ", " +
+		"setEbayLocation: " + jsString(s.EbayEffective.Location) +
+		"}"
 }
 
 // SettingsPanel is a fragment so a save re-renders it with the NORMALISED value,
@@ -143,7 +175,7 @@ func SettingsPanel(s SettingsView) templ.Component {
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(s.Current)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 73, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 105, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -156,7 +188,7 @@ func SettingsPanel(s SettingsView) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(s.Source())
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 75, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 107, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -184,7 +216,7 @@ func SettingsPanel(s SettingsView) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(s.UpdatedAt.Format("2 Jan 2006 15:04"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 112, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 144, Col: 52}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 			if templ_7745c5c3_Err != nil {
@@ -197,7 +229,7 @@ func SettingsPanel(s SettingsView) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(s.FromEnvironment)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 113, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 145, Col: 56}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -213,7 +245,35 @@ func SettingsPanel(s SettingsView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "</div></div><!--\n\t\t  ADR-016. Until this card existed the eBay category could only be\n\t\t  supplied through EBAY_CATEGORY, read once at start-up, documented in no\n\t\t  table in the README — so the export refused with \"a category id is\n\t\t  required\" and nothing anywhere said where to put one.\n\n\t\t  There is no <form> here: ADR-008 permits exactly one, the photo upload.\n\t\t  The inputs bind to signals and the button posts them.\n\t\t--><div class=\"card\" style=\"max-width:640px\"><div class=\"card-head\"><h2>eBay</h2></div><div class=\"card-body stack\"><p class=\"muted\">What eBay needs beyond the item itself. A category number is required on every listing — these are eBay's own taxonomy, so there is no sensible default — and an individual offer can override this one on its own page.</p><div class=\"field\"><label for=\"ebay-category\">Default category</label> <input id=\"ebay-category\" class=\"input\" type=\"text\" inputmode=\"numeric\" spellcheck=\"false\" placeholder=\"11450\" data-bind:set-ebay-category data-on:keydown=\"evt.key === 'Enter' &amp;&amp; @post('/settings')\"> <span class=\"hint\">Used for any offer that does not name its own. Find the number on eBay under Sell → category lookup.</span></div><div class=\"field\"><label for=\"ebay-condition\">Condition code</label> <input id=\"ebay-condition\" class=\"input\" type=\"text\" inputmode=\"numeric\" spellcheck=\"false\" placeholder=\"3000\" data-bind:set-ebay-condition data-on:keydown=\"evt.key === 'Enter' &amp;&amp; @post('/settings')\"> <span class=\"hint\">3000 is \"Used\", which is what most second-hand stock is.</span></div><div class=\"field\"><label for=\"ebay-location\">Item location</label> <input id=\"ebay-location\" class=\"input\" type=\"text\" spellcheck=\"false\" placeholder=\"Kaunas, Lithuania\" data-bind:set-ebay-location data-on:keydown=\"evt.key === 'Enter' &amp;&amp; @post('/settings')\"> <span class=\"hint\">Shown on every listing, and eBay uses it to quote postage.</span></div><div><button class=\"btn btn-primary\" type=\"button\" data-on:click=\"@post('/settings')\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>Save eBay settings</span></button></div>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		if s.EbayFromEnv.Category != "" {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<span class=\"faint\">The start-up default for the category was <code class=\"code\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var8 string
+			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(s.EbayFromEnv.Category)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/settings.templ`, Line: 234, Col: 49}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "</code>.</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<span class=\"faint\">No start-up default was configured, so until something is saved here every eBay export refuses.</span>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "</div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

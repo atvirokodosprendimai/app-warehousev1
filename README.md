@@ -65,6 +65,20 @@ registration: every later account is created by an administrator.
 | `PHOTOS_DIR` | `data/photos` | Photo blobs |
 | `PUBLIC_BASE_URL` | `http://localhost:8080` | The origin a marketplace fetches photos from |
 | `SECURE_COOKIES` | `false` | Set true behind HTTPS |
+| `EBAY_CATEGORY` | *(none)* | Start-up default for eBay's category number |
+| `EBAY_CONDITION_ID` | `3000` | eBay's condition code; 3000 is "Used" |
+| `EBAY_LOCATION` | *(none)* | The city an eBay item ships from |
+
+The three `EBAY_*` variables are **start-up defaults only**, and they were
+documented in no table at all until 2026-09-07 — which meant an export refused
+with *"a category id is required"* and nothing anywhere said where to put one.
+An administrator sets all three at **Settings**, they take effect immediately
+without a restart, they survive one, and they win field by field: setting only
+the category leaves the other two on their start-up values.
+
+An individual offer can override the category on its own page, because eBay's
+categories are per item — a lamp and a chair are not the same number, and one
+category per export file would mean one export per category.
 
 ⚠ `PUBLIC_BASE_URL` must be an absolute, publicly reachable URL before you
 export. A marketplace that cannot fetch an image does not report an error — it

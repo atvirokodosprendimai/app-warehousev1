@@ -54,6 +54,12 @@ func (r *Repo) Settings(ctx context.Context) (core.Settings, error) {
 		switch key {
 		case core.SettingPublicBaseURL:
 			out.PublicBaseURL = value
+		case core.SettingEbayCategory:
+			out.Ebay.Category = value
+		case core.SettingEbayConditionID:
+			out.Ebay.ConditionID = value
+		case core.SettingEbayLocation:
+			out.Ebay.Location = value
 		}
 		// An unknown key is ignored rather than refused: a downgrade should not
 		// fail to start because a newer version left a row behind.
@@ -79,7 +85,10 @@ func (r *Repo) SaveSettings(ctx context.Context, s core.Settings) error {
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	pairs := map[string]string{
-		core.SettingPublicBaseURL: s.PublicBaseURL,
+		core.SettingPublicBaseURL:   s.PublicBaseURL,
+		core.SettingEbayCategory:    s.Ebay.Category,
+		core.SettingEbayConditionID: s.Ebay.ConditionID,
+		core.SettingEbayLocation:    s.Ebay.Location,
 	}
 	for key, value := range pairs {
 		if _, err := tx.ExecContext(ctx, `

@@ -69,3 +69,49 @@ func TestReachablePubliclyIsAWarningNotAValidation(t *testing.T) {
 		}
 	}
 }
+
+// TestMarketplaceResolveTakesTheDefaultOnlyForEmptyFields pins the precedence
+// ADR-016 establishes, field by field rather than value by value.
+//
+// The reported failure was not a missing value — it was that a value could only
+// be supplied by restarting the process, and nothing said so. Making the stored
+// settings win PER FIELD is what lets an administrator set the one thing that is
+// wrong without having to restate the two that are already right.
+func TestMarketplaceResolveTakesTheDefaultOnlyForEmptyFields(t *testing.T) {
+	env := Marketplace{Category: "9999", ConditionID: "3000", Location: "Vilnius"}
+
+	t.Run("a stored field wins and an empty one falls through", func(t *testing.T) {
+		stored := Marketplace{Category: "11450", Location: "Kaunas"}
+
+		got := stored.Resolve(env)
+
+		if got.Category != "11450" {
+			t.Errorf("Category = %q, want the stored %q", got.Category, "11450")
+		}
+		if got.ConditionID != "3000" {
+			t.Errorf("ConditionID = %q, want the environment default %q — an unset field must "+
+				"fall through, or setting one value would blank the others",
+				got.ConditionID, "3000")
+		}
+		if got.Location != "Kaunas" {
+			t.Errorf("Location = %q, want the stored %q", got.Location, "Kaunas")
+		}
+	})
+
+	t.Run("nothing stored is the fresh-installation case", func(t *testing.T) {
+		got := Marketplace{}.Resolve(env)
+
+		if got != env {
+			t.Errorf("Resolve on an empty Marketplace = %+v, want the environment default %+v; "+
+				"a fresh installation has no rows and must still export", got, env)
+		}
+	})
+
+	t.Run("resolving against nothing leaves the stored values alone", func(t *testing.T) {
+		stored := Marketplace{Category: "11450", ConditionID: "1000", Location: "Kaunas"}
+
+		if got := stored.Resolve(Marketplace{}); got != stored {
+			t.Errorf("Resolve against an empty default = %+v, want %+v", got, stored)
+		}
+	})
+}

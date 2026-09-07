@@ -10,7 +10,7 @@ that a deferral resurfaces instead of quietly becoming permanent.
 
 ---
 
-## The three that matter
+## The gaps that matter
 
 These are not the same kind of thing as the rest of this file. Each one is a gap
 in how this repository knows whether it works.
@@ -59,6 +59,27 @@ Every migration has a `-- +goose Down` section and none of them has ever been
 run. `TestMigrateIsIdempotent` runs the set forward twice; nothing runs it
 backward. A down migration that does not work is discovered during the incident
 it was written for.
+
+### Four packages still build their own test schema
+
+**Deferred by:** ADR-013 (run every test against the real migrations)
+
+`internal/fx` (1 copied `CREATE TABLE`), `internal/location` (2),
+`internal/cart` (5) and `internal/auth` (1) never run the migrations — they
+build a schema of their own, each with a comment explaining why the copy is
+acceptable. That is the same comment `internal/offer` and `internal/submission`
+carried before their copies drifted and left the suite green against a schema
+production does not have.
+
+⚠ ADR-013 claimed "No package holds a copy of any schema statement" from
+2026-09-06 until 2026-09-07, when this was found while reading `internal/fx` for
+an unrelated reason. The claim was false when written; the record now says so.
+Its `Enforced-by` test lives in `internal/offer`, so it proves that one package
+runs the migrations and is structurally blind to these four — a record can be
+mutation-verified and still overstate its reach.
+
+**What would make this real:** nine statements, four helpers. Each conversion may
+surface drift that has already happened, which is the point of doing it.
 
 ---
 

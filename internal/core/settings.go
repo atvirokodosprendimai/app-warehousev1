@@ -10,6 +10,53 @@ import (
 // SettingPublicBaseURL is the stored key for the public origin.
 const SettingPublicBaseURL = "public_base_url"
 
+// The stored keys for eBay's per-run configuration.
+//
+// They are namespaced by profile because there will be more than one
+// marketplace, and an unprefixed "category" would have to mean eBay's number,
+// Allegro's category name and Shopify's product type at once.
+const (
+	SettingEbayCategory    = "ebay.category"
+	SettingEbayConditionID = "ebay.condition_id"
+	SettingEbayLocation    = "ebay.location"
+)
+
+// Marketplace is the per-profile configuration an export needs beyond the
+// offers themselves.
+//
+// It is a value rather than three loose strings so that resolving stored
+// settings against start-up defaults is one operation with one rule, rather
+// than three call sites each free to get the precedence subtly different.
+type Marketplace struct {
+	// Category is the marketplace's own category identifier. eBay's is a number
+	// from its taxonomy; Allegro's is a category NAME. Stored as text so the
+	// schema has no opinion about which.
+	Category string
+	// ConditionID is eBay's numeric condition code.
+	ConditionID string
+	// Location is the city an item ships from, which eBay shows on the listing
+	// and uses to quote postage.
+	Location string
+}
+
+// Resolve returns m with any empty field taken from def.
+//
+// ⚠ PER FIELD, not whole-value. An administrator correcting one wrong setting
+// must not have to restate the two that are already right, and a whole-value
+// fallback would blank them the moment any single field was stored.
+func (m Marketplace) Resolve(def Marketplace) Marketplace {
+	if strings.TrimSpace(m.Category) == "" {
+		m.Category = def.Category
+	}
+	if strings.TrimSpace(m.ConditionID) == "" {
+		m.ConditionID = def.ConditionID
+	}
+	if strings.TrimSpace(m.Location) == "" {
+		m.Location = def.Location
+	}
+	return m
+}
+
 // Settings are the deployment values an administrator can change while the
 // application is running.
 //
@@ -20,6 +67,9 @@ type Settings struct {
 	// PublicBaseURL is the origin a marketplace fetches photographs from, e.g.
 	// "https://warehouse.example.com". Empty means "fall back to the environment".
 	PublicBaseURL string
+	// Ebay is eBay's per-run configuration. Any empty field means "fall back to
+	// the environment", exactly as PublicBaseURL does.
+	Ebay Marketplace
 	// UpdatedAt is when it last changed, in UTC.
 	UpdatedAt time.Time
 }

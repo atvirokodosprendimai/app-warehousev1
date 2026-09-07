@@ -36,9 +36,25 @@ as strong as whoever read it last.
 
 ## Decision
 
-Every test that needs a database calls the same migration runner the binary
-calls, against the embedded `migrations` FS. No package holds a copy of any
-schema statement.
+A test that needs a database calls the same migration runner the binary calls,
+against the embedded `migrations` FS, rather than building a schema of its own.
+
+⚠ **THIS IS THE RULE, NOT YET THE STATE, AND THIS RECORD SAID OTHERWISE.** It
+claimed "No package holds a copy of any schema statement" from 2026-09-06 until
+2026-09-07. That was false when written. `internal/offer` and `internal/submission`
+were converted — those are the two the drift incident was found in — and **four
+packages were never touched**: `internal/fx` (1 copied statement),
+`internal/location` (2), `internal/cart` (5) and `internal/auth` (1). Nine
+statements in total, each with a comment explaining why the copy is acceptable,
+which is exactly the comment the converted two used to carry.
+
+The error is worth more than the omission. `Enforced-by` names a test in
+`internal/offer`, so it proves that ONE package runs the migrations and is
+structurally blind to the other four — the same shape as the two guards the
+2026-09-06 mutation campaign found not binding. A record can be mutation-verified
+and still overstate its reach, because a mutant only ever proves the check sees
+the thing it was pointed at. Converting the remaining four is filed in
+`docs/adr/BACKLOG.md`.
 
 The consequence that makes it work is that a schema change is **impossible to
 half-apply**: a migration that adds a table, an index or a trigger reaches the

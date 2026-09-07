@@ -99,6 +99,33 @@ func (a *App) publicBase(ctx context.Context) string {
 	return a.Cfg.PublicBaseURL
 }
 
+// ebayMarketplace resolves eBay's per-run configuration for THIS request.
+//
+// It mirrors publicBase, and for the same reason: a value read once at start-up
+// can only be corrected by whoever can restart the process, and it is discovered
+// to be wrong after an export has already gone out. Resolving per request is
+// what makes the Settings page take effect without a restart.
+//
+// ⚠ Resolution is per FIELD (see [core.Marketplace.Resolve]). An administrator
+// who sets only the category must not thereby blank the condition and location
+// the environment supplied.
+func (a *App) ebayMarketplace(ctx context.Context) core.Marketplace {
+	def := core.Marketplace{
+		Category:    a.Cfg.Export.Category,
+		ConditionID: a.Cfg.Export.ConditionID,
+		Location:    a.Cfg.Export.Location,
+	}
+	if a.Settings != nil {
+		s, err := a.Settings.Settings(ctx)
+		if err != nil {
+			a.Log.Warn("settings unreadable, using the configured eBay defaults", "err", err)
+			return def
+		}
+		return s.Ebay.Resolve(def)
+	}
+	return def
+}
+
 // CartService is the slice of the cart write side the HTTP layer uses.
 //
 // It is declared here, at the consumer, rather than exported from the cart
