@@ -800,20 +800,20 @@ func submissionPhotos(d SubmissionDetail) templ.Component {
 			}
 		}
 		if d.Submission.Status != core.SubmissionAccepted {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<!-- The same single no-form exception as the offer editor, for the\n\t\t\t\t\t     same three reasons: datastar throws FetchFormNotFound with no\n\t\t\t\t\t     enclosing form, sends urlencoded without the enctype, and\n\t\t\t\t\t     FormData omits an unnamed control. --> <form enctype=\"multipart/form-data\" data-on:submit=\"evt.preventDefault()\"><label class=\"drop\"><span aria-hidden=\"true\">＋</span> <span>Add</span> <input class=\"sr-only\" type=\"file\" name=\"photos\" accept=\"image/jpeg,image/png,image/webp,image/gif\" multiple data-on:change=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<!-- The same single no-form exception as the offer editor, for the\n\t\t\t\t\t     same three reasons: datastar throws FetchFormNotFound with no\n\t\t\t\t\t     enclosing form, sends urlencoded without the enctype, and\n\t\t\t\t\t     FormData omits an unnamed control. --> <form enctype=\"multipart/form-data\" data-on:submit=\"evt.preventDefault()\"><label class=\"drop\"><!-- ADR-015: the same busy state as the offer upload, for the\n\t\t\t\t\t\t\t     same reason. `_uploading` is lowercase because the\n\t\t\t\t\t\t\t     indicator's name lives in an attribute NAME, and\n\t\t\t\t\t\t\t     underscore-prefixed so it stays out of every later\n\t\t\t\t\t\t\t     request. --><span data-show=\"!$_uploading\" aria-hidden=\"true\">＋</span> <span data-show=\"!$_uploading\">Add</span> <span data-show=\"$_uploading\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span data-show=\"$_uploading\" style=\"display:none\" aria-live=\"polite\">Uploading…</span> <input class=\"sr-only\" type=\"file\" name=\"photos\" accept=\"image/jpeg,image/png,image/webp,image/gif\" multiple data-on:change=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var36 string
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/submit/" + d.Submission.ID + "/photos', {contentType: 'form'})")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 281, Col: 97}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 288, Col: 97}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "\"></label></form>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "\" data-indicator:_uploading data-attr:disabled=\"$_uploading\"></label></form>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -876,7 +876,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var38 string
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/submit/" + d.Submission.ID + "/review')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 310, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 319, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 			if templ_7745c5c3_Err != nil {
@@ -899,7 +899,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 329, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 338, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 			if templ_7745c5c3_Err != nil {
@@ -912,7 +912,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var40 string
 			templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 329, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 338, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 			if templ_7745c5c3_Err != nil {
@@ -935,7 +935,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var41 string
 			templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 341, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 350, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 			if templ_7745c5c3_Err != nil {
@@ -948,7 +948,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var42 string
 			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 341, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 350, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 			if templ_7745c5c3_Err != nil {
@@ -971,7 +971,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var43 string
 			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 352, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 361, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 			if templ_7745c5c3_Err != nil {
@@ -984,7 +984,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 			var templ_7745c5c3_Var44 string
 			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(l.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 352, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 361, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 			if templ_7745c5c3_Err != nil {
@@ -1002,7 +1002,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 		var templ_7745c5c3_Var45 string
 		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/submit/" + d.Submission.ID + "/accept')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 375, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 384, Col: 70}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var45)
 		if templ_7745c5c3_Err != nil {
@@ -1015,7 +1015,7 @@ func decidePanel(d SubmissionDetail) templ.Component {
 		var templ_7745c5c3_Var46 string
 		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/submit/" + d.Submission.ID + "/decline')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 385, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/inbox.templ`, Line: 394, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var46)
 		if templ_7745c5c3_Err != nil {

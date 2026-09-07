@@ -295,8 +295,26 @@ templ OfferPhotosCard(d OfferDetail) {
 				-->
 				<form enctype="multipart/form-data" data-on:submit="evt.preventDefault()">
 					<label class="drop">
-						<span aria-hidden="true">＋</span>
-						<span>Add</span>
+						<!--
+						  ADR-015. The idle half and the busy half of the same 104px
+						  square. Until this, choosing a file changed nothing on screen —
+						  and this is the longest request the application makes, so on a
+						  phone a slow upload was indistinguishable from a dead control.
+
+						  `_uploading` is all lowercase ON PURPOSE. The indicator puts its
+						  signal name in the ATTRIBUTE NAME, and HTML lowercases attribute
+						  names, so a camelCase name would have datastar create one signal
+						  while every line here reads another — which is a defect that has
+						  already taken a sibling project's page down. It is
+						  underscore-prefixed so it stays in the browser instead of riding
+						  to the backend on every later action, and it is deliberately NOT
+						  `_busy`: signals are global, so sharing that name would spin
+						  every other spinner on this page during an upload.
+						-->
+						<span data-show="!$_uploading" aria-hidden="true">＋</span>
+						<span data-show="!$_uploading">Add</span>
+						<span data-show="$_uploading" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span data-show="$_uploading" style="display:none" aria-live="polite">Uploading…</span>
 						<input
 							class="sr-only"
 							type="file"
@@ -304,6 +322,8 @@ templ OfferPhotosCard(d OfferDetail) {
 							accept="image/jpeg,image/png,image/webp,image/gif"
 							multiple
 							data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+							data-indicator:_uploading
+							data-attr:disabled="$_uploading"
 						/>
 					</label>
 				</form>

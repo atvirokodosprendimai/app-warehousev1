@@ -2,6 +2,7 @@ package view
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -235,6 +236,167 @@ func TestNoFormsOutsideFileUpload(t *testing.T) {
 		if strings.Contains(html, "<form") {
 			t.Errorf("%s renders a <form>; this application binds inputs to signals "+
 				"instead, and file upload is the only exception", name)
+		}
+	}
+}
+
+// uploadSurfaces renders the two file-upload cards, which are the subject of
+// ADR-015.
+func uploadSurfaces(t *testing.T) map[string]string {
+	t.Helper()
+	photo := core.Photo{ID: "11111111-1111-1111-1111-111111111111", ContentType: "image/jpeg"}
+	return map[string]string{
+		"offer photos card": renderString(t, OfferPhotosCard(OfferDetail{
+			Row: OfferRow{Offer: core.Offer{ID: "o1", Title: "Lamp", Photos: []core.Photo{photo}}},
+		})),
+		"submission photos card": renderString(t, SubmissionBody(SubmissionDetail{
+			Submission: core.Submission{ID: "sub-1", Title: "Oak chair", Status: core.SubmissionNew},
+			Currencies: core.KnownCurrencies(),
+		})),
+	}
+}
+
+// uploadIndicatorSignal is the signal ADR-015 puts on both uploads.
+//
+// It is deliberately NOT `_busy`: datastar signals are global and flattened, so
+// reusing that name would spin every other spinner on the page during an upload.
+const uploadIndicatorSignal = "_uploading"
+
+// TestPhotoUploadShowsABusyState pins the feedback ADR-015 exists to provide.
+//
+// A photograph off a phone camera is several megabytes over a mobile uplink, so
+// this is the longest request the application makes — and until ADR-015 it was
+// the ONLY interactive control with no busy state at all. The reported symptom
+// was exactly what that produces: "with slow mobile i have no idea its doing
+// something or not", and a user who cannot tell a slow upload from a dead
+// control taps again.
+//
+// Three things have to be true together, and each fails differently:
+//   - the input carries data-indicator, or no signal is ever created;
+//   - it carries data-attr:disabled on that signal, or a second tap starts a
+//     duplicate upload;
+//   - something READS the signal, or the indicator is wired to nothing and the
+//     markup looks correct while showing the user precisely nothing.
+func TestPhotoUploadShowsABusyState(t *testing.T) {
+	sig := uploadIndicatorSignal
+
+	for name, html := range uploadSurfaces(t) {
+		fi := strings.Index(html, `type="file"`)
+		if fi < 0 {
+			t.Errorf("%s: no <input type=\"file\"> at all — this test is asserting nothing", name)
+			continue
+		}
+		start := strings.LastIndex(html[:fi], "<input")
+		end := strings.Index(html[fi:], ">")
+		if start < 0 || end < 0 {
+			t.Errorf("%s: malformed file input", name)
+			continue
+		}
+		input := html[start : fi+end]
+
+		if !strings.Contains(input, "data-indicator:"+sig) {
+			t.Errorf("%s: the file input carries no data-indicator:%s, so nothing creates the "+
+				"in-flight signal and the upload gives no feedback on a slow connection. "+
+				"Input: %s", name, sig, input)
+		}
+		if !strings.Contains(input, `data-attr:disabled="$`+sig+`"`) {
+			t.Errorf("%s: the file input is not disabled while $%s is true, so a second tap "+
+				"during a slow upload starts a duplicate one. Input: %s", name, sig, input)
+		}
+		if !strings.Contains(html, `data-show="$`+sig+`"`) {
+			t.Errorf("%s: nothing reads $%s, so the indicator is wired to NOTHING — the "+
+				"attribute is present and the user still sees no change", name, sig)
+		}
+		if !strings.Contains(html, "Uploading") {
+			t.Errorf("%s: no busy text. A spinner alone says something is happening; the word "+
+				"says what", name)
+		}
+	}
+}
+
+// indicatorKeyRe matches the colon-key form, where the signal name is part of
+// the ATTRIBUTE NAME — which is the form this codebase uses everywhere.
+var indicatorKeyRe = regexp.MustCompile(`data-indicator:([A-Za-z0-9_-]+)`)
+
+// indicatorValRe matches the value form, where the name is the attribute VALUE.
+var indicatorValRe = regexp.MustCompile(`data-indicator="([^"]*)"`)
+
+// everyIndicatorSurface renders the screens that carry indicators, so the two
+// invariants below hold for the whole package rather than only for the uploads.
+func everyIndicatorSurface(t *testing.T) map[string]string {
+	t.Helper()
+	out := map[string]string{
+		"auth":       renderString(t, AuthPage(Auth{})),
+		"intake":     renderString(t, IntakeScreen(nil)),
+		"offers":     renderString(t, OffersScreen(OfferList{Currencies: core.KnownCurrencies()})),
+		"carts":      renderString(t, CartsScreen(Carts{})),
+		"users":      renderString(t, UsersScreen(Users{})),
+		"newPlace":   renderString(t, NewLocationScreen(nil, "")),
+		"submit":     renderString(t, SubmitScreen(Submit{Currencies: core.KnownCurrencies()})),
+		"offerPhoto": renderString(t, OfferPhotosCard(OfferDetail{Row: OfferRow{Offer: core.Offer{ID: "o1"}}})),
+	}
+	for k, v := range uploadSurfaces(t) {
+		out[k] = v
+	}
+	return out
+}
+
+// TestEveryIndicatorNameSurvivesHTMLLowercasing refuses the defect that took a
+// sibling project's admin page down in production on 2026-08-31.
+//
+// `data-indicator:<name>` puts the signal name in the ATTRIBUTE NAME, and the
+// HTML parser lowercases attribute names. A camelCase name therefore creates a
+// DIFFERENT signal from the one every consumer reads: datastar wrote
+// `_plansaving` while the markup read `$_planSaving`, so nothing ever cleared
+// the busy flag — and because `data-attr:disabled` on an undefined signal sets
+// the attribute, and `disabled` is a boolean attribute where presence alone
+// disables, every control on the page rendered dead and stayed dead.
+//
+// This codebase is currently safe only because every indicator it happens to
+// use is already lowercase. That is luck, and this test is what replaces it.
+func TestEveryIndicatorNameSurvivesHTMLLowercasing(t *testing.T) {
+	found := 0
+	for name, html := range everyIndicatorSurface(t) {
+		for _, m := range indicatorKeyRe.FindAllStringSubmatch(html, -1) {
+			found++
+			if m[1] != strings.ToLower(m[1]) {
+				t.Errorf("%s: data-indicator:%s puts a name with an uppercase letter in an "+
+					"ATTRIBUTE NAME. HTML lowercases it, so datastar creates $%s while every "+
+					"consumer reads $%s — different signals, and nothing reports it. Use an "+
+					"all-lowercase name, or the value form data-indicator=%q",
+					name, m[1], strings.ToLower(m[1]), m[1], m[1])
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("no data-indicator attribute was found on any surface, so this test is " +
+			"asserting nothing — either the indicators moved or the rendering changed")
+	}
+}
+
+// TestEveryIndicatorSignalHasAConsumer refuses an indicator wired to nothing.
+//
+// data-indicator maintains a signal; it does not itself display anything. An
+// indicator with no data-show or data-attr reading it is markup that looks like
+// feedback and produces none, and no server-side check can see the difference.
+// In the same sibling project the most-used screen in the product carried THREE
+// such attributes with zero consumers.
+func TestEveryIndicatorSignalHasAConsumer(t *testing.T) {
+	for name, html := range everyIndicatorSurface(t) {
+		signals := map[string]bool{}
+		for _, m := range indicatorKeyRe.FindAllStringSubmatch(html, -1) {
+			// What datastar actually creates is the lowercased name.
+			signals[strings.ToLower(m[1])] = true
+		}
+		for _, m := range indicatorValRe.FindAllStringSubmatch(html, -1) {
+			signals[m[1]] = true
+		}
+		for sig := range signals {
+			if !strings.Contains(html, "$"+sig) {
+				t.Errorf("%s: data-indicator creates $%s and nothing on this surface reads it. "+
+					"An indicator with no consumer renders no feedback at all, and the markup "+
+					"looks correct either way", name, sig)
+			}
 		}
 	}
 }

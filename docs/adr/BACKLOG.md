@@ -33,7 +33,7 @@ has asked for it.
 
 ### Nobody has opened the application in a browser
 
-**Deferred by:** ADR-008 (no forms except the photo upload), ADR-009 (one stream per page)
+**Deferred by:** ADR-008 (no forms except the photo upload), ADR-009 (one stream per page), ADR-015 (an upload says it is uploading)
 
 Six defects were found by a person using the application after the server-side
 suite was green, and every one was invisible to that suite **by construction**:
@@ -205,6 +205,26 @@ description match; nothing measures whether it does.
 
 The inbox filters by status and submitter, not by text. The FTS machinery exists
 and is not applied to `submissions`.
+
+## Interface
+
+### Every busy indicator gets its own signal
+
+**Deferred by:** ADR-015 (an upload says it is uploading)
+
+Nine controls share the signal `_busy`, and datastar signals are global and
+flattened — so any one of them going busy spins the spinner and disables the
+control on all the others that happen to be on the same page. On the offer detail
+page that is five controls reacting to one.
+
+ADR-015 avoided widening it: the upload got its own `_uploading` rather than
+joining `_busy`. The existing nine were left alone, because renaming a signal
+touches every consumer of it and the payoff is cosmetic. It is written down here
+so the next person to notice a spinner spinning for no reason finds the answer
+rather than a mystery.
+
+**What would make this real:** somebody being confused by it, or a page where two
+slow actions can genuinely be in flight at once.
 
 ## Operations
 

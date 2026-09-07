@@ -1,4 +1,4 @@
 {
   "check": "go test ./...",
-  "notes": "templ templates compile to *_templ.go, which are committed. If a .templ file changed, run `go tool templ generate` before the check."
+  "notes": "templ templates compile to *_templ.go, which are committed. If a .templ file changed, regenerate with `go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate` before the check. NOT `go tool templ generate` — there is no tool directive in go.mod and no templ on PATH, so that form fails with `go: no such tool \"templ\"`."
 }

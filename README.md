@@ -165,7 +165,7 @@ hydrates. Those need a browser.
 
 ## Why it is like this
 
-`docs/adr/` holds fourteen decision records — what was decided, what was rejected
+`docs/adr/` holds fifteen decision records — what was decided, what was rejected
 and why, and for each one the check that goes red when the decision is violated.
 Every one of those checks was verified by breaking the mechanism it names and
 watching the test fail. Start at [docs/adr/README.md](docs/adr/README.md).

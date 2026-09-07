@@ -1,14 +1,18 @@
 # Decision records
 
-Fourteen decisions that shaped this application, written down because none of
+Fifteen decisions that shaped this application, written down because none of
 them can be recovered from the shape of the code. Each record says what was
 decided, what was rejected and why, what it costs, and — in its `Enforced-by:`
 header — the check that goes red when the decision is violated.
 
-They are **retrospective**. The application was built first and these were
-written afterwards, on 2026-09-06, so none of them has a `tasks/` directory and
-none of them claims a task is `done`. What holds each decision up is the named
-test, not a task log.
+**ADR-001 to ADR-014 are retrospective.** The application was built first and
+those were written afterwards, on 2026-09-06, so none of them has a `tasks/`
+directory and none claims a task is `done`. What holds each up is the named test,
+not a task log.
+
+**ADR-015 is forward work** and therefore has the full apparatus: a `tasks/`
+directory, a task that was red before it was green, and a Verification Log and
+Mutation Log the tool wrote rather than the author.
 
 ## The corpus
 
@@ -28,6 +32,7 @@ test, not a task log.
 | [012](ADR-012-search-is-an-index-the-database-maintains.md) | Make search an external-content FTS5 index kept by triggers | Search goes quietly stale rather than failing |
 | [013](ADR-013-run-every-test-against-the-real-migrations.md) | Run every test against the real migrations | The suite passes against a schema production does not have — this one already happened |
 | [014](ADR-014-deployment-values-that-shape-an-artefact-live-in-the-database.md) | Keep deployment values that shape an artefact in the database | The public domain can only be fixed by whoever can restart the process |
+| [015](ADR-015-an-upload-says-it-is-uploading.md) | Make the photo upload say that it is uploading | A slow upload on a phone is indistinguishable from a dead control |
 
 [BACKLOG.md](BACKLOG.md) holds every deferral these records made, each naming the
 record that punted it.
@@ -50,9 +55,17 @@ the thing it named was broken.
 
 An `Enforced-by:` header is a claim, and a check that cannot fail is decoration.
 So each one was verified by **breaking the mechanism it names and confirming the
-test goes red** — 2026-09-06, thirteen mutants, one per record:
+test goes red** — 2026-09-06 for the retrospective corpus, thirteen mutants, one
+per record:
 
     KILLED=13  SURVIVED=0  INCONCLUSIVE=0
+
+ADR-015 added three more on 2026-09-07, each bound by `adr-verify --covers` to
+one mechanism it declares in `Rests-on:` — the indicator itself, the
+lowercase-survival rule, and the has-a-consumer rule. Its fourth declared
+mechanism carries no mutant on purpose, and the task says why rather than faking
+one: the fence performs that step itself, so it cannot fail for that reason
+inside its own run.
 
 ADR-009 carries no mutant because its `Enforced-by:` is honestly `None`.
 
