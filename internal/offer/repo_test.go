@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -529,6 +530,117 @@ func TestOffersFilterNeedsPricingIsTheResearchQueue(t *testing.T) {
 	}
 	if s := fmt.Sprint(ids(got)); s != "[unpriced]" {
 		t.Errorf("NeedsPricing = %s, want [unpriced]", s)
+	}
+}
+
+// TestOffersFilterNeedsDescribingMatchesThePredicate is ADR-019's queue, and it
+// asserts the thing that actually breaks.
+//
+// The queue exists twice — once as SQL in this package and once as
+// core.Offer.NeedsDescribing in Go — and nothing forces the two to stay in step.
+// When they drift, the sidebar count and the list it links to disagree: the
+// operator is either promised work they cannot find, or shown work nobody told
+// them about. So this compares the two against each other rather than against a
+// hand-written expected list, which would keep passing while both sides drifted
+// together.
+func TestOffersFilterNeedsDescribingMatchesThePredicate(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	mustCreate(t, r, newOffer("unnamed", "SKU-1", "", baseTime))
+	// A title of nothing but spaces is not a title. SQL must agree with the domain
+	// about that, or the two queues differ by exactly the rows somebody has pressed
+	// the space bar in.
+	mustCreate(t, r, newOffer("spaces", "SKU-2", "   ", baseTime.Add(time.Minute)))
+	mustCreate(t, r, newOffer("named", "SKU-3", "Vintage brass desk lamp", baseTime.Add(2*time.Minute)))
+	// Undescribed but no longer a draft: out of the queue, because the queue is
+	// work somebody is expected to pick up.
+	archived := newOffer("archived", "SKU-4", "", baseTime.Add(3*time.Minute))
+	archived.Status = core.StatusArchived
+	mustCreate(t, r, archived)
+
+	got, err := r.Offers(ctx, core.OfferFilter{NeedsDescribing: true})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+
+	inQueue := map[string]bool{}
+	for _, o := range got {
+		inQueue[o.ID] = true
+		if !o.NeedsDescribing() {
+			t.Errorf("%s is in the SQL queue but NeedsDescribing() is false — the clause and "+
+				"the predicate have drifted apart", o.ID)
+		}
+	}
+
+	all, err := r.Offers(ctx, core.OfferFilter{})
+	if err != nil {
+		t.Fatalf("Offers(all): %v", err)
+	}
+	if len(all) != 4 {
+		t.Fatalf("the fixture holds %d offers, want 4 — the sweep below would prove nothing", len(all))
+	}
+	for _, o := range all {
+		if o.NeedsDescribing() && !inQueue[o.ID] {
+			t.Errorf("%s satisfies NeedsDescribing() but the SQL queue omits it, so the "+
+				"sidebar would count work the listing does not show", o.ID)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("the queue holds %d rows, want 2 — the empty title and the whitespace one. "+
+			"A queue of 0 would make both sweeps above vacuous", len(got))
+	}
+}
+
+// TestPublishingAnUntitledOfferIsRefusedByTheDatabase proves ADR-019's second
+// gate, the one no Go path can bypass.
+//
+// The domain refuses this as well, which is exactly why the row is written with
+// raw SQL here: the whole point of the trigger is the writer that never calls
+// Validate — a migration, a future importer, or somebody at a sqlite3 prompt.
+// ADR-004 established the doubling up for the price; this is the same argument
+// for the title.
+func TestPublishingAnUntitledOfferIsRefusedByTheDatabase(t *testing.T) {
+	r := newTestRepo(t)
+	ts := formatTime(baseTime)
+
+	// An untitled DRAFT must be accepted, or the refusal below would be happening
+	// for the wrong reason and this test would pass against a database that simply
+	// rejects empty titles everywhere.
+	if _, err := r.write.Exec(
+		`INSERT INTO offers (id, sku, title, status, quantity, shop_minor, created_at, updated_at)
+		 VALUES ('d1', 'SKU-D1', '', 'draft', 1, 0, ?, ?)`, ts, ts); err != nil {
+		t.Fatalf("an untitled DRAFT was refused by the database, which ADR-019 permits: %v", err)
+	}
+
+	// Publishing it is what must fail.
+	_, err := r.write.Exec(`UPDATE offers SET status = 'listed', shop_minor = 4500 WHERE id = 'd1'`)
+	if err == nil {
+		t.Fatal("the database accepted a listed offer with no title: the trigger from " +
+			"migration 00008 is missing or was dropped, and a marketplace would be sent a " +
+			"listing headed by an empty string")
+	}
+	if !strings.Contains(err.Error(), "needs a title") {
+		t.Errorf("refused with %v, want the trigger's own message — a different error means "+
+			"something else refused this row and the trigger is still unproven", err)
+	}
+
+	// The INSERT arm of the same rule, and a whitespace-only title, which trim()
+	// has to treat as absent exactly as the domain does.
+	if _, err := r.write.Exec(
+		`INSERT INTO offers (id, sku, title, status, quantity, shop_minor, created_at, updated_at)
+		 VALUES ('l1', 'SKU-L1', '   ', 'listed', 1, 4500, ?, ?)`, ts, ts); err == nil {
+		t.Error("the database accepted an INSERT of a listed offer whose title is only spaces")
+	}
+
+	// The row must still be a draft: a refused UPDATE that half-applied would be
+	// worse than one that never ran.
+	var status string
+	if err := r.write.QueryRow(`SELECT status FROM offers WHERE id = 'd1'`).Scan(&status); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if status != "draft" {
+		t.Errorf("status = %q after the refused update, want draft", status)
 	}
 }
 

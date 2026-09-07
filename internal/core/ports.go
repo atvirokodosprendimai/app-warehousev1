@@ -69,6 +69,10 @@ type OfferFilter struct {
 	// NeedsPricing restricts to drafts with no shop price — the work queue for
 	// the research step in the photograph, title, price-later flow.
 	NeedsPricing bool
+	// NeedsDescribing restricts to drafts with no title — the work queue for the
+	// cataloguing step, where one person photographs a thing and another names
+	// and describes it afterwards (ADR-019).
+	NeedsDescribing bool
 	// Limit and Offset page the result. Limit 0 means the repository's default.
 	Limit  int
 	Offset int

@@ -118,6 +118,13 @@ func HoldReason(o Offer) string {
 	switch {
 	case !o.Status.Exportable():
 		return "status is " + o.Status.Label()
+	// Since ADR-019 a draft may legitimately have no title, so an export has to
+	// say so rather than send a listing headed by an empty string. Both the
+	// domain and a database trigger refuse to PUBLISH one, which means this case
+	// should be unreachable through any supported write path — it is here as the
+	// third gate, for a row that arrived some other way.
+	case strings.TrimSpace(o.Title) == "":
+		return "no title yet"
 	case o.Shop.IsZero():
 		return "no shop price yet"
 	case len(o.Photos) == 0:

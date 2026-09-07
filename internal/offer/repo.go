@@ -240,6 +240,14 @@ func listQuery(f core.OfferFilter) (string, []any) {
 		where = append(where, "o.status = 'draft' AND o.shop_minor = 0")
 	}
 
+	if f.NeedsDescribing {
+		// The describing queue, matching core.Offer.NeedsDescribing: photographed,
+		// not yet named. trim() so a title of nothing but spaces counts as absent
+		// here exactly as it does in the domain — otherwise the queue and the
+		// predicate would disagree about the same row.
+		where = append(where, "o.status = 'draft' AND trim(o.title) = ''")
+	}
+
 	q := "SELECT " + offerColumns + " FROM offers o" + join
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")

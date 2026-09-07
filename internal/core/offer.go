@@ -141,15 +141,20 @@ type Offer struct {
 
 // Validate checks the domain rules that hold regardless of who is writing.
 //
-// It deliberately does NOT require a price on a draft. The intake flow is
-// photograph, title, shelve — and only later, after finding out what the item
-// can actually fetch, price it. Demanding a price at creation would push the
-// operator to type a placeholder, and a placeholder that reaches StatusListed
-// ships to a marketplace as a real offer.
+// It deliberately does NOT require a price on a draft, and since ADR-019 it does
+// not require a TITLE on one either. The intake flow is photograph, title,
+// shelve — and both of the later steps can happen later still, increasingly by a
+// DIFFERENT PERSON: one walks the warehouse photographing things, another names
+// and describes what they photographed. Demanding either value at creation is
+// what pushes an operator to invent one, and a placeholder that reaches
+// StatusListed ships to a marketplace as though it were real.
+//
+// Both become mandatory at the same boundary — the moment the offer enters a
+// status that is exported — because that is the moment somebody outside the
+// building reads them. The SKU is different and stays required from the start:
+// it is the reference written on the box (ADR-010), so it has to exist before
+// the item is put on a shelf.
 func (o *Offer) Validate() error {
-	if strings.TrimSpace(o.Title) == "" {
-		return fmt.Errorf("%w: title is required", ErrInvalid)
-	}
 	if strings.TrimSpace(o.SKU) == "" {
 		return fmt.Errorf("%w: SKU is required", ErrInvalid)
 	}
@@ -158,6 +163,10 @@ func (o *Offer) Validate() error {
 	}
 	if o.Quantity < 0 {
 		return fmt.Errorf("%w: quantity cannot be negative", ErrInvalid)
+	}
+	if o.Status.Exportable() && strings.TrimSpace(o.Title) == "" {
+		return fmt.Errorf("%w: an offer in status %s needs a title, because that "+
+			"status is exported to a marketplace", ErrInvalid, o.Status)
 	}
 	if o.Status.Exportable() && o.Shop.IsZero() {
 		return fmt.Errorf("%w: an offer in status %s needs a shop price, because that "+
@@ -186,6 +195,18 @@ func (o *Offer) Validate() error {
 // typed a price without also moving the status.
 func (o *Offer) NeedsPricing() bool {
 	return o.Status == StatusDraft && o.Shop.IsZero()
+}
+
+// NeedsDescribing reports whether the offer is waiting on the cataloguing step —
+// it has been photographed but nobody has named it yet.
+//
+// This is the hand-off point between two people (ADR-019): a photographer creates
+// the group of pictures, and whoever describes it finds it through this. It is
+// derived rather than stored for the same reason NeedsPricing is — a stored
+// duplicate goes stale the moment somebody types a title without also moving a
+// status, and the queue then shows work that is already done.
+func (o *Offer) NeedsDescribing() bool {
+	return o.Status == StatusDraft && strings.TrimSpace(o.Title) == ""
 }
 
 // Margin returns what the business keeps: the shop price less what the owner
