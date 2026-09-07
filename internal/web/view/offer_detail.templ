@@ -72,6 +72,7 @@ func offerSignals(d OfferDetail) string {
 		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
 		"offerLocation: " + jsString(o.LocationID) + ", " +
 		"offerSku: " + jsString(o.SKU) + ", " +
+		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
 		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
 		"}"
 }
@@ -94,6 +95,24 @@ templ offerDetailsCard(d OfferDetail) {
 			<div class="field">
 				<label for="o-cond">Condition</label>
 				<input id="o-cond" class="input" type="text" placeholder="used — good" data-bind:offer-condition/>
+			</div>
+			<!--
+			  How many of the thing we hold. The column has existed since the first
+			  migration and both exporters have always written it, but nothing in the
+			  interface ever SET it — so every offer carried the database default of
+			  1, and a shelf of five went to a marketplace as one.
+
+			  Text with an inputmode rather than type="number", matching the prices:
+			  a number input sends a JSON number, and every signal this screen reads
+			  is a string.
+			-->
+			<div class="field">
+				<label for="o-qty">Qty</label>
+				<input id="o-qty" class="input" type="text" inputmode="numeric" data-bind:offer-quantity/>
+				<span class="hint">
+					How many of this we hold. It is sent to every marketplace as the
+					stock figure, so 0 reads as out of stock rather than as unknown.
+				</span>
 			</div>
 			<!--
 			  The reference lives here since ADR-020, because deleting the intake

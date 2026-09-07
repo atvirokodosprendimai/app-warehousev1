@@ -442,6 +442,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .cell-status { grid-column: 2; grid-row: 2; }
   .cell-where,
   .cell-price,
+  .cell-qty,
   .cell-owner,
   .cell-margin {
     grid-column: 1 / -1;

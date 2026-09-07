@@ -116,6 +116,7 @@ func offerSignals(d OfferDetail) string {
 		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
 		"offerLocation: " + jsString(o.LocationID) + ", " +
 		"offerSku: " + jsString(o.SKU) + ", " +
+		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
 		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
 		"}"
 }
@@ -141,14 +142,14 @@ func offerDetailsCard(d OfferDetail) templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"card\"><div class=\"card-head\"><h2>Details</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-title\">Title</label> <input id=\"o-title\" class=\"input\" type=\"text\" data-bind:offer-title> <span class=\"hint\">This is the listing headline on every marketplace.</span></div><div class=\"field\"><label for=\"o-desc\">Description</label> <textarea id=\"o-desc\" class=\"textarea\" data-bind:offer-description></textarea></div><div class=\"field\"><label for=\"o-cond\">Condition</label> <input id=\"o-cond\" class=\"input\" type=\"text\" placeholder=\"used — good\" data-bind:offer-condition></div><!--\n\t\t\t  The reference lives here since ADR-020, because deleting the intake\n\t\t\t  screen took away the only place it could be typed. It is allocated by\n\t\t\t  the database (ADR-010) and shown rather than asked for, but it stays\n\t\t\t  EDITABLE: somebody re-cataloguing existing stock has references already\n\t\t\t  written on the boxes, and a typo made at intake used to be permanent.\n\t\t\t--><div class=\"field\"><label for=\"o-sku\">Reference</label> <input id=\"o-sku\" class=\"input code\" type=\"text\" data-bind:offer-sku> <span class=\"hint\">Generated for you, and used as the Shopify handle and the eBay custom label. Once the offer is published it should not change.</span></div><div><button class=\"btn btn-primary\" type=\"button\" data-on:click=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 5, "<div class=\"card\"><div class=\"card-head\"><h2>Details</h2></div><div class=\"card-body stack\"><div class=\"field\"><label for=\"o-title\">Title</label> <input id=\"o-title\" class=\"input\" type=\"text\" data-bind:offer-title> <span class=\"hint\">This is the listing headline on every marketplace.</span></div><div class=\"field\"><label for=\"o-desc\">Description</label> <textarea id=\"o-desc\" class=\"textarea\" data-bind:offer-description></textarea></div><div class=\"field\"><label for=\"o-cond\">Condition</label> <input id=\"o-cond\" class=\"input\" type=\"text\" placeholder=\"used — good\" data-bind:offer-condition></div><!--\n\t\t\t  How many of the thing we hold. The column has existed since the first\n\t\t\t  migration and both exporters have always written it, but nothing in the\n\t\t\t  interface ever SET it — so every offer carried the database default of\n\t\t\t  1, and a shelf of five went to a marketplace as one.\n\n\t\t\t  Text with an inputmode rather than type=\"number\", matching the prices:\n\t\t\t  a number input sends a JSON number, and every signal this screen reads\n\t\t\t  is a string.\n\t\t\t--><div class=\"field\"><label for=\"o-qty\">Qty</label> <input id=\"o-qty\" class=\"input\" type=\"text\" inputmode=\"numeric\" data-bind:offer-quantity> <span class=\"hint\">How many of this we hold. It is sent to every marketplace as the stock figure, so 0 reads as out of stock rather than as unknown.</span></div><!--\n\t\t\t  The reference lives here since ADR-020, because deleting the intake\n\t\t\t  screen took away the only place it could be typed. It is allocated by\n\t\t\t  the database (ADR-010) and shown rather than asked for, but it stays\n\t\t\t  EDITABLE: somebody re-cataloguing existing stock has references already\n\t\t\t  written on the boxes, and a typo made at intake used to be permanent.\n\t\t\t--><div class=\"field\"><label for=\"o-sku\">Reference</label> <input id=\"o-sku\" class=\"input code\" type=\"text\" data-bind:offer-sku> <span class=\"hint\">Generated for you, and used as the Shopify handle and the eBay custom label. Once the offer is published it should not change.</span></div><div><button class=\"btn btn-primary\" type=\"button\" data-on:click=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 117, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 136, Col: 62}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 		if templ_7745c5c3_Err != nil {
@@ -198,7 +199,7 @@ func offerPricingCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var6 string
 			templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 142, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 161, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 			if templ_7745c5c3_Err != nil {
@@ -211,7 +212,7 @@ func offerPricingCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 142, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 161, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -234,7 +235,7 @@ func offerPricingCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 154, Col: 24}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 173, Col: 24}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -247,7 +248,7 @@ func offerPricingCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 154, Col: 30}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 173, Col: 30}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
@@ -273,7 +274,7 @@ func offerPricingCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var10 string
 		templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/prices')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 165, Col: 69}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 184, Col: 69}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var10)
 		if templ_7745c5c3_Err != nil {
@@ -381,7 +382,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var13 string
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(moneyOrDash(d.Row.Offer.Sold))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 205, Col: 61}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 224, Col: 61}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -399,7 +400,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 				var templ_7745c5c3_Var14 string
 				templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Offer.SoldAt.Format("2 January 2006"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 208, Col: 74}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 227, Col: 74}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 				if templ_7745c5c3_Err != nil {
@@ -418,7 +419,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(realisedText(d.Row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 211, Col: 77}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 230, Col: 77}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -447,7 +448,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 					var templ_7745c5c3_Var16 string
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/status/" + string(s) + "')")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 221, Col: 90}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 240, Col: 90}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var16)
 					if templ_7745c5c3_Err != nil {
@@ -460,7 +461,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 					var templ_7745c5c3_Var17 string
 					templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(s.Label())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 224, Col: 24}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 243, Col: 24}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 					if templ_7745c5c3_Err != nil {
@@ -489,7 +490,7 @@ func OfferStatusCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var18 string
 			templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.ResolveAttributeValue("@get('/offers/" + d.Row.Offer.ID + "/sold-dialog')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 235, Col: 74}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 254, Col: 74}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var18)
 			if templ_7745c5c3_Err != nil {
@@ -550,7 +551,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(itoa(len(d.Row.Offer.Photos)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 262, Col: 54}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 281, Col: 54}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
@@ -568,7 +569,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var21 templ.SafeURL
 			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.PublicPath()))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 284, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 303, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 			if templ_7745c5c3_Err != nil {
@@ -581,7 +582,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue("Open " + photoAlt(d.Row.Offer.Title, i) + " at full size")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 287, Col: 78}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 306, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 			if templ_7745c5c3_Err != nil {
@@ -594,7 +595,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.PublicPath())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 289, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 308, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var23)
 			if templ_7745c5c3_Err != nil {
@@ -607,7 +608,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var24 string
 			templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.ResolveAttributeValue(photoAlt(d.Row.Offer.Title, i))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 289, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 308, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var24)
 			if templ_7745c5c3_Err != nil {
@@ -630,7 +631,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var25 string
 			templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue("Remove " + photoAlt(d.Row.Offer.Title, i))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 304, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 323, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 			if templ_7745c5c3_Err != nil {
@@ -643,7 +644,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var26 string
 			templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue("@delete('/photos/" + p.ID + "?offer=" + d.Row.Offer.ID + "')")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 305, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 324, Col: 85}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 			if templ_7745c5c3_Err != nil {
@@ -661,7 +662,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 360, Col: 95}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 379, Col: 95}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 		if templ_7745c5c3_Err != nil {
@@ -689,7 +690,7 @@ func OfferPhotosCard(d OfferDetail) templ.Component {
 				var templ_7745c5c3_Var28 string
 				templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(p.PublicURL(d.PublicBase))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 374, Col: 58}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 393, Col: 58}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 				if templ_7745c5c3_Err != nil {
@@ -755,7 +756,7 @@ func offerLocationCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var30 string
 			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(l.ID)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 405, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 424, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 			if templ_7745c5c3_Err != nil {
@@ -768,7 +769,7 @@ func offerLocationCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var31 string
 			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(l.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 405, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 424, Col: 37}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -791,7 +792,7 @@ func offerLocationCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var32 string
 			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.Summary())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 410, Col: 47}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 429, Col: 47}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -810,7 +811,7 @@ func offerLocationCard(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Where.CustodianContact)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 413, Col: 63}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 432, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {
@@ -828,7 +829,7 @@ func offerLocationCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var34 string
 		templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/location')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 419, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 438, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 		if templ_7745c5c3_Err != nil {
@@ -875,7 +876,7 @@ func SoldDialog(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var36 string
 		templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue("{soldAmount: '', soldCurrency: " + jsString(currencyOr(d.Row.Offer.Shop, core.BaseCurrency)) + ", soldDate: " + jsString(today()) + "}")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 442, Col: 155}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 461, Col: 155}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 		if templ_7745c5c3_Err != nil {
@@ -888,7 +889,7 @@ func SoldDialog(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var37 string
 		templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(d.Row.Offer.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 451, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 470, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 		if templ_7745c5c3_Err != nil {
@@ -906,7 +907,7 @@ func SoldDialog(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var38 string
 			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 458, Col: 26}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 477, Col: 26}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 			if templ_7745c5c3_Err != nil {
@@ -919,7 +920,7 @@ func SoldDialog(d OfferDetail) templ.Component {
 			var templ_7745c5c3_Var39 string
 			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 458, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 477, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 			if templ_7745c5c3_Err != nil {
@@ -937,7 +938,7 @@ func SoldDialog(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var40 string
 		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/sold')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 475, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 494, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var40)
 		if templ_7745c5c3_Err != nil {
@@ -1021,7 +1022,7 @@ func offerMarketplaceCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var43 string
 		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue("evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 519, Col: 96}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 538, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 		if templ_7745c5c3_Err != nil {
@@ -1034,7 +1035,7 @@ func offerMarketplaceCard(d OfferDetail) templ.Component {
 		var templ_7745c5c3_Var44 string
 		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue("@post('/offers/" + d.Row.Offer.ID + "/category')")
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 529, Col: 71}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/offer_detail.templ`, Line: 548, Col: 71}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 		if templ_7745c5c3_Err != nil {

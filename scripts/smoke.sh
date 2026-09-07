@@ -343,6 +343,25 @@ curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/prices" \
 check "margin computed" "Margin 15.00 EUR" "$RUN/prices.txt"
 check "comma decimal accepted" "45.00 EUR" "$RUN/prices.txt"
 
+# ⚠ HOW MANY OF THE THING WE HOLD, ALL THE WAY TO THE MARKETPLACE.
+#
+# `quantity` has been in the schema since the first migration and BOTH exporters
+# have always written it — eBay's `*Quantity`, Shopify's `Variant Inventory Qty`
+# — but nothing in the interface ever SET it, so every offer shipped the database
+# default of 1 and a shelf of forty-two went out as one. The whole chain was
+# green the entire time, because the only broken link was the one no test drove.
+#
+# The title rides along because saving details rewrites them: a payload carrying
+# only the quantity would blank the name, which is the same class of silent write
+# the handler's empty-means-unchanged rule exists to prevent.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Vintage brass desk lamp","offerDescription":"","offerCondition":"","offerQuantity":"42"}' \
+  -o "$RUN/qty.txt"
+check "a quantity can be set at all" "Saved" "$RUN/qty.txt"
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/qty.html"
+check "and it comes back on the editor" "42" "$RUN/qty.html"
+
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/status/listed" \
   -H 'Content-Type: application/json' -d '{}' -o "$RUN/status.txt"
 check "now listed" "Listed" "$RUN/status.txt"
@@ -415,12 +434,14 @@ check "export page says how many are ready" "1 ready" "$RUN/export.html"
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv" -o "$RUN/shopify.csv"
 check "shopify header" "Variant Price" "$RUN/shopify.csv"
 check "shopify carries the shop price" "45.00" "$RUN/shopify.csv"
+check "shopify carries the QUANTITY we hold, not the default 1" ",42," "$RUN/shopify.csv"
 check "shopify carries an absolute photo URL" "$BASE/p/" "$RUN/shopify.csv"
 absent "the OWNER price never reaches the shopify export" "30.00" "$RUN/shopify.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay.csv"
 check "ebay header" "PicURL" "$RUN/ebay.csv"
 check "ebay carries the shop price" "45.00" "$RUN/ebay.csv"
+check "ebay carries the QUANTITY we hold, not the default 1" ",42," "$RUN/ebay.csv"
 absent "the OWNER price never reaches the ebay export" "30.00" "$RUN/ebay.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv?cart=$CART_ID" -o "$RUN/cart.csv"

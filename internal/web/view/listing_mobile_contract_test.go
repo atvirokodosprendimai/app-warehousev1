@@ -124,7 +124,7 @@ func TestTheStylesheetAndTheListingAgreeOnEveryCellName(t *testing.T) {
 
 	for _, class := range []string{
 		"cell-photo", "cell-item", "cell-status", "cell-where",
-		"cell-price", "cell-owner", "cell-margin", "cell-add",
+		"cell-qty", "cell-price", "cell-owner", "cell-margin", "cell-add",
 	} {
 		inHTML := strings.Contains(html, class)
 		inCSS := strings.Contains(sheet, "."+class)

@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -265,7 +266,12 @@ type offerSignals struct {
 	Location      string `json:"offerLocation"`
 	// Sku is editable since ADR-020: deleting the intake screen removed the only
 	// place a reference could be typed, so it moved to the Details card.
-	Sku          string `json:"offerSku"`
+	Sku string `json:"offerSku"`
+	// Quantity is how many of the thing we hold. It is a STRING here for the same
+	// reason every other number on this screen is: the input is `type="text"` with
+	// an inputmode, so the signal arrives as a string. A `type="number"` input
+	// would send a JSON number and fail to unmarshal into this struct.
+	Quantity     string `json:"offerQuantity"`
 	SoldAmount   string `json:"soldAmount"`
 	SoldCurrency string `json:"soldCurrency"`
 	SoldDate     string `json:"soldDate"`
@@ -300,6 +306,19 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	// value, so blanking it here would be a write nobody asked for.
 	if strings.TrimSpace(in.Sku) != "" {
 		o.SKU = strings.TrimSpace(in.Sku)
+	}
+	// ⚠ An empty quantity means "the client did not send one", never "we have none
+	// of it". Both exporters write this number — eBay's `*Quantity` and Shopify's
+	// `Variant Inventory Qty` — so silently coercing a blank to 0 would take a
+	// live listing out of stock on a marketplace because a payload omitted a field.
+	if q := strings.TrimSpace(in.Quantity); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n < 0 {
+			a.flash(w, r, "offer-flash", "error",
+				"Quantity must be a whole number, 0 or more.")
+			return
+		}
+		o.Quantity = n
 	}
 
 	if err := a.Offer.Update(r.Context(), o); err != nil {
