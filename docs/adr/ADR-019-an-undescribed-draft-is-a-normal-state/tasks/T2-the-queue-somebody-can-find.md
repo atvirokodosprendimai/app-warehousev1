@@ -8,7 +8,7 @@
 **Consumes:** `core.Offer.NeedsDescribing`, `core.OfferFilter.NeedsDescribing` (T1)
 **Data dependency:** hermetic
 **Proof map:** v1
-**Rests-on:** `the sidebar count query`, `the needs_describing query-string filter`, `the untitled row rendering`, `the intake path that creates an offer with no title`
+**Rests-on:** `the sidebar entry carrying its count`, `the needs_describing query-string filter`, `the untitled row rendering`, `the intake screen not demanding a title`
 
 ## Goal
 
@@ -88,6 +88,10 @@ request proves the route answers.
 
 To be completed by `adr-verify` during execution; each entry binds to the
 acceptance digest of the run that killed it.
+- 2026-09-07 · f788c73* · mutant killed · exit 1 · `internal/web/view/layout.templ` · an entry with no count looks identical whether three groups are waiting or none are, so nobody is told there is work to pick up · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the sidebar entry carrying its count
+- 2026-09-07 · f788c73* · mutant killed · exit 2 · `internal/web/handlers_offer.go` · the menu entry then links to an address that quietly returns every offer, so the cataloguer works from a list that is not the queue · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the needs_describing query-string filter
+- 2026-09-07 · f788c73* · mutant killed · exit 1 · `internal/web/view/offers.templ` · an untitled row then renders an empty cell, which reads as a rendering fault and gets reported as a bug rather than picked up as work · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the untitled row rendering
+- 2026-09-07 · f788c73* · mutant killed · exit 1 · `internal/web/view/screens.templ` · a required title puts the demand back on the photographer, who is holding an object they often cannot identify — which is the whole thing ADR-019 removes · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the intake screen not demanding a title
 
 ## Invariants
 
@@ -100,6 +104,7 @@ acceptance digest of the run that killed it.
 
 - A screen that renders `Offer.Title` and was not updated shows a blank. The test covers the listing; the offer editor shows an empty input, which is correct there because that is the field being filled in.
 - The sidebar count runs a second query on every page render, as the pricing count already does. Same cost, same justification, and the same warn-and-continue handling if it fails.
+- ⚠ **The COUNT QUERY in `a.page` carries no killed mutant, and `Rests-on:` deliberately does not claim it.** It was declared as "the sidebar count query" in the first draft of this task, and that was wrong: every test here injects `Page.NeedsDescribing` directly, so they prove the count is RENDERED and observe nothing about where the number came from. Setting it to a constant would leave all of them green. What is declared instead is `the sidebar entry carrying its count`, which is exactly what they do prove. The query itself is one line mirroring the pricing count immediately above it, with the same warn-and-continue handling; a test that could see it would have to drive a real request and read a number out of the chrome, which is a browser-shaped assertion this repository does not yet have (`docs/adr/BACKLOG.md`). Stated rather than papered over with a mutant that would really be proving the renderer again.
 
 ## Stop Condition
 
@@ -116,3 +121,8 @@ this task into a workflow feature.
 ## Verification Log
 
 To be completed by `adr-verify` during execution.
+- 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:14071
+- 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:13719
+- 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:12671
+- 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:13965
+- 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:13812

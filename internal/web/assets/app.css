@@ -606,6 +606,11 @@ tbody tr:hover { background: var(--surface-2); }
   .cols { grid-template-columns: 1fr 1fr; }
 }
 
+/* An untitled offer is a normal state (ADR-019), and it must not look like a
+   value that failed to render. Muted and italic reads as "not yet"; an empty
+   cell reads as a bug and gets reported as one. */
+.row-title.untitled { color: var(--text-faint); font-style: italic; }
+
 .money-row { display: grid; grid-template-columns: 1fr 96px; gap: 8px; }
 
 /* ---------- messages ---------- */

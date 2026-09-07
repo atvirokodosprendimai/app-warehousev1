@@ -20,7 +20,7 @@ file, the task file wins and the README must be regenerated.
 | ID | Title | Status | Covers | Acceptance |
 |----|-------|--------|--------|------------|
 | T1 | A draft needs no title, and publication still refuses one without | done | — | `go test ./internal/core/ ./internal/offer/ ./internal/cart/ ./internal/store/` |
-| T2 | The undescribed groups are a queue somebody can find | pending | — | `go test ./internal/web/view/ && scripts/smoke.sh` |
+| T2 | The undescribed groups are a queue somebody can find | done | — | `go test ./internal/web/view/ && scripts/smoke.sh` |
 
 Status: `pending` | `partial` | `blocked` | `done`.
 

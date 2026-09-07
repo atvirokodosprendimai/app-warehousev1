@@ -56,8 +56,22 @@ templ offerRow(r OfferRow, showOwner bool, addToCart bool) {
 			}
 		</td>
 		<td>
-			<a class="row-title" href={ templ.SafeURL("/offers/" + r.Offer.ID) }>{ r.Offer.Title }</a>
-			<div class="row-sub code">{ r.Offer.SKU }</div>
+			<!--
+			  An untitled offer is a normal state since ADR-019: one person
+			  photographs a thing, another names it later. Rendered as an empty cell
+			  it reads as a RENDERING FAULT and gets reported as one, so it carries
+			  the word instead — and the photograph count beside the reference,
+			  because with no title those two are all a cataloguer has to tell one
+			  waiting group from another.
+			-->
+			if r.Offer.Title == "" {
+				<a class="row-title untitled" href={ templ.SafeURL("/offers/" + r.Offer.ID) }>Untitled</a>
+				<div class="row-sub code">{ r.Offer.SKU }</div>
+				<div class="row-sub faint">{ r.PhotoCountText() }</div>
+			} else {
+				<a class="row-title" href={ templ.SafeURL("/offers/" + r.Offer.ID) }>{ r.Offer.Title }</a>
+				<div class="row-sub code">{ r.Offer.SKU }</div>
+			}
 		</td>
 		<td>
 			@Badge(r.Offer.Status)
@@ -170,11 +184,12 @@ templ OffersScreen(l OfferList) {
 					</div>
 				</div>
 				<div class="toolbar" role="group" aria-label="Filter by status">
-					@filterChip("/offers", "All", !l.Filter.NeedsPricing && len(l.Filter.Status) == 0)
+					@filterChip("/offers", "All", !l.Filter.NeedsPricing && !l.Filter.NeedsDescribing && len(l.Filter.Status) == 0)
 					for _, s := range core.Statuses() {
 						@filterChip(statusHref(s), s.Label(), l.StatusActive(s))
 					}
 					@filterChip("/offers?needs_pricing=1", "Needs pricing", l.Filter.NeedsPricing)
+					@filterChip("/offers?needs_describing=1", "Needs describing", l.Filter.NeedsDescribing)
 				</div>
 				<div data-show="$_finding" style="display:none" class="msg msg-info">
 					<span class="spinner" aria-hidden="true"></span>
@@ -279,6 +294,7 @@ templ DashboardScreen(d Dashboard) {
 			@tile("/offers?status=listed", "Listed", itoa(d.Page.Count(core.StatusListed)), "live on marketplaces")
 			@tile("/offers?status=pending", "Pending", itoa(d.Page.Count(core.StatusPending)), "sold, not settled")
 			@tile("/offers?needs_pricing=1", "Awaiting pricing", itoa(d.Page.NeedsPricing), "photographed, not priced")
+			@tile("/offers?needs_describing=1", "Needs describing", itoa(d.Page.NeedsDescribing), "photographed, not named")
 			@tile("/offers?status=sold", "Sold", itoa(d.Page.Count(core.StatusSold)), "all time")
 		</div>
 		<div class="tiles">

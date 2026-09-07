@@ -36,6 +36,11 @@ type Page struct {
 	Counts map[core.Status]int
 	// NeedsPricing is how many drafts are still waiting on the research step.
 	NeedsPricing int
+	// NeedsDescribing is how many photograph groups are still waiting on the
+	// cataloguing step — one person photographed them, nobody has named them yet
+	// (ADR-019). It is the hand-off signal between the two, so it is carried on
+	// every page rather than only on the queue.
+	NeedsDescribing int
 	// InboxOpen is how many staff submissions are still waiting on a decision.
 	// It drives the live banner, so it is carried on every page rather than only
 	// on the inbox — the whole point of the banner is to reach an administrator
@@ -139,6 +144,20 @@ func (r OfferRow) MarginText() string {
 	return m.String()
 }
 
+// PhotoCountText renders how many photographs a row carries.
+//
+// It exists for the describing queue, where the row has no title yet: the count
+// and the reference are then the ONLY things distinguishing one waiting item
+// from another, and the count is also what says whether the group is complete
+// enough to describe.
+func (r OfferRow) PhotoCountText() string {
+	n := len(r.Offer.Photos)
+	if n == 1 {
+		return "1 photograph"
+	}
+	return itoa(n) + " photographs"
+}
+
 // BadgeClass returns the CSS class for the offer's status badge.
 func (r OfferRow) BadgeClass() string { return "badge badge-" + string(r.Offer.Status) }
 
@@ -174,6 +193,9 @@ func (l OfferList) RowsPath() string {
 	}
 	if l.Filter.NeedsPricing {
 		q = append(q, "needs_pricing=1")
+	}
+	if l.Filter.NeedsDescribing {
+		q = append(q, "needs_describing=1")
 	}
 	if l.Filter.LocationPathPrefix != "" {
 		q = append(q, "at="+url.QueryEscape(l.Filter.LocationPathPrefix))

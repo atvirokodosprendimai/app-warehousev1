@@ -226,6 +226,66 @@ check "the editor uses the SAME one stream endpoint" "/stream?offer=$OFFER_ID" "
 curl -fsS -b "$COOKIES" "$BASE/offers?needs_pricing=1" -o "$RUN/pricing.html"
 check "unpriced draft is in the pricing queue" "Vintage brass desk lamp" "$RUN/pricing.html"
 
+# ★ ADR-019: THE TWO-PERSON INTAKE, WALKED END TO END.
+#
+# One person photographs a thing without naming it; a second person finds it in a
+# queue and names it. This is the only assertion that proves the hand-off exists
+# as an ADDRESS rather than as markup — the view tests prove the menu entry is
+# rendered, and only an HTTP request proves the route behind it answers.
+echo "== ADR-019: one person photographs, another describes =="
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
+  -H 'Content-Type: application/json' \
+  -d '{"newTitle":"","newSku":"","newLocation":""}' \
+  -o "$RUN/unnamed.txt"
+check "an offer can be created with NO title at all" "/offers/" "$RUN/unnamed.txt"
+UNNAMED_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed.txt" | head -1 | cut -d/ -f3)
+echo "  unnamed offer id: $UNNAMED_ID"
+
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing.html"
+check "the unnamed group is in the describing queue" "Untitled"    "$RUN/describing.html"
+# The reference is what is written on the box, so it has to be allocated at
+# photograph time -- otherwise the photographer has nothing to label with.
+check "and it carries a reference to label the box"  "WH000000"    "$RUN/describing.html"
+check "the menu entry M asked for is on the page"    "Needs describing" "$RUN/describing.html"
+absent "the named offer is NOT in the describing queue" "Vintage brass desk lamp" "$RUN/describing.html"
+
+# The second person's side: the offer editor is the describing screen (ADR-019
+# rejects a second one), so naming it is an ordinary save.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Enamel advertising sign","offerDescription":"chipped at one corner","offerCondition":"used"}' \
+  -o "$RUN/described.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing2.html"
+absent "once named, it LEAVES the describing queue" "Enamel advertising sign" "$RUN/describing2.html"
+curl -fsS -b "$COOKIES" "$BASE/offers/$UNNAMED_ID" -o "$RUN/described.html"
+check "and the name stuck" "Enamel advertising sign" "$RUN/described.html"
+
+# ⚠ The publication guard, over HTTP. A title is not required to CREATE and IS
+# required to LIST -- refused by the domain and, separately, by a database
+# trigger. Without this the relaxation would be indistinguishable from having
+# removed the rule.
+#
+# ⚠ THE OFFER MUST BE PRICED FIRST, and that is the whole subtlety: an offer with
+# neither a price nor a title is refused for the PRICE, because that guard is
+# checked first. Asserting on that refusal would have proved the shop-price rule
+# from ADR-004 over again and said nothing about the title. Priced-but-unnamed is
+# the only state that isolates this rule.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
+  -H 'Content-Type: application/json' \
+  -d '{"newTitle":"","newSku":"","newLocation":""}' \
+  -o "$RUN/unnamed2.txt"
+UNNAMED2_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed2.txt" | head -1 | cut -d/ -f3)
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED2_ID/prices" \
+  -H 'Content-Type: application/json' \
+  -d '{"shopAmount":"45.00","shopCurrency":"EUR","ownerAmount":"","ownerCurrency":"EUR"}' \
+  -o "$RUN/unnamed2-priced.txt"
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED2_ID/status/listed" \
+  -H 'Content-Type: application/json' -d '{}' -o "$RUN/publish-unnamed.txt"
+check "a priced but UNNAMED offer cannot be listed" "title" "$RUN/publish-unnamed.txt"
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing3.html"
+check "and it is still sitting in the describing queue" "Untitled" "$RUN/describing3.html"
+
 echo "== the upload control the BROWSER will actually use =="
 # ⚠ The curl upload below builds its own multipart body and therefore proves only
 # that the SERVER accepts one. It says nothing about whether the page can produce

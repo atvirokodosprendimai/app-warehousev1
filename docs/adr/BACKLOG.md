@@ -247,9 +247,56 @@ rather than a mystery.
 **What would make this real:** somebody being confused by it, or a page where two
 slow actions can genuinely be in flight at once.
 
+### Assigning a photograph group to a cataloguer, or locking one while it is described
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+ADR-019 makes "photographed but not yet named" a queue two people share. It gives
+that queue no ownership at all: anybody can open any group, and two cataloguers
+who both open `WH0000042` will both describe it, with the second save winning
+silently.
+
+That is tolerable at the size this is built for — a handful of people who can see
+each other. It stops being tolerable the moment the queue is worked by people in
+different places, which is exactly the arrangement ADR-005's offsite warehouses
+already permit.
+
+**What would make this real:** two people actually colliding, or the queue being
+worked by somebody the photographer cannot shout to.
+
+### Bulk-describing several photograph groups in one screen
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+Describing is done one offer at a time, through the offer editor. A cataloguer
+working a shelf of forty items pays a page load per item to type two fields.
+
+⚠ This is the same shape as "Bulk pricing of a whole batch in one screen"
+(deferred by ADR-004), and for the same reason — the queues are the same
+mechanism one field apart. If either is ever built, build the other with it
+rather than inventing a second bulk-edit surface.
+
+**What would make this real:** somebody describing a large intake and saying so.
+
+### Splitting or merging a photograph group
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+A photograph group is a draft offer, so "one thing" is decided when the shutter
+is pressed. There is no way to move a picture from one offer to another, so a
+photographer who shoots two objects into one group, or one object across two,
+leaves the cataloguer with no fix but to delete and re-photograph.
+
+`Service.RemovePhoto` and `AddPhoto` exist, so the pieces are there; what is
+missing is a move that keeps the photo id, and the id is both the public URL and
+the blob's name on disk (ADR-007), so a move must not mint a new one.
+
+**What would make this real:** it happening. It will — a person photographing
+quickly does not always know where one lot ends.
+
 ### Allegro's and Shopify's own category settings and resolution
 
-**Deferred by:** ADR-016 (marketplace configuration is data)
+**Deferred by:** ADR-016 (marketplace configuration is data), ADR-019 (an undescribed draft is a normal state)
 
 ADR-016 builds the mechanism — per-profile defaults in `settings`, per-offer
 overrides in `offer_categories` — and wires only eBay through it, because eBay is

@@ -22,7 +22,16 @@ templ IntakeScreen(locations []core.Location) {
 						data-bind:new-title
 						data-on:keydown="evt.key === 'Enter' && @post('/offers')"
 					/>
-					<span class="hint">A title is all you need now. Photographs and a price come next.</span>
+					<!--
+					  Deliberately NOT required (ADR-019). Somebody photographing a shelf is
+					  often holding a thing they cannot identify, and demanding a name first
+					  is what produces "lamp 2" — a placeholder that, unlike a placeholder
+					  PRICE, no constraint would ever stop reaching a marketplace.
+					-->
+					<span class="hint">
+						Optional. Leave it blank if you are only photographing — the item goes to
+						<strong>Needs describing</strong> so somebody can name and describe it later.
+					</span>
 				</div>
 				<div class="field">
 					<label for="n-sku">Reference</label>

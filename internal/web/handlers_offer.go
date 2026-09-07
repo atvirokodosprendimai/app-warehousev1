@@ -123,6 +123,8 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 	nav := "offers"
 	title := "Offers"
 	switch {
+	case f.NeedsDescribing:
+		nav, title = "describing", "Needs describing"
 	case f.NeedsPricing:
 		nav, title = "pricing", "Awaiting pricing"
 	case len(f.Status) == 1:
@@ -157,6 +159,7 @@ func offerFilterFrom(r *http.Request) core.OfferFilter {
 		Query:              strings.TrimSpace(q.Get("q")),
 		LocationPathPrefix: strings.TrimSpace(q.Get("at")),
 		NeedsPricing:       q.Get("needs_pricing") == "1",
+		NeedsDescribing:    q.Get("needs_describing") == "1",
 		Limit:              200,
 	}
 	for _, s := range q["status"] {

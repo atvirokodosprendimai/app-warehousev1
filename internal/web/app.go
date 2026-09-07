@@ -176,6 +176,14 @@ func (a *App) page(r *http.Request, title, nav string) view.Page {
 		p.NeedsPricing = len(pending)
 	}
 
+	// The describing queue's count, loaded exactly as the pricing one above and
+	// with the same warn-and-continue handling: a sidebar badge is not worth
+	// failing a page over.
+	unnamed, err := a.Offers.Offers(r.Context(), core.OfferFilter{NeedsDescribing: true, Limit: 1000})
+	if err == nil {
+		p.NeedsDescribing = len(unnamed)
+	}
+
 	// Every page opens exactly one SSE connection, and this is it. A screen that
 	// needs more than the shared fragments appends to this path rather than
 	// opening a second stream.
