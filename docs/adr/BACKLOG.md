@@ -196,14 +196,18 @@ asking them.
 The decision is communicated by the phone call that produced it. There is no mail
 or SMS transport in this application.
 
-### `core.Photo.OfferID` holds a submission id for submission photos
+### ~~`core.Photo.OfferID` holds a submission id for submission photos~~
 
-**Deferred by:** ADR-011 (a submission is not an offer)
+**Deferred by:** ADR-011 (a submission is not an offer) — **closed 2026-09-07.**
 
-`core.Photo` has no `SubmissionID` field, so a submission's photograph carries the
-submission id in `OfferID`. It works, it is tested, and **the field name is a
-lie**. Renaming it to something aggregate-neutral touches both packages and the
-templates. Recorded so the next reader meets it here rather than in the debugger.
+`core.Photo` has no `SubmissionID` field, so a submission's photograph carried the
+submission id in a field called `OfferID`. It worked, it was tested, and the field
+name was a lie — in the one record whose whole subject is that a submission is not
+an offer. It is `ParentID` now.
+
+⚠ Kept here because the shape recurs: `core.Submission.OfferID` is a different
+field of the same name that is TRUE, and the compiler is what told the two apart
+during the rename. A grep could not have.
 
 ## Search
 

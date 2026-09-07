@@ -39,7 +39,7 @@ func testOffer(sku string, n int) core.Offer {
 	for i := range n {
 		o.Photos = append(o.Photos, core.Photo{
 			ID:          fmt.Sprintf("photo-%s-%d", strings.ToLower(sku), i),
-			OfferID:     o.ID,
+			ParentID:    o.ID,
 			Position:    i,
 			ContentType: "image/jpeg",
 		})

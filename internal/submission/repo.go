@@ -279,7 +279,7 @@ func (r *Repo) AddSubmissionPhoto(ctx context.Context, p core.Photo) error {
 	const q = `INSERT INTO submission_photos (` + photoColumns + `)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.write.ExecContext(ctx, q,
-		p.ID, p.OfferID, p.Position, p.Filename, p.ContentType, p.ByteSize,
+		p.ID, p.ParentID, p.Position, p.Filename, p.ContentType, p.ByteSize,
 		p.SHA256, formatTime(p.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("submission: add photo: %w", err)
@@ -371,15 +371,15 @@ func (r *Repo) photosBySubmission(ctx context.Context, submissionIDs []string) (
 			p       core.Photo
 			created string
 		)
-		// OfferID receives submission_id: see [Repo.AddSubmissionPhoto].
-		if err := rows.Scan(&p.ID, &p.OfferID, &p.Position, &p.Filename,
+		// ParentID receives submission_id: see [Repo.AddSubmissionPhoto].
+		if err := rows.Scan(&p.ID, &p.ParentID, &p.Position, &p.Filename,
 			&p.ContentType, &p.ByteSize, &p.SHA256, &created); err != nil {
 			return nil, fmt.Errorf("submission: load photos: %w", err)
 		}
 		if p.CreatedAt, err = parseTime(created); err != nil {
 			return nil, err
 		}
-		out[p.OfferID] = append(out[p.OfferID], p)
+		out[p.ParentID] = append(out[p.ParentID], p)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("submission: load photos: %w", err)

@@ -235,7 +235,7 @@ func (s *Service) AddPhoto(ctx context.Context, offerID, filename, contentType s
 	sum := sha256.Sum256(data)
 	p := core.Photo{
 		ID:          uuid.NewString(),
-		OfferID:     o.ID,
+		ParentID:    o.ID,
 		Position:    nextPosition(o.Photos),
 		Filename:    filename,
 		ContentType: contentType,

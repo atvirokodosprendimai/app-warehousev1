@@ -143,7 +143,7 @@ func insertPhoto(t *testing.T, r *Repo, id, submissionID string, position int) {
 	t.Helper()
 	err := r.AddSubmissionPhoto(context.Background(), core.Photo{
 		ID:          id,
-		OfferID:     submissionID,
+		ParentID:    submissionID,
 		Position:    position,
 		Filename:    id + ".jpg",
 		ContentType: "image/jpeg",
@@ -289,7 +289,7 @@ func (f *fakeOffers) Offer(ctx context.Context, id string) (core.Offer, error) {
 			p       core.Photo
 			created string
 		)
-		if err := rows.Scan(&p.ID, &p.OfferID, &p.Position, &p.Filename, &p.ContentType,
+		if err := rows.Scan(&p.ID, &p.ParentID, &p.Position, &p.Filename, &p.ContentType,
 			&p.ByteSize, &p.SHA256, &created); err != nil {
 			return core.Offer{}, err
 		}

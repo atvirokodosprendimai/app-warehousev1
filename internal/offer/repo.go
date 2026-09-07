@@ -389,7 +389,7 @@ func (r *Repo) DeleteOffer(ctx context.Context, id string) error {
 func (r *Repo) AddPhoto(ctx context.Context, p core.Photo) error {
 	const q = `INSERT INTO offer_photos (` + photoColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.write.ExecContext(ctx, q,
-		p.ID, p.OfferID, p.Position, p.Filename, p.ContentType, p.ByteSize, p.SHA256,
+		p.ID, p.ParentID, p.Position, p.Filename, p.ContentType, p.ByteSize, p.SHA256,
 		formatTime(p.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("offer: add photo: %w", err)
@@ -519,14 +519,14 @@ func (r *Repo) photosByOffer(ctx context.Context, offerIDs []string) (map[string
 			p       core.Photo
 			created string
 		)
-		if err := rows.Scan(&p.ID, &p.OfferID, &p.Position, &p.Filename, &p.ContentType,
+		if err := rows.Scan(&p.ID, &p.ParentID, &p.Position, &p.Filename, &p.ContentType,
 			&p.ByteSize, &p.SHA256, &created); err != nil {
 			return nil, fmt.Errorf("offer: load photos: %w", err)
 		}
 		if p.CreatedAt, err = parseTime(created); err != nil {
 			return nil, err
 		}
-		out[p.OfferID] = append(out[p.OfferID], p)
+		out[p.ParentID] = append(out[p.ParentID], p)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("offer: load photos: %w", err)

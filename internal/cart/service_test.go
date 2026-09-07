@@ -165,7 +165,7 @@ func TestServiceWritesReachTheStore(t *testing.T) {
 // which.
 func TestExportSetHoldsEachUnexportableOfferWithItsOwnReason(t *testing.T) {
 	photo := func(offerID string) []core.Photo {
-		return []core.Photo{{ID: "p-" + offerID, OfferID: offerID, ContentType: "image/jpeg"}}
+		return []core.Photo{{ID: "p-" + offerID, ParentID: offerID, ContentType: "image/jpeg"}}
 	}
 	priced := core.Money{Minor: 1200, Currency: "EUR"}
 

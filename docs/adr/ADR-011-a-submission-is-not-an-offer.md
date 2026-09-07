@@ -158,4 +158,4 @@ not reference them, apart from the nullable back-pointer.
 
 ## Follow-ups
 
-- [ ] `core.Photo.OfferID` should be an aggregate-neutral name. Recorded in `docs/adr/BACKLOG.md`.
+- [x] `core.Photo.OfferID` should be an aggregate-neutral name. **Done 2026-09-07**: it is `core.Photo.ParentID`, across seventeen sites in five packages. ⚠ `core.Submission.OfferID` is a DIFFERENT field and a true one — a submission accepted onto an offer really does carry that offer's id — so it was left alone; the two are told apart by their type, not by their name, which is exactly why the rename was worth doing. The database column stays `offer_id` on `offer_photos`, which is the honest half: those rows really are an offer's.

@@ -288,8 +288,17 @@ func (o *Offer) PrimaryPhoto() Photo {
 type Photo struct {
 	// ID is the UUID that names this photo publicly.
 	ID string
-	// OfferID is the owning offer.
-	OfferID string
+	// ParentID is the offer OR SUBMISSION this photograph hangs off.
+	//
+	// ⚠ IT IS NOT ALWAYS AN OFFER, AND IT WAS CALLED OfferID UNTIL 2026-09-07.
+	// A submission's photographs are taken before anybody has decided whether an
+	// offer will exist, and `core.Photo` has no second field for them — so the
+	// submission's id travelled in a field whose name said "offer". It worked, it
+	// was tested, and the name was a lie: ADR-011's whole point is that a
+	// submission is not an offer, and the one place the two were conflated was
+	// this field. The database column is still `offer_id` on `offer_photos`,
+	// which is the honest half — those rows really are an offer's.
+	ParentID string
 	// Position orders the photos; 0 is primary.
 	Position int
 	// Filename is the operator's original name, kept for their benefit only.

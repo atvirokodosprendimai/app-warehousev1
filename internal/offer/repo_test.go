@@ -25,7 +25,7 @@ func mustAddPhoto(t *testing.T, r *Repo, id, offerID string, position int) core.
 	t.Helper()
 	p := core.Photo{
 		ID:          id,
-		OfferID:     offerID,
+		ParentID:    offerID,
 		Position:    position,
 		Filename:    id + ".jpg",
 		ContentType: "image/jpeg",
@@ -136,8 +136,8 @@ func TestOffersPutsEachPhotoOnItsOwnOfferInOrder(t *testing.T) {
 	for _, o := range got {
 		var have []string
 		for _, p := range o.Photos {
-			if p.OfferID != o.ID {
-				t.Errorf("photo %s landed on offer %s but belongs to %s", p.ID, o.ID, p.OfferID)
+			if p.ParentID != o.ID {
+				t.Errorf("photo %s landed on offer %s but belongs to %s", p.ID, o.ID, p.ParentID)
 			}
 			have = append(have, p.ID)
 		}
