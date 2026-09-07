@@ -42,7 +42,8 @@ const timeLayout = time.RFC3339
 // reused by a query that joins locations.
 const offerColumns = `o.id, o.sku, o.title, o.description, o.condition, o.status,
 	o.quantity, o.shop_minor, o.shop_currency, o.owner_minor, o.owner_currency,
-	o.sold_minor, o.sold_currency, o.sold_at, o.location_id, o.created_at, o.updated_at`
+	o.sold_minor, o.sold_currency, o.sold_at, o.location_id, o.category_id,
+	o.created_at, o.updated_at`
 
 // photoColumns is the select list for a photo row.
 const photoColumns = `id, offer_id, position, filename, content_type, byte_size, sha256, created_at`
@@ -358,12 +359,12 @@ func (r *Repo) UpdateOffer(ctx context.Context, o core.Offer) error {
 	const q = `UPDATE offers SET sku = ?, title = ?, description = ?, condition = ?,
 		status = ?, quantity = ?, shop_minor = ?, shop_currency = ?, owner_minor = ?,
 		owner_currency = ?, sold_minor = ?, sold_currency = ?, sold_at = ?,
-		location_id = ?, updated_at = ? WHERE id = ?`
+		location_id = ?, category_id = ?, updated_at = ? WHERE id = ?`
 	res, err := r.write.ExecContext(ctx, q,
 		o.SKU, o.Title, o.Description, o.Condition, string(o.Status), o.Quantity,
 		o.Shop.Minor, o.Shop.Currency, o.Owner.Minor, o.Owner.Currency,
 		o.Sold.Minor, o.Sold.Currency, nullTime(o.SoldAt), nullString(o.LocationID),
-		formatTime(o.UpdatedAt), o.ID)
+		nullString(o.CategoryID), formatTime(o.UpdatedAt), o.ID)
 	if err != nil {
 		return writeErr("update offer", o.SKU, err)
 	}
@@ -547,17 +548,24 @@ func scanOffer(sc rowScanner) (core.Offer, error) {
 		status     string
 		soldAt     sql.NullString
 		locationID sql.NullString
+		categoryID sql.NullString
 		created    string
 		updated    string
 	)
 	err := sc.Scan(&o.ID, &o.SKU, &o.Title, &o.Description, &o.Condition, &status,
 		&o.Quantity, &o.Shop.Minor, &o.Shop.Currency, &o.Owner.Minor, &o.Owner.Currency,
-		&o.Sold.Minor, &o.Sold.Currency, &soldAt, &locationID, &created, &updated)
+		&o.Sold.Minor, &o.Sold.Currency, &soldAt, &locationID, &categoryID, &created, &updated)
 	if err != nil {
 		return core.Offer{}, err
 	}
 	o.Status = core.Status(status)
 	o.LocationID = locationID.String
+	// ⚠ CategoryID is what the thing IS (ADR-021); o.Categories, loaded by
+	// categoriesByOffer, is where to LIST it per marketplace (ADR-016). Both are
+	// read here because each is one column or one row. The FIELDS an offer's
+	// category asks are NOT, because resolving them is an ancestor walk, and
+	// paying for one per row on a listing that renders none would be waste.
+	o.CategoryID = categoryID.String
 	if o.CreatedAt, err = parseTime(created); err != nil {
 		return core.Offer{}, err
 	}

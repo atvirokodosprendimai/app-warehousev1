@@ -110,6 +110,63 @@ type LocationStore interface {
 	LocationWriter
 }
 
+// TaxonomyReader loads the operator's tree of what things ARE, and the questions
+// each node asks (ADR-021).
+//
+// ⚠ Nothing here touches [Offer.Categories], which is the per-marketplace
+// category and belongs to OfferWriter.SetCategory. The two are different things
+// wearing one word.
+type TaxonomyReader interface {
+	// Category returns one node, or ErrNotFound.
+	Category(ctx context.Context, id string) (Category, error)
+	// CategoryChildren returns the direct children of a node; an empty parentID
+	// returns the roots.
+	CategoryChildren(ctx context.Context, parentID string) ([]Category, error)
+	// CategoryAncestors returns the chain from the root down to, but excluding,
+	// id — the walk field inheritance is resolved along.
+	CategoryAncestors(ctx context.Context, id string) ([]Category, error)
+	// AllCategories returns every node ordered by path, for a picker. Path order
+	// is tree order, so the result renders as an indented tree unsorted.
+	AllCategories(ctx context.Context) ([]Category, error)
+	// OwnFields returns the fields defined ON a node, without its ancestors'.
+	// It is what an editing screen shows as "this level's questions".
+	OwnFields(ctx context.Context, categoryID string) ([]CategoryField, error)
+	// ResolvedFields returns the fields a node asks INCLUDING every ancestor's,
+	// ordered root first and by position within each level — the order a person
+	// thinks in, general before specific.
+	ResolvedFields(ctx context.Context, categoryID string) ([]CategoryField, error)
+	// OfferFields returns ResolvedFields for the offer's category with this
+	// offer's answers filled in. An offer with no category gets none.
+	OfferFields(ctx context.Context, offerID, categoryID string) ([]OfferField, error)
+	// CountFieldValues reports how many stored answers a field has, so deleting
+	// it can say what it will take with it before it does.
+	CountFieldValues(ctx context.Context, fieldID string) (int, error)
+}
+
+// TaxonomyWriter mutates the tree, its fields, and the answers given to them.
+type TaxonomyWriter interface {
+	CreateCategory(ctx context.Context, c Category) error
+	UpdateCategory(ctx context.Context, c Category) error
+	// DeleteCategory removes a node. It must refuse a node that still has
+	// children, because the database's RESTRICT does not say which reference
+	// held it.
+	DeleteCategory(ctx context.Context, id string) error
+	CreateField(ctx context.Context, f CategoryField) error
+	UpdateField(ctx context.Context, f CategoryField) error
+	// DeleteField removes a question AND, by cascade, every answer to it.
+	DeleteField(ctx context.Context, id string) error
+	// SetFieldValue stores one answer, keyed by FIELD ID so renaming the field
+	// cannot orphan it. An empty value deletes the row rather than storing a
+	// blank, so "never answered" and "answered with nothing" stay one state.
+	SetFieldValue(ctx context.Context, offerID, fieldID, value string) error
+}
+
+// TaxonomyStore is both halves.
+type TaxonomyStore interface {
+	TaxonomyReader
+	TaxonomyWriter
+}
+
 // UserReader loads accounts.
 type UserReader interface {
 	// User returns one account by id, or ErrNotFound.

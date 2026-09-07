@@ -88,6 +88,11 @@ scratch by the real migration set (ADR-013) rather than by a test fixture.
 
 To be completed by `adr-verify` during execution; each entry binds to the
 acceptance digest of the run that killed it.
+- 2026-09-07 · 922b941* · mutant killed · exit 1 · `internal/taxonomy/repo.go` · inheritance resolves LEAF-first, so an operator filing a turbocharger meets the turbo questions before the general car ones — the order the parent ADR chose deliberately, reversed, with every field still present so nothing looks missing · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · covers:fields inherit from every ancestor root-first
+- 2026-09-07 · 922b941* · mutant killed · exit 1 · `internal/taxonomy/repo.go` · the descendant rewrite matches the old path with LIKE instead of substr, so a node whose code contains an underscore re-addresses an unrelated sibling subtree — "_" is a LIKE wildcard, "A_B" is a legal code, and every path it silently rewrites points at a node that is not there · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · covers:a subtree move rewrites descendant paths by offset
+- 2026-09-07 · 922b941* · mutant killed · exit 1 · `migrations/00009_categories.sql` · the path index is dropped and only UNIQUE(parent_id, code) is left, which is INERT at the root because SQL treats every NULL parent as distinct — so two roots called CAR both insert, two different trees answer to one address, and the pasted path that used to resolve to exactly one node now resolves to either · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · covers:a duplicate root is refused
+- 2026-09-07 · 922b941* · mutant killed · exit 1 · `internal/taxonomy/repo.go` · answers are looked up by the field CODE rather than its id, so renaming a question silently orphans every answer already given to it — the offer still renders, the question is still asked, and what somebody typed is simply gone with no error anywhere · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · covers:a value is keyed by field id
+- 2026-09-07 · 922b941* · mutant killed · exit 1 · `migrations/00009_categories.sql` · answers no longer follow their question out of the database, so deleting a field is refused by a bare FOREIGN KEY error the operator cannot act on — and were it not refused, answers would outlive the question that gives them meaning, which is a value nothing can interpret · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · covers:deleting a field takes its values with it
 
 ## Invariants
 
@@ -118,3 +123,9 @@ wrong rather than merely subtle.
 ## Verification Log
 
 To be completed by `adr-verify` during execution.
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:12837
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:13594
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:13848
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:13457
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:13699
+- 2026-09-07 · 922b941* · exit 0 · `set -o pipefail …` · acceptance-sha256:757c4afb164313e8abb6675cdbf641ee0e893afef181fde8d8e53d81cfbfc190 · ms:13862

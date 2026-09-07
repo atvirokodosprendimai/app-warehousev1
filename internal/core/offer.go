@@ -133,7 +133,28 @@ type Offer struct {
 	// The values are not interchangeable between profiles. eBay's is a number
 	// from its own taxonomy; Allegro's is a category NAME. That is why this is a
 	// map keyed by profile rather than one field.
+	//
+	// ⚠ NOT to be confused with CategoryID below. This says WHERE TO LIST the
+	// item; CategoryID says WHAT THE ITEM IS.
 	Categories map[string]string
+	// CategoryID is the node in the operator's own tree that says what this thing
+	// IS — "Car parts / Engine / Turbocharger" (ADR-021). Empty is the ordinary
+	// case and always permitted: a category is never demanded at intake, for the
+	// same reason a price and a title are not.
+	//
+	// ⚠ NOT to be confused with Categories above. That is per-marketplace and
+	// comes from the marketplace's taxonomy; this is the operator's own
+	// vocabulary. BACKLOG.md carries the rename that would end the collision.
+	CategoryID string
+	// Fields are the questions this offer's category asks — its own and every
+	// ancestor's, root first — together with the answers given.
+	//
+	// ⚠ A READ MODEL, filled in by the caller, exactly as Categories is. It is
+	// loaded on the whole-offer read and left EMPTY on list reads, where an
+	// ancestor walk per row would be paid for nothing. An empty slice therefore
+	// means "not loaded" and "no fields" indistinguishably; every consumer reads
+	// whole offers for that reason.
+	Fields []OfferField
 	// CreatedAt and UpdatedAt are UTC timestamps.
 	CreatedAt time.Time
 	UpdatedAt time.Time

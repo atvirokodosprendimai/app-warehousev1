@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
+	"github.com/pressly/goose/v3"
 )
 
 // TestMigrateIsIdempotent runs the migrations twice: a start-up that re-runs
@@ -165,5 +166,63 @@ func TestSchemaCascadesPhotosWithTheirOffer(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("%d photo row(s) outlived their offer", n)
+	}
+}
+
+// TestTheCategoriesMigrationGoesDownAndUpAgain exercises ONE down migration:
+// 00009, the one this change adds.
+//
+// ⚠ THIS REPOSITORY HAD NEVER RUN A DOWN MIGRATION when this test was written —
+// `BACKLOG.md` names it as one of the three gaps that matter, and an untested
+// down is not a rollback, it is a paragraph of SQL nobody has compiled. The
+// scope is deliberately this migration and not the corpus: proving 00009
+// reverses is in scope for the change that adds it, and proving 00001..00008 do
+// is its own piece of work, still on the backlog.
+//
+// It matters here beyond diligence. 00009 both CREATES tables and ALTERs an
+// existing one, and with foreign keys enabled the order of the down steps is
+// load-bearing: `offers.category_id` references `categories`, so the column has
+// to go first or the DROP is refused.
+func TestTheCategoriesMigrationGoesDownAndUpAgain(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if _, err := db.Write.Exec(`SELECT 1 FROM categories LIMIT 1`); err != nil {
+		t.Fatalf("categories is absent after migrating up: %v", err)
+	}
+
+	goose.SetBaseFS(migrations.FS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		t.Fatalf("dialect: %v", err)
+	}
+	goose.SetLogger(goose.NopLogger())
+
+	if err := goose.Down(db.Write, "."); err != nil {
+		t.Fatalf("down: %v — the rollback this migration documents does not run", err)
+	}
+	for _, table := range []string{"categories", "category_fields", "offer_field_values"} {
+		if _, err := db.Write.Exec(`SELECT 1 FROM ` + table + ` LIMIT 1`); err == nil {
+			t.Errorf("%s survived the down migration", table)
+		}
+	}
+	// The column has to be gone too, or a second up would fail on a duplicate.
+	if _, err := db.Write.Exec(`SELECT category_id FROM offers LIMIT 1`); err == nil {
+		t.Error("offers.category_id survived the down migration; the next up would " +
+			"fail on a duplicate column name")
+	}
+
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("re-migrate after down: %v — a down that cannot be followed by an up "+
+			"is not a rollback, it is a one-way trip", err)
+	}
+	if _, err := db.Write.Exec(`SELECT 1 FROM categories LIMIT 1`); err != nil {
+		t.Fatalf("categories is absent after migrating up again: %v", err)
 	}
 }
