@@ -43,7 +43,7 @@ templ OfferScreen(d OfferDetail) {
 			<div class="stack">
 				@OfferPhotosCard(d)
 				@offerDetailsCard(d)
-				@offerFieldsCard(d)
+				@OfferFieldsCard(d)
 				@offerPricingCard(d)
 			</div>
 			<div class="stack">
@@ -104,7 +104,32 @@ func fieldSignalSeed(d OfferDetail) string {
 	return out
 }
 
-// offerFieldsCard asks whatever this offer's category asks.
+// FieldSignalValues is the same seed as fieldSignalSeed, keyed by signal name so
+// it can be sent over SSE rather than written into the page.
+//
+// It exists because the questions card can APPEAR after the page has loaded: an
+// offer filed under a category mid-session gets controls whose signals were
+// never seeded, and an input bound to a signal that does not exist renders blank
+// however right its markup is. The stream sends these if-missing, which seeds a
+// card that has just arrived without overwriting what somebody is typing into
+// one that was already there.
+//
+// ⚠ IT MUST AGREE WITH fieldSignalSeed ON THE BOOL RULE — a yes/no is a real
+// boolean by both routes, never a string — and TestTheTwoSignalSeedsAgree fails
+// if the two ever drift apart.
+func FieldSignalValues(d OfferDetail) map[string]any {
+	out := make(map[string]any, len(d.Fields))
+	for _, f := range d.Fields {
+		if f.Kind == core.FieldBool {
+			out[FieldSignal(f.ID)] = f.Bool()
+			continue
+		}
+		out[FieldSignal(f.ID)] = f.Value
+	}
+	return out
+}
+
+// OfferFieldsCard asks whatever this offer's category asks.
 //
 // ⚠ IT KNOWS NO FIELD NAMES. Everything here comes from the resolved list the
 // handler loaded, which is the point of ADR-021: the operator defines the
@@ -115,41 +140,54 @@ func fieldSignalSeed(d OfferDetail) string {
 // The card sits after Photographs and before Status on purpose. ADR-020 put the
 // camera first and the publish decision last, and this is neither — it is
 // description, so it belongs beside Details.
-templ offerFieldsCard(d OfferDetail) {
-	if len(d.Fields) > 0 {
-		<div class="card">
-			<div class="card-head">
-				<h2>Details for this category</h2>
-			</div>
-			<div class="card-body stack">
-				for _, g := range d.FieldsByLevel() {
-					<div class="field-group">
-						<!--
-						  The level a question came from, shown because an operator who
-						  did not define it here should be able to see WHY they are being
-						  asked and where to go to change it.
-						-->
-						<h3 class="field-group-head">{ g.Leaf() }</h3>
-						for _, f := range g.Fields {
-							@offerField(f)
-						}
+//
+// ⚠ THE WRAPPER IS ALWAYS RENDERED; THE CARD INSIDE IT IS NOT. Filing an offer
+// under a category is what brings these questions into existence, so the card
+// has to be able to APPEAR on a page that was loaded without one — and an SSE
+// patch can only replace an element that is already in the document. An offer
+// with no category therefore renders an empty <div id="offer-fields">: nothing
+// to look at, and a target for the stream to write into.
+//
+// M found this by filing an offer and being asked nothing. Every Go test passed,
+// smoke passed and the browser walk passed, because the walk reloaded the page
+// immediately after saving — which is the one step an operator does not take.
+templ OfferFieldsCard(d OfferDetail) {
+	<div id="offer-fields">
+		if len(d.Fields) > 0 {
+			<div class="card">
+				<div class="card-head">
+					<h2>Details for this category</h2>
+				</div>
+				<div class="card-body stack">
+					for _, g := range d.FieldsByLevel() {
+						<div class="field-group">
+							<!--
+							  The level a question came from, shown because an operator who
+							  did not define it here should be able to see WHY they are being
+							  asked and where to go to change it.
+							-->
+							<h3 class="field-group-head">{ g.Leaf() }</h3>
+							for _, f := range g.Fields {
+								@offerField(f)
+							}
+						</div>
+					}
+					<div>
+						<button
+							class="btn btn-primary"
+							type="button"
+							data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/fields')" }
+							data-indicator:_busy
+							data-attr:disabled="$_busy"
+						>
+							<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+							<span>Save these details</span>
+						</button>
 					</div>
-				}
-				<div>
-					<button
-						class="btn btn-primary"
-						type="button"
-						data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/fields')" }
-						data-indicator:_busy
-						data-attr:disabled="$_busy"
-					>
-						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
-						<span>Save these details</span>
-					</button>
 				</div>
 			</div>
-		</div>
-	}
+		}
+	</div>
 }
 
 // offerField renders one question's control.
@@ -231,7 +269,19 @@ templ offerDetailsCard(d OfferDetail) {
 				  `selected` attribute beside it would be a second source of truth
 				  that disagrees the moment the signal changes.
 				-->
-				<select id="o-category" class="select" data-bind:offer-category>
+				<!--
+				  IT APPLIES ON CHANGE, unlike every other control in this card.
+				  Choosing a category is not describing the thing — it decides which
+				  questions the page asks next, and those arrive from the server over
+				  the stream. Waiting for Save details would mean choosing a category
+				  and being shown nothing, which is exactly what M reported.
+				-->
+				<select
+					id="o-category"
+					class="select"
+					data-bind:offer-category
+					data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "')" }
+				>
 					<option value="">— not filed —</option>
 					for _, c := range d.Categories {
 						<option value={ c.ID }>{ c.Path } · { c.Name }</option>

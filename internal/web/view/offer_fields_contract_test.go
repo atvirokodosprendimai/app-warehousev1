@@ -206,6 +206,64 @@ func TestAnUncategorisedOfferIsAskedNothing(t *testing.T) {
 		t.Error("the picker offers no way back to no category; un-filing something " +
 			"is a legitimate edit and there is no other control for it")
 	}
+
+	// ⚠ THE WRAPPER IS STILL THERE, AND THAT IS THE WHOLE OF THE DEFECT M
+	// REPORTED. An SSE patch replaces an element that is already in the document,
+	// so a page rendering NOTHING for an uncategorised offer can never be sent the
+	// questions when one is chosen — the operator files the offer and is asked
+	// nothing until they reload the page by hand.
+	if !strings.Contains(html, `id="offer-fields"`) {
+		t.Error("an uncategorised offer renders no patch target for the questions " +
+			"card, so choosing a category cannot make the questions appear")
+	}
+}
+
+// TestChoosingACategoryAsksItsQuestionsWithoutASecondSave pins the live half of
+// the same defect.
+//
+// ⚠ ADR-021-T3's STEP S6 ALREADY CLAIMED THIS — "re-render the card when the
+// category changes so the questions follow the filing" — and nothing asserted
+// it. The picker wrote its value into a signal and stopped; the questions
+// arrived on the next full page load. Same shape as ADR-020-T1's Reachability
+// rung 3, and found the same way: by M doing the job.
+func TestChoosingACategoryAsksItsQuestionsWithoutASecondSave(t *testing.T) {
+	d := fieldsDetail(field("f-vin", "CAR", "VIN", core.FieldText))
+	html := renderString(t, OfferScreen(d))
+
+	// Dynamic attribute, so templ escapes the apostrophes.
+	want := `data-on:change="@post(&#39;/offers/` + d.Row.Offer.ID + `&#39;)"`
+	if !strings.Contains(html, want) {
+		t.Error("the category picker does not apply when it changes, so choosing a " +
+			"category shows the operator nothing until they save the card and " +
+			"reload the page by hand")
+	}
+}
+
+// TestTheTwoSignalSeedsAgree pins the rule the page and the stream have to share.
+//
+// The page seeds its signals as a JS object literal; the stream sends them as
+// JSON when the card appears mid-session. A yes/no has to be a real boolean by
+// BOTH routes — a checkbox bound to the string "" renders TICKED — or the same
+// unanswered question answers itself depending on how it reached the page.
+func TestTheTwoSignalSeedsAgree(t *testing.T) {
+	yes := field("f-oem", "CAR", "Original part", core.FieldBool)
+	text := field("f-vin", "CAR", "VIN", core.FieldText)
+	text.Value = "WVW123"
+	d := fieldsDetail(yes, text)
+
+	if seed := offerSignals(d); !strings.Contains(seed, FieldSignal("f-oem")+": false") {
+		t.Errorf("the page seed does not carry an unanswered yes/no as a JS boolean: %s", seed)
+	}
+
+	sent := FieldSignalValues(d)
+	if got, ok := sent[FieldSignal("f-oem")].(bool); !ok || got {
+		t.Errorf("the stream sends an unanswered yes/no as %#v, not the boolean false "+
+			"the page seeds; a checkbox bound to a string renders ticked",
+			sent[FieldSignal("f-oem")])
+	}
+	if got := sent[FieldSignal("f-vin")]; got != "WVW123" {
+		t.Errorf("the stream lost a stored text answer: %#v", got)
+	}
 }
 
 // TestFieldSignalIsLowercaseAndIdentifierSafe pins the naming rule that has

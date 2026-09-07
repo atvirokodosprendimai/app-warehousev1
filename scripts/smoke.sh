@@ -275,6 +275,15 @@ check "the child screen shows its own question" "Engine code" "$RUN/cat-engine.h
 check "and the question INHERITED from its parent" "VIN" "$RUN/cat-engine.html"
 check "labelled with the level it came from" "Inherited" "$RUN/cat-engine.html"
 
+
+# ⚠ THE PATCH TARGET, BEFORE THERE IS ANYTHING TO ASK. The questions card arrives
+# over SSE the moment an offer is filed, and a patch can only replace an element
+# that is already in the document — so an offer with no category has to render an
+# empty wrapper. Without it, choosing a category showed the operator nothing until
+# they reloaded the page by hand, which is how M found it.
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-unfiled.html"
+check "an unfiled offer carries the questions card's patch target" 'id="offer-fields"' "$RUN/offer-unfiled.html"
+absent "and asks nothing while it has no category" "Details for this category" "$RUN/offer-unfiled.html"
 # File the offer under the deeper node, through the ordinary Details save.
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
   -H 'Content-Type: application/json' \

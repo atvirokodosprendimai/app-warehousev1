@@ -86,6 +86,17 @@ func (a *App) GetStream(w http.ResponseWriter, r *http.Request) {
 			_ = sse.PatchElementTempl(view.OfferPhotosCard(d))
 			_ = sse.PatchElementTempl(view.MarginLine(d.Row))
 			_ = sse.PatchElementTempl(view.OfferCartsCard(d))
+			// ⚠ THE QUESTIONS CARD TRAVELS WITH ITS SIGNALS. Filing an offer under a
+			// category makes a set of controls appear that were not on the page when
+			// it loaded, so nothing has seeded their signals — and an input bound to
+			// a signal that does not exist renders blank however right its markup is,
+			// which reads as "the answers I just saved are gone". If-missing is what
+			// makes this safe to send on EVERY offer event: it seeds a card that has
+			// just arrived and leaves a half-typed one alone.
+			_ = sse.PatchElementTempl(view.OfferFieldsCard(d))
+			if sig := view.FieldSignalValues(d); len(sig) > 0 {
+				_ = sse.MarshalAndPatchSignalsIfMissing(sig)
+			}
 
 		case <-ticker.C:
 			// An idle connection through a proxy is dropped without either end

@@ -981,6 +981,14 @@ tbody tr:hover { background: var(--surface-2); }
   color: var(--text-faint);
 }
 
+/* The questions card is patched in over SSE the moment an offer is filed under a
+   category, so its wrapper has to be in the document even while there is nothing
+   to ask. `display: contents` is what keeps that free: the wrapper generates no
+   box, so the card inside takes part in .stack's own gap and an empty wrapper
+   contributes no gap of its own, rather than leaving a 14px hole between Details
+   and Pricing on every offer that has no category. */
+#offer-fields { display: contents; }
+
 /* Controls that belong on one line and may wrap on a phone rather than shrink —
    the same choice the top bar makes, and for the same reason: a 44px target and
    a full label are worth more than one unbroken row. */
