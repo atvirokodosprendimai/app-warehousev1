@@ -50,9 +50,6 @@ category was chosen. ⚠ The two walks had ALREADY each caught a real defect whi
 living in a scratch directory that is deleted with the session that wrote it — a
 check that does not survive its author is a demonstration, not a check.
 
-
-### Closed, and kept here so nobody rediscovers them
-
 **Every check runs on every push** — closed 2026-09-07 by
 `.github/workflows/checks.yml`. The repository had no CI at all while GitHub's
 default-setup CodeQL reported green, which put a tick against commits whose
@@ -443,16 +440,20 @@ strings — which the field carries no room for today.
 
 **What would make this real:** a second operator who does not read English.
 
-### The taxonomy's refusals reach the operator
+### ~~The taxonomy's refusals reach the operator~~
 
-**Deferred by:** ADR-021 T5 (a trade arrives in one press)
+**Deferred by:** ADR-021 T5 (a trade arrives in one press) — **closed 2026-09-07.**
 
-`App.userMessage` maps the sentinels of `auth`, `offer`, `location` and `export`
-and NOT those of `taxonomy`, so a duplicate category code renders as "Something
-went wrong. The details are in the server log." and is logged as an unexpected
-error. T5 answers its own duplicate-root case in the handler; the hand-typed path
-that T2 shipped still falls through.
+`App.userMessage` mapped the sentinels of `auth`, `offer`, `location` and `export`
+and none of `taxonomy`, so a duplicate category code rendered as "Something went
+wrong. The details are in the server log." and was logged as an unexpected error.
+T5 answered its own duplicate-root case inside the handler; the hand-typed path
+that T2 shipped fell through to the generic one.
 
-**What would make this real:** it is four identifiers on one existing list, and
-was left out of T5 only because changing messages on handlers T5 does not touch
-is not what M asked for.
+All six taxonomy sentinels are on the list now — `ErrCodeTaken`, `ErrPathTaken`,
+`ErrFieldCodeTaken`, `ErrHasChildren`, `ErrCategoryInUse` and `ErrCycle`.
+
+⚠ Kept here because the entry itself was wrong in a way worth remembering: it
+said "four identifiers" and there were six. A count written beside the thing it
+counts is a second copy of the truth, and this one had already stopped agreeing
+before anybody acted on it.

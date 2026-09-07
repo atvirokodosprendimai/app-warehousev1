@@ -130,10 +130,10 @@ record.
 
 ## Out of Scope
 
-- Continuous integration — running these checks on every push (deferred: docs/adr/BACKLOG.md)
-- Testing a migration's *down* direction (deferred: docs/adr/BACKLOG.md)
+- Continuous integration — running these checks on every push (permanent: fact: it exists — gofmt, `go vet`, `go test ./...` and `scripts/smoke.sh` run on every push and pull request; citation: file `.github/workflows/checks.yml:35`)
+- Testing a migration's *down* direction (permanent: fact: every migration is rolled back to zero and the application tables are asserted gone; citation: file `internal/store/migrate_test.go:80`)
 - Testing against a database restored from production (permanent: boundary: there is no production deployment yet; when there is, this becomes a real question)
-- A browser-driven check of the pages (deferred: docs/adr/BACKLOG.md)
+- A browser-driven check of the pages (permanent: fact: two Playwright walks run as a second CI job and upload their screenshots as an artifact; citation: file `.github/workflows/checks.yml:81`)
 - Mutation testing across the suite (permanent: boundary: guards are mutation-checked individually where they matter — ADR-008 — rather than by a campaign this repository has no runner for)
 
 ## Risks
@@ -141,7 +141,7 @@ record.
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Somebody reintroduces a copied schema for speed | Med | High | This record; and a copied schema missing the FTS objects fails `TestSearchIndexFollowsUpdatesAndDeletes` at once |
-| **Nobody runs the checks before pushing** | **High** | **High** | **Nothing. There is no CI. This is the open gap, and the CodeQL green tick actively disguises it** |
+| Nobody runs the checks before pushing | Low | High | `.github/workflows/checks.yml` runs gofmt, vet, the suite, the smoke walk and both browser walks on every push and pull request; first green run 2026-09-07. ⚠ Read the STEPS, not the job's conclusion — a step that skips still reports success |
 | Migration time grows until tests are slow | Low | Low | Visible immediately as suite runtime |
 
 ## Rollback

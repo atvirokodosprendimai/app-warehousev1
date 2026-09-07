@@ -135,7 +135,7 @@ a retrospective record.
 
 ## Out of Scope
 
-- Any browser-driven end-to-end test (deferred: docs/adr/BACKLOG.md)
+- Any browser-driven end-to-end test (permanent: fact: it exists — two Playwright walks drive the real binary against a fresh database and run on every push; citation: file `scripts/browser.sh:53`)
 - Drag-and-drop or paste-to-upload (deferred: docs/adr/BACKLOG.md)
 - Client-side image resizing before upload (permanent: boundary: the server already refuses what a marketplace cannot render, and doing it twice adds a second place to be wrong)
 - Asserting datastar's behaviour beyond the form branch (permanent: fact: the three requirements are read verbatim from the pinned bundle and quoted beside the assertion; citation: file `internal/web/view/upload_contract_test.go:19`)

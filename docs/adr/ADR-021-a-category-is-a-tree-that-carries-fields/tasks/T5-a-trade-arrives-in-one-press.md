@@ -132,7 +132,7 @@ file.
 ## Out of Scope
 
 - Translating the templates (deferred: `docs/adr/BACKLOG.md` — the labels are English because they become CSV headers on international marketplaces; M chose this over Lithuanian on 2026-09-07)
-- Mapping taxonomy sentinels in `userMessage`, which today renders a duplicate category code as "Something went wrong" on the hand-typed path too (deferred: `docs/adr/BACKLOG.md`)
+- Mapping taxonomy sentinels in `userMessage` (permanent: fact: done the same day, in the backlog sweep — all six are mapped, so a duplicate category code says so on the hand-typed path too rather than "Something went wrong"; citation: file `internal/web/app.go:357`)
 - Editing a template, or re-applying one over an existing tree (permanent: boundary: a template's output is the operator's data from the moment it lands, so the thing to edit is the tree, not the template that seeded it)
 
 ## Verification Log
