@@ -43,6 +43,7 @@ templ OfferScreen(d OfferDetail) {
 			<div class="stack">
 				@OfferPhotosCard(d)
 				@offerDetailsCard(d)
+				@offerFieldsCard(d)
 				@offerPricingCard(d)
 			</div>
 			<div class="stack">
@@ -73,8 +74,123 @@ func offerSignals(d OfferDetail) string {
 		"offerLocation: " + jsString(o.LocationID) + ", " +
 		"offerSku: " + jsString(o.SKU) + ", " +
 		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
-		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
+		"offerEbayCategory: " + jsString(o.Categories["ebay"]) + ", " +
+		"offerCategory: " + jsString(o.CategoryID) +
+		fieldSignalSeed(d) +
 		"}"
+}
+
+// fieldSignalSeed adds one signal per custom field the offer's category asks.
+//
+// ⚠ A BOOL IS SEEDED AS A JS BOOLEAN, NOT A STRING. A checkbox bound to the
+// string "" is checked, because "" is a value datastar happily assigns and the
+// DOM coerces; seeding false is what makes an unanswered yes/no render as
+// unanswered. Every other kind is a string, which is what every other signal on
+// this screen is.
+func fieldSignalSeed(d OfferDetail) string {
+	out := ""
+	for _, f := range d.Fields {
+		out += ", " + FieldSignal(f.ID) + ": "
+		if f.Kind == core.FieldBool {
+			if f.Bool() {
+				out += "true"
+			} else {
+				out += "false"
+			}
+			continue
+		}
+		out += jsString(f.Value)
+	}
+	return out
+}
+
+// offerFieldsCard asks whatever this offer's category asks.
+//
+// ⚠ IT KNOWS NO FIELD NAMES. Everything here comes from the resolved list the
+// handler loaded, which is the point of ADR-021: the operator defines the
+// questions and this card renders them. A template that named a field would be
+// a schema per trade, shipped by us, which is the thing the record exists to
+// avoid.
+//
+// The card sits after Photographs and before Status on purpose. ADR-020 put the
+// camera first and the publish decision last, and this is neither — it is
+// description, so it belongs beside Details.
+templ offerFieldsCard(d OfferDetail) {
+	if len(d.Fields) > 0 {
+		<div class="card">
+			<div class="card-head">
+				<h2>Details for this category</h2>
+			</div>
+			<div class="card-body stack">
+				for _, g := range d.FieldsByLevel() {
+					<div class="field-group">
+						<!--
+						  The level a question came from, shown because an operator who
+						  did not define it here should be able to see WHY they are being
+						  asked and where to go to change it.
+						-->
+						<h3 class="field-group-head">{ g.Leaf() }</h3>
+						for _, f := range g.Fields {
+							@offerField(f)
+						}
+					</div>
+				}
+				<div>
+					<button
+						class="btn btn-primary"
+						type="button"
+						data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/fields')" }
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>
+						<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+						<span>Save these details</span>
+					</button>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// offerField renders one question's control.
+//
+// ⚠ THE DEFAULT BRANCH IS LOAD-BEARING, NOT TIDINESS. A kind this binary does
+// not recognise renders as a text input rather than failing the page: a row
+// written by a newer version and read by an older one should degrade to
+// something an operator can still read and type into. ADR-021 records this as a
+// Risk and this is where it is answered. Writing an unknown kind is refused
+// separately, by core.ParseFieldKind, which is what keeps the case rare.
+templ offerField(f core.OfferField) {
+	<div class="field">
+		<label for={ "cf-" + f.ID }>
+			{ f.Label }
+			if f.Required {
+				<span class="hint-inline">— usually needed</span>
+			}
+		</label>
+		switch f.Kind {
+			case core.FieldLongText:
+				<textarea id={ "cf-" + f.ID } class="textarea" { FieldBind(f)... }></textarea>
+			case core.FieldNumber:
+				<div class="row-inline">
+					<input id={ "cf-" + f.ID } class="input" type="text" inputmode="numeric" { FieldBind(f)... }/>
+					if f.Unit != "" {
+						<span class="unit">{ f.Unit }</span>
+					}
+				</div>
+			case core.FieldChoice:
+				<select id={ "cf-" + f.ID } class="select" { FieldBind(f)... }>
+					<option value="">— not set —</option>
+					for _, opt := range f.OptionList() {
+						<option value={ opt }>{ opt }</option>
+					}
+				</select>
+			case core.FieldBool:
+				<input id={ "cf-" + f.ID } type="checkbox" { FieldBind(f)... }/>
+			default:
+				<input id={ "cf-" + f.ID } class="input" type="text" { FieldBind(f)... }/>
+		}
+	</div>
 }
 
 templ offerDetailsCard(d OfferDetail) {
@@ -95,6 +211,37 @@ templ offerDetailsCard(d OfferDetail) {
 			<div class="field">
 				<label for="o-cond">Condition</label>
 				<input id="o-cond" class="input" type="text" placeholder="used — good" data-bind:offer-condition/>
+			</div>
+			<!--
+			  WHAT THE THING IS (ADR-021) — the operator's own taxonomy, not a
+			  marketplace's. ⚠ The eBay category is a DIFFERENT field on a
+			  DIFFERENT card: that one says where to list this, and it comes from
+			  eBay's taxonomy. This one says what it is, and it decides which
+			  questions the card below asks.
+
+			  Optional, and it stays optional: ADR-004 and ADR-019 both exist
+			  because demanding a value at the shelf is what makes somebody type a
+			  placeholder.
+			-->
+			<div class="field">
+				<label for="o-category">Category</label>
+				<!--
+				  No `selected` attribute, matching the location picker above: the
+				  value comes from the seeded signal through data-bind, and a
+				  `selected` attribute beside it would be a second source of truth
+				  that disagrees the moment the signal changes.
+				-->
+				<select id="o-category" class="select" data-bind:offer-category>
+					<option value="">— not filed —</option>
+					for _, c := range d.Categories {
+						<option value={ c.ID }>{ c.Path } · { c.Name }</option>
+					}
+				</select>
+				<span class="hint">
+					What kind of thing this is. Filing it here is what decides which
+					extra details you are asked for; the marketplace category is set
+					separately, under Marketplace.
+				</span>
 			</div>
 			<!--
 			  How many of the thing we hold. The column has existed since the first

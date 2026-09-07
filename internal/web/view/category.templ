@@ -1,0 +1,402 @@
+package view
+
+import "github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+
+// TaxonomyScreen is where an operator shapes their own vocabulary: the tree of
+// what things ARE, and the questions each level asks (ADR-021).
+//
+// ⚠ NOT the warehouse tree, and not a marketplace's taxonomy. `/warehouse`
+// answers "where is this"; eBay's category answers "where do we list this"; this
+// answers "what is this", and it is the only one of the three the operator owns
+// outright.
+//
+// It deliberately copies `/warehouse`'s shape — a tree on the left, the selected
+// node on the right — because somebody who has moved a shelf should not have to
+// learn a second idiom to move a category.
+templ TaxonomyScreen(t Taxonomy) {
+	<div class="stack" data-signals={ taxonomySignals(t) }>
+		<div id="cat-flash"></div>
+		@TaxonomyBody(t)
+	</div>
+}
+
+// TaxonomyBody is the part a change re-renders.
+//
+// It carries the id an SSE patch targets, and it is the WHOLE two-column body
+// rather than one card: renaming a node re-addresses every descendant, so the
+// paths listed beside the tree are all different strings afterwards.
+templ TaxonomyBody(t Taxonomy) {
+	<div id="cat-body" class="cols">
+		<div class="stack">
+			@taxonomyTreeCard(t)
+			@taxonomyNewCard(t)
+		</div>
+		<div class="stack">
+			if t.HasSelection {
+				@taxonomyNodeCard(t)
+				@taxonomyFieldsCard(t)
+				@taxonomyFieldFormCard(t)
+			} else {
+				<div class="card">
+					<div class="card-body">
+						<p class="empty">
+							Pick a category on the left to edit it, or make the first one
+							below. A category is what a thing IS — "Car parts › Engine ›
+							Turbocharger" — and the questions you attach to it are asked of
+							everything filed underneath.
+						</p>
+					</div>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+// taxonomySignals seeds the screen.
+//
+// camelCase in the literal, kebab-case in the data-bind suffix — the same
+// signal. HTML lowercases attribute names, so data-bind:catCode would bind
+// "catcode" and silently miss this seed.
+func taxonomySignals(t Taxonomy) string {
+	f := t.Editing
+	return "{" +
+		"catCode: " + jsString(t.Selected.Code) + ", " +
+		"catName: " + jsString(t.Selected.Name) + ", " +
+		"catParent: " + jsString(t.Selected.ParentID) + ", " +
+		"newCode: \"\", " +
+		"newName: \"\", " +
+		"newParent: " + jsString(t.Selected.ID) + ", " +
+		"fieldID: " + jsString(f.ID) + ", " +
+		"fieldCode: " + jsString(f.Code) + ", " +
+		"fieldLabel: " + jsString(f.Label) + ", " +
+		"fieldKind: " + jsString(kindOr(f.Kind, core.FieldText)) + ", " +
+		"fieldUnit: " + jsString(f.Unit) + ", " +
+		"fieldOptions: " + jsString(f.Options) + ", " +
+		"fieldPosition: " + jsString(itoa(f.Position)) + ", " +
+		"fieldRequired: " + boolLiteral(f.Required) + ", " +
+		"fieldExport: " + boolLiteral(f.Export) +
+		"}"
+}
+
+// kindOr defaults an empty kind, so the add form opens on something valid.
+func kindOr(k core.FieldKind, fallback core.FieldKind) string {
+	if k == "" {
+		return string(fallback)
+	}
+	return string(k)
+}
+
+// boolLiteral renders a Go bool as a JS one. ⚠ A checkbox bound to the STRING
+// "false" is checked, because a non-empty string is truthy — seeding a real
+// boolean is what makes an unticked box render unticked.
+func boolLiteral(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+templ taxonomyTreeCard(t Taxonomy) {
+	<div class="card">
+		<div class="card-head">
+			<h2>Categories</h2>
+		</div>
+		<div class="card-body">
+			if len(t.Tree) == 0 {
+				<p class="empty">
+					Nothing yet. Make a root below — "Car parts", "PC parts" — and grow it
+					as you find you need to.
+				</p>
+			} else {
+				<ul class="tree">
+					for _, c := range t.Tree {
+						<li class={ "tree-row", templ.KV("is-current", c.ID == t.Selected.ID) }>
+							<a href={ templ.SafeURL("/categories?at=" + c.ID) } class="tree-link">
+								<span class="code">{ c.Path }</span>
+								<span>{ c.Name }</span>
+							</a>
+						</li>
+					}
+				</ul>
+			}
+		</div>
+	</div>
+}
+
+templ taxonomyNewCard(t Taxonomy) {
+	<div class="card">
+		<div class="card-head">
+			<h2>New category</h2>
+		</div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="n-code">Code</label>
+				<input id="n-code" class="input code" type="text" placeholder="TURBO" data-bind:new-code/>
+				<span class="hint">
+					Short, and unique among its siblings. It becomes part of the address,
+					so it cannot contain a slash.
+				</span>
+			</div>
+			<div class="field">
+				<label for="n-name">Name</label>
+				<input id="n-name" class="input" type="text" placeholder="Turbocharger" data-bind:new-name/>
+			</div>
+			<div class="field">
+				<label for="n-parent">Inside</label>
+				<select id="n-parent" class="select" data-bind:new-parent>
+					<option value="">— a new root —</option>
+					for _, c := range t.Tree {
+						<option value={ c.ID }>{ c.Path }</option>
+					}
+				</select>
+			</div>
+			<div>
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click="@post('/categories')"
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Add category</span>
+				</button>
+			</div>
+		</div>
+	</div>
+}
+
+templ taxonomyNodeCard(t Taxonomy) {
+	<div class="card">
+		<div class="card-head">
+			<h2>{ t.Selected.Name }</h2>
+			<span class="code">{ t.Selected.Path }</span>
+		</div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="c-name">Name</label>
+				<input id="c-name" class="input" type="text" data-bind:cat-name/>
+			</div>
+			<div class="field">
+				<label for="c-code">Code</label>
+				<input id="c-code" class="input code" type="text" data-bind:cat-code/>
+				<span class="hint">
+					Changing this re-addresses everything underneath it. Nothing moves —
+					only the address changes.
+				</span>
+			</div>
+			<div class="field">
+				<label for="c-parent">Inside</label>
+				<select id="c-parent" class="select" data-bind:cat-parent>
+					<option value="">— a root —</option>
+					for _, c := range t.Tree {
+						if c.ID != t.Selected.ID {
+							<option value={ c.ID }>{ c.Path }</option>
+						}
+					}
+				</select>
+			</div>
+			<div class="row-inline">
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click={ "@post('/categories/" + t.Selected.ID + "')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					<span>Save</span>
+				</button>
+				if t.Deletable() {
+					<button
+						class="btn btn-danger"
+						type="button"
+						data-on:click={ "@post('/categories/" + t.Selected.ID + "/delete')" }
+						data-indicator:_busy
+						data-attr:disabled="$_busy"
+					>Delete</button>
+				} else {
+					<!--
+					  ON DELETE RESTRICT refuses this at the database, and the refusal is a
+					  bare FOREIGN KEY message. Saying so here instead of offering a
+					  control that errors is the difference between a rule and a bug.
+					-->
+					<span class="hint">
+						Move or delete the { itoa(t.Children) } categories inside this one
+						before deleting it.
+					</span>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ taxonomyFieldsCard(t Taxonomy) {
+	<div class="card">
+		<div class="card-head">
+			<h2>Questions</h2>
+		</div>
+		<div class="card-body stack">
+			if len(t.Inherited) > 0 {
+				<div class="stack">
+					<h3 class="field-group-head">Inherited</h3>
+					<!--
+					  Shown, and NOT editable here. An inherited question belongs to the
+					  ancestor that defined it, and editing it from a descendant would
+					  change it for every other subtree under that ancestor without
+					  saying so. The link goes to where it can be changed.
+					-->
+					<ul class="tree">
+						for _, f := range t.Inherited {
+							<li class="tree-row">
+								<span class="code">{ f.CategoryPath }</span>
+								<span>{ f.Label }</span>
+								<span class="hint">{ f.Kind.Label() }</span>
+								if f.Export {
+									<span class="tag">exported</span>
+								}
+							</li>
+						}
+					</ul>
+				</div>
+			}
+			<div class="stack">
+				<h3 class="field-group-head">Asked by this category</h3>
+				if len(t.Own) == 0 {
+					<p class="empty">
+						None yet. Anything you add here is asked of every offer filed under
+						this category or anything inside it.
+					</p>
+				} else {
+					<ul class="tree">
+						for _, f := range t.Own {
+							<li class="tree-row">
+								<a href={ templ.SafeURL("/categories?at=" + t.Selected.ID + "&field=" + f.ID) }>
+									{ f.Label }
+								</a>
+								<span class="hint">{ f.Kind.Label() }</span>
+								if f.Unit != "" {
+									<span class="hint">{ f.Unit }</span>
+								}
+								if f.Export {
+									<span class="tag">exported</span>
+								}
+								<button
+									class="btn btn-danger btn-small"
+									type="button"
+									data-on:click={ "@post('/fields/" + f.ID + "/delete')" }
+									data-indicator:_busy
+									data-attr:disabled="$_busy"
+								>
+									<!--
+									  The count is read before the delete and shown before it
+									  happens. Deleting a question deletes its answers — that is
+									  deliberate, because an answer whose question no longer
+									  exists cannot be interpreted — but a deliberate loss still
+									  has to be visible.
+									-->
+									if t.ValueCounts[f.ID] > 0 {
+										Delete ({ itoa(t.ValueCounts[f.ID]) } answers)
+									} else {
+										Delete
+									}
+								</button>
+							</li>
+						}
+					</ul>
+				}
+			</div>
+		</div>
+	</div>
+}
+
+templ taxonomyFieldFormCard(t Taxonomy) {
+	<div class="card">
+		<div class="card-head">
+			if t.Editing.ID != "" {
+				<h2>Edit “{ t.Editing.Label }”</h2>
+			} else {
+				<h2>New question</h2>
+			}
+		</div>
+		<div class="card-body stack">
+			<div class="field">
+				<label for="f-label">Label</label>
+				<input id="f-label" class="input" type="text" placeholder="Engine code" data-bind:field-label/>
+				<span class="hint">
+					⚠ This is what a marketplace sees as the column name, so renaming it
+					renames a published column. The code below is what never moves.
+				</span>
+			</div>
+			<div class="field">
+				<label for="f-code">Code</label>
+				<input id="f-code" class="input code" type="text" placeholder="engine_code" data-bind:field-code/>
+			</div>
+			<div class="field">
+				<label for="f-kind">Kind</label>
+				<select id="f-kind" class="select" data-bind:field-kind>
+					for _, k := range t.Kinds {
+						<option value={ string(k) }>{ k.Label() }</option>
+					}
+				</select>
+			</div>
+			<div class="field">
+				<label for="f-unit">Unit</label>
+				<input id="f-unit" class="input" type="text" placeholder="km" data-bind:field-unit/>
+				<span class="hint">
+					Numbers only. Kept beside the value rather than inside it, so the
+					number stays a number.
+				</span>
+			</div>
+			<div class="field">
+				<label for="f-options">Options</label>
+				<textarea id="f-options" class="textarea" placeholder="One per line" data-bind:field-options></textarea>
+				<span class="hint">Choices only, one per line.</span>
+			</div>
+			<div class="field">
+				<label for="f-position">Order</label>
+				<input id="f-position" class="input" type="text" inputmode="numeric" data-bind:field-position/>
+				<span class="hint">Lower comes first. Put the question you always answer at the top.</span>
+			</div>
+			<div class="field">
+				<label for="f-required">
+					<input id="f-required" type="checkbox" data-bind:field-required/>
+					Usually needed
+				</label>
+				<span class="hint">
+					A hint on the offer screen, never a block. Demanding a value at the
+					shelf is what makes somebody type a placeholder.
+				</span>
+			</div>
+			<div class="field">
+				<label for="f-export">
+					<input id="f-export" type="checkbox" data-bind:field-export/>
+					Send this to marketplaces
+				</label>
+				<span class="hint">
+					Off unless you say otherwise. When on, this becomes a column in the
+					CSV exports — an item specific on eBay, a plain column on Shopify.
+				</span>
+			</div>
+			<div class="row-inline">
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click={ "@post('/categories/" + t.Selected.ID + "/fields')" }
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>
+					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+					if t.Editing.ID != "" {
+						<span>Save question</span>
+					} else {
+						<span>Add question</span>
+					}
+				</button>
+				if t.Editing.ID != "" {
+					<a class="btn" href={ templ.SafeURL("/categories?at=" + t.Selected.ID) }>Cancel</a>
+				}
+			</div>
+		</div>
+	</div>
+}

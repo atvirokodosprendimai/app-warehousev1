@@ -235,6 +235,75 @@ check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
 check "the first reference is WH0000001" "WH0000001" "$RUN/offer.html"
 absent "no dated hex reference survives" "WH-2026" "$RUN/offer.html"
 
+echo "== the operator's own taxonomy, and the questions it asks (ADR-021) =="
+# ⚠ THIS IS NOT THE MARKETPLACE CATEGORY. offer_categories (ADR-016) says where
+# to LIST a thing on eBay; this tree says what the thing IS. The two are
+# exercised separately on purpose, and the export section below asserts both.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d '{"newCode":"CAR","newName":"Car parts","newParent":""}' \
+  -o "$RUN/cat-root.txt"
+check "a root category can be created" "/categories?at=" "$RUN/cat-root.txt"
+CAR_ID=$(grep -o "at=[0-9a-f-]\{36\}" "$RUN/cat-root.txt" | head -1 | cut -d= -f2)
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d "{\"newCode\":\"ENGINE\",\"newName\":\"Engine\",\"newParent\":\"$CAR_ID\"}" \
+  -o "$RUN/cat-child.txt"
+check "a child category can be created" "/categories?at=" "$RUN/cat-child.txt"
+ENGINE_ID=$(grep -o "at=[0-9a-f-]\{36\}" "$RUN/cat-child.txt" | head -1 | cut -d= -f2)
+
+# A question on the ROOT. Marked for export, so the CSV section below can prove
+# that a ticked field reaches a marketplace and an unticked one does not.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/$CAR_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d '{"fieldID":"","fieldCode":"vin","fieldLabel":"VIN","fieldKind":"text","fieldUnit":"","fieldOptions":"","fieldPosition":"0","fieldRequired":false,"fieldExport":true}' \
+  -o "$RUN/field-vin.txt"
+check "a question can be attached to a category" "/categories?at=$CAR_ID" "$RUN/field-vin.txt"
+
+# And one on the CHILD, deliberately NOT exported.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/$ENGINE_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d '{"fieldID":"","fieldCode":"engine_code","fieldLabel":"Engine code","fieldKind":"text","fieldUnit":"","fieldOptions":"","fieldPosition":"0","fieldRequired":false,"fieldExport":false}' \
+  -o "$RUN/field-code.txt"
+check "a question can be attached to a deeper category" "/categories?at=$ENGINE_ID" "$RUN/field-code.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/categories?at=$ENGINE_ID" -o "$RUN/cat-engine.html"
+check "the child screen shows its own question" "Engine code" "$RUN/cat-engine.html"
+# ★ THE WHOLE RECORD IN ONE ASSERTION: a question defined on the PARENT appears
+# on the child, without having been copied there.
+check "and the question INHERITED from its parent" "VIN" "$RUN/cat-engine.html"
+check "labelled with the level it came from" "Inherited" "$RUN/cat-engine.html"
+
+# File the offer under the deeper node, through the ordinary Details save.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d "{\"offerTitle\":\"Vintage brass desk lamp\",\"offerDescription\":\"\",\"offerCondition\":\"\",\"offerCategory\":\"$ENGINE_ID\"}" \
+  -o "$RUN/filed.txt"
+check "an offer can be filed under a category" "Saved" "$RUN/filed.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-fields.html"
+check "the editor asks the category's own question" "Engine code" "$RUN/offer-fields.html"
+check "and every question inherited from above it" "VIN" "$RUN/offer-fields.html"
+
+# The signal name is the field id with its hyphens removed. google/uuid emits
+# lowercase, which matters: HTML lowercases attribute names, so an uppercase id
+# would bind a signal the seed never wrote.
+VIN_FIELD=$(grep -o 'id="cf-[0-9a-f-]\{36\}"' "$RUN/offer-fields.html" | head -1 | cut -d'"' -f2 | cut -c4-)
+CODE_FIELD=$(grep -o 'id="cf-[0-9a-f-]\{36\}"' "$RUN/offer-fields.html" | tail -1 | cut -d'"' -f2 | cut -c4-)
+VIN_SIG="f${VIN_FIELD//-/}"
+CODE_SIG="f${CODE_FIELD//-/}"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d "{\"$VIN_SIG\":\"WVWZZZ1JZXW000001\",\"$CODE_SIG\":\"BKD-1968\"}" \
+  -o "$RUN/answers.txt"
+check "answers to those questions can be saved" "Saved" "$RUN/answers.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-answered.html"
+check "and they come back on the next load" "WVWZZZ1JZXW000001" "$RUN/offer-answered.html"
+check "including the one from the deeper level" "BKD-1968" "$RUN/offer-answered.html"
+
 echo "== a reference is findable the way it is typed =="
 for q in WH0000001 wh0000001 WH1 1; do
   curl -fsS -b "$COOKIES" "$BASE/offers/rows" \
@@ -530,6 +599,18 @@ check "and warns a marketplace cannot fetch from it" "only resolves on this mach
 
 curl -s -b "$STAFF" "$BASE/settings" -o /dev/null -w '%{http_code}' > "$RUN/staffset.code"
 check "staff cannot open settings" "403" "$RUN/staffset.code"
+
+# ⚠ THE ONLY PLACE THIS IS PROVED. internal/web carries no Go tests, so a route's
+# standing is not visible from any unit test — only a real request with a real
+# staff session shows it. Shaping the vocabulary is admin because changing what
+# categories EXIST changes what every offer in the warehouse can say about
+# itself; filing an offer under one is ordinary work and stays open to everybody.
+curl -s -b "$STAFF" "$BASE/categories" -o /dev/null -w '%{http_code}' > "$RUN/staffcat.code"
+check "staff cannot shape the taxonomy" "403" "$RUN/staffcat.code"
+curl -s -b "$STAFF" -X POST "$BASE/categories" -H 'Content-Type: application/json' \
+  -d '{"newCode":"SNEAK","newName":"Sneaky","newParent":""}' \
+  -o /dev/null -w '%{http_code}' > "$RUN/staffcatpost.code"
+check "nor create one by posting straight at the endpoint" "403" "$RUN/staffcatpost.code"
 
 # A trailing slash is sent on purpose: the value must come back normalised, and
 # the box must show what was STORED rather than what was typed.

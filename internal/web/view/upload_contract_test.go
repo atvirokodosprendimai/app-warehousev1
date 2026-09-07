@@ -254,6 +254,23 @@ func TestNoFormsOutsideFileUpload(t *testing.T) {
 		"users":    UsersScreen(Users{}),
 		"newPlace": NewLocationScreen(nil, ""),
 		"submit":   SubmitScreen(Submit{Currencies: core.KnownCurrencies()}),
+		// ⚠ A SCREEN NOT IN THIS MAP IS NOT CHECKED, and the omission is silent —
+		// the test still passes, named for a rule it is no longer enforcing
+		// everywhere. The taxonomy screen is here because it is the newest one with
+		// a lot of inputs on it, which is exactly the shape that grows a <form>.
+		// Both of its states are rendered: an empty screen has almost no controls,
+		// and would pass while the populated one carried a form.
+		"taxonomy": TaxonomyScreen(Taxonomy{Kinds: core.FieldKinds()}),
+		"taxonomySelected": TaxonomyScreen(Taxonomy{
+			Kinds:        core.FieldKinds(),
+			Tree:         []core.Category{{ID: "c1", Code: "CAR", Path: "CAR", Name: "Car parts"}},
+			Selected:     core.Category{ID: "c1", Code: "CAR", Path: "CAR", Name: "Car parts"},
+			HasSelection: true,
+			Own: []core.CategoryField{
+				{ID: "f1", CategoryID: "c1", Code: "vin", Label: "VIN", Kind: core.FieldText},
+			},
+			ValueCounts: map[string]int{"f1": 2},
+		}),
 	}
 	for name, c := range cases {
 		html := renderString(t, c)

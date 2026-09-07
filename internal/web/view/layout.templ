@@ -148,6 +148,11 @@ templ sidebar(p Page) {
 			@navLink("/carts", "carts", p.Nav, "Carts", 0, false)
 			@navLink("/export", "export", p.Nav, "Export", 0, false)
 			if p.User.IsAdmin {
+				// ⚠ Under Setup and behind IsAdmin, beside Warehouse: this is the
+				// tree of what things ARE, the sibling of the tree of where things
+				// live. It is admin because changing what categories exist changes
+				// what every offer in the warehouse can say about itself.
+				@navLink("/categories", "categories", p.Nav, "Categories", 0, false)
 				@navLink("/users", "users", p.Nav, "Users", 0, false)
 				@navLink("/settings", "settings", p.Nav, "Settings", 0, false)
 			}

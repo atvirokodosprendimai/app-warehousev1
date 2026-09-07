@@ -25,6 +25,7 @@ turbocharger questions, in that order, on the screen they are already on.
 | `internal/web/view/offer_detail.templ` | edit | the picker on Details, and a card rendering the resolved fields |
 | `internal/web/view/offer_fields_contract_test.go` | create | the assertions below |
 | `scripts/smoke.sh` | edit | files an offer under a category, answers a field, reads it back |
+| `internal/web/view/model.go` | edit | `OfferDetail.Categories` and `.Fields`, `FieldsByLevel`, and `FieldSignal`/`FieldBind` — the per-field datastar binding, which is a spread because templ attribute names are static |
 
 <The card renders whatever T1 resolved. It holds no knowledge of which fields
 exist — that is the whole point of the record, and a test that hard-codes a
@@ -87,6 +88,11 @@ card order gets broken by somebody who was not thinking about it.
 
 To be completed by `adr-verify` during execution; each entry binds to the
 acceptance digest of the run that killed it.
+- 2026-09-07 · b35d8d8* · mutant killed · exit 1 · `internal/web/view/model.go` · the levels render leaf-first, so an operator filing a turbocharger is asked the turbo questions before the general car ones — every question is still on the page and nothing looks missing, only the order the record chose is reversed · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · covers:an offer's fields are its ancestors' fields root-first
+- 2026-09-07 · b35d8d8* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · a long-text question falls through to the default branch and renders a single-line input, so a paragraph about what is wrong with a part has to be typed into a one-line box and is silently truncated by nothing but the operator giving up · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · covers:each of the five kinds renders its own control
+- 2026-09-07 · b35d8d8* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · a field whose kind this binary does not recognise renders NO control at all — the label is there, the input is not, so the question is asked and cannot be answered. This is the exact state a row written by a newer version and read by an older one produces · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · covers:an unrecognised kind renders as text rather than failing the page
+- 2026-09-07 · b35d8d8* · mutant killed · exit 5 · `internal/web/handlers_offer.go` · filing an offer under a category is accepted and flashes "Saved", and nothing is stored — so the operator picks a category, is told it worked, and the questions never appear. A silent no-op behind a success message is the worst shape this failure could take · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · covers:changing the category re-asks the questions
+- 2026-09-07 · b35d8d8* · mutant killed · exit 1 · `internal/web/view/offer_detail.templ` · the questions card is put above the photographs, so an operator who has just pressed New offer and is still holding the object meets a form before the camera — the exact step ADR-020 exists to remove, reintroduced by a card that was added later and not thought about · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · covers:a field card is never before the photographs
 
 ## Invariants
 
@@ -118,3 +124,10 @@ a cache.
 ## Verification Log
 
 To be completed by `adr-verify` during execution.
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:15138
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:15066
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:15244
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:15020
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:14784
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:14606
+- 2026-09-07 · b35d8d8* · exit 0 · `set -o pipefail …` · acceptance-sha256:63b62054c60e806b059ba5ff9bf6801a14ecf388aae135582dfe8d37cd81fc23 · ms:14314

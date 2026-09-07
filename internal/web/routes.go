@@ -73,6 +73,12 @@ func (a *App) Routes() http.Handler {
 		r.Post("/offers/{id}/sold", a.PostSold)
 		r.Post("/offers/{id}/location", a.PostOfferLocation)
 		r.Post("/offers/{id}/category", a.PostOfferCategory)
+		// ⚠ Two routes, two different meanings of "category". `/category` above is
+		// the MARKETPLACE one (ADR-016): where to list this on eBay. `/fields` here
+		// stores the answers to whatever the operator's OWN taxonomy asks about it
+		// (ADR-021). The offer's taxonomy node itself is saved by `POST /offers/{id}`
+		// with the rest of the Details card.
+		r.Post("/offers/{id}/fields", a.PostOfferFields)
 		r.Post("/offers/{id}/photos", a.PostPhotos)
 		// One SSE endpoint for the whole application. The query says what this
 		// page needs beyond what every page needs; the server decides the rest.
@@ -117,6 +123,15 @@ func (a *App) Routes() http.Handler {
 		r.Get("/inbox", a.GetInbox)
 		r.Get("/settings", a.GetSettings)
 		r.Post("/settings", a.PostSettings)
+		// ⚠ ADMIN, deliberately. A cataloguer FILES an offer under a category;
+		// changing what categories EXIST changes what every offer in the warehouse
+		// can say about itself, which is the same standing as changing a setting.
+		r.Get("/categories", a.GetTaxonomy)
+		r.Post("/categories", a.PostCategories)
+		r.Post("/categories/{id}", a.PostCategory)
+		r.Post("/categories/{id}/delete", a.PostCategoryDelete)
+		r.Post("/categories/{id}/fields", a.PostCategoryFields)
+		r.Post("/fields/{fieldID}/delete", a.PostFieldDelete)
 		r.Post("/submit/{id}/review", a.PostStartReview)
 		r.Post("/submit/{id}/decline", a.PostDecline)
 		r.Post("/submit/{id}/accept", a.PostAccept)

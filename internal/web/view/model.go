@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/a-h/templ"
+
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 )
 
@@ -233,6 +235,114 @@ type OfferDetail struct {
 	// stops the same item being put into two batches destined for two different
 	// marketplaces without anyone noticing.
 	InCarts []core.Cart
+	// Categories is the flat, path-ordered taxonomy tree for the "what is this"
+	// picker (ADR-021). ⚠ Not the marketplace category, which is per profile and
+	// lives on the Marketplace card.
+	Categories []core.Category
+	// Fields are the questions this offer's category asks — its own and every
+	// ancestor's, root first — with the answers already given. Empty when the
+	// offer has no category, which is the ordinary case.
+	Fields []core.OfferField
+}
+
+// FieldsByLevel groups Fields by the category that defined them, preserving the
+// root-first order the read returned.
+//
+// The grouping is done here rather than in the template because templ has no
+// good way to express "start a new group when this row's path differs from the
+// last", and because the ORDER is the contract: a group that sorted itself would
+// quietly discard the inheritance order the whole record is about.
+func (d OfferDetail) FieldsByLevel() []FieldGroup {
+	out := []FieldGroup{}
+	for _, f := range d.Fields {
+		if n := len(out); n > 0 && out[n-1].Path == f.CategoryPath {
+			out[n-1].Fields = append(out[n-1].Fields, f)
+			continue
+		}
+		out = append(out, FieldGroup{Path: f.CategoryPath, Fields: []core.OfferField{f}})
+	}
+	return out
+}
+
+// FieldGroup is one category's worth of questions, labelled with the level they
+// came from so an operator can see WHY they are being asked.
+type FieldGroup struct {
+	// Path is the materialised path of the category that defined these fields.
+	Path string
+	// Fields are its questions, in the operator's order.
+	Fields []core.OfferField
+}
+
+// Leaf returns the last segment of the group's path, which is the level's own
+// code — "ENGINE" out of "CAR/ENGINE".
+func (g FieldGroup) Leaf() string {
+	if i := strings.LastIndex(g.Path, "/"); i >= 0 {
+		return g.Path[i+1:]
+	}
+	return g.Path
+}
+
+// Taxonomy is the read model for the screen an operator shapes their own tree
+// on (ADR-021).
+//
+// ⚠ It is NOT the warehouse tree. `/warehouse` addresses where a thing IS;
+// this addresses what a thing is. They are the same shape on purpose — an
+// operator who has moved a shelf should not have to learn a second idiom to move
+// a category — and they are different data.
+type Taxonomy struct {
+	Page Page
+	// Tree is every node ordered by path, which is tree order.
+	Tree []core.Category
+	// Selected is the node being edited. Zero when nothing is selected, which is
+	// the screen's first state.
+	Selected core.Category
+	// HasSelection distinguishes "nothing selected" from "a node whose id is
+	// empty", which cannot happen but would render identically if it could.
+	HasSelection bool
+	// Own are the questions defined ON the selected node — the editable ones.
+	Own []core.CategoryField
+	// Inherited are the questions it gets from its ancestors. Shown so the
+	// operator can see the whole set an offer will be asked, and NOT editable
+	// here: editing one from a descendant would change it for every other
+	// subtree under that ancestor without saying so.
+	Inherited []core.CategoryField
+	// ValueCounts is how many stored answers each of Own's fields has, so a
+	// delete can say what it will take with it before it does.
+	ValueCounts map[string]int
+	// Children is how many nodes sit directly under Selected. A node with any
+	// cannot be deleted.
+	Children int
+	// Editing is the field currently loaded into the field form, if any. An
+	// empty ID means the form is adding rather than editing.
+	Editing core.CategoryField
+	// Kinds is the list a field's kind may be chosen from.
+	Kinds []core.FieldKind
+}
+
+// Deletable reports whether the selected node can be removed.
+func (t Taxonomy) Deletable() bool { return t.HasSelection && t.Children == 0 }
+
+// Indent returns how deep a node sits, for rendering the tree as a list.
+func (t Taxonomy) Indent(c core.Category) int { return c.Depth() }
+
+// FieldSignal is the datastar signal name for one custom field's control.
+//
+// A field's id is a UUID and a signal name has to be a plain identifier, so the
+// hyphens come out and an "f" goes on the front. ⚠ The result must be entirely
+// LOWERCASE: HTML lowercases attribute names, so data-bind:fAB would bind the
+// signal "fab" and silently miss the one this seeds — the same trap the price
+// fields carry a comment about.
+func FieldSignal(fieldID string) string {
+	return "f" + strings.ToLower(strings.ReplaceAll(fieldID, "-", ""))
+}
+
+// FieldBind returns the datastar binding for one custom field's control.
+//
+// It is a spread rather than a literal attribute because the name is computed
+// per field and templ attribute names are static. The value is bool true so
+// templ renders the bare attribute, which is the form data-bind takes.
+func FieldBind(f core.OfferField) templ.Attributes {
+	return templ.Attributes{"data-bind:" + FieldSignal(f.ID): true}
 }
 
 // InCart reports whether this offer is already in a given batch.

@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -243,6 +244,29 @@ func (a *App) offerDetail(r *http.Request, id string) (view.OfferDetail, error) 
 	if holding, err := a.Carts.CartsHolding(r.Context(), id); err == nil {
 		d.InCarts = holding
 	}
+
+	// The taxonomy tree and this offer's resolved questions. ⚠ Both are loaded
+	// HERE, in the read model both the page load and the SSE loop go through, so
+	// answering a question and having the page re-render cannot disagree about
+	// which questions there were.
+	//
+	// Neither is fatal. A picker with no options and a card with no questions are
+	// both legible states; taking the offer page down because a taxonomy read
+	// failed is not.
+	if a.Taxonomies != nil {
+		if cats, err := a.Taxonomies.AllCategories(r.Context()); err == nil {
+			d.Categories = cats
+		} else {
+			a.Log.Warn("categories unavailable", "err", err)
+		}
+		if o.CategoryID != "" {
+			if fields, err := a.Taxonomies.OfferFields(r.Context(), id, o.CategoryID); err == nil {
+				d.Fields = fields
+			} else {
+				a.Log.Warn("offer fields unavailable", "err", err)
+			}
+		}
+	}
 	return d, nil
 }
 
@@ -273,7 +297,10 @@ type offerSignals struct {
 	// reason every other number on this screen is: the input is `type="text"` with
 	// an inputmode, so the signal arrives as a string. A `type="number"` input
 	// would send a JSON number and fail to unmarshal into this struct.
-	Quantity     string `json:"offerQuantity"`
+	Quantity string `json:"offerQuantity"`
+	// Category is the node in the OPERATOR's tree that says what this thing is
+	// (ADR-021). ⚠ Not EbayCategory below, which says where to list it.
+	Category     string `json:"offerCategory"`
 	SoldAmount   string `json:"soldAmount"`
 	SoldCurrency string `json:"soldCurrency"`
 	SoldDate     string `json:"soldDate"`
@@ -322,6 +349,11 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 		}
 		o.Quantity = n
 	}
+	// The taxonomy category, unlike the reference and the quantity, IS clearable:
+	// it is a <select> whose first option is "not filed", so an empty value is a
+	// choice the operator made rather than a field the payload omitted. Un-filing
+	// something is a legitimate edit and there is no other control for it.
+	o.CategoryID = strings.TrimSpace(in.Category)
 
 	if err := a.Offer.Update(r.Context(), o); err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
@@ -329,6 +361,84 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Broadcast(id)
 	a.flash(w, r, "offer-flash", "ok", "Saved.")
+}
+
+// PostOfferFields stores this offer's answers to whatever its category asks.
+//
+// ⚠ IT ITERATES THE FIELDS THE CATEGORY DEFINES, NOT THE SIGNALS THE CLIENT
+// SENT. The page binds one signal per field, named for the field's id, and every
+// unprefixed signal on the screen rides along with the request — so trusting the
+// payload's key set would mean writing whatever a caller chose to name. Reading
+// the resolved list first and looking each one up is what keeps the write bounded
+// by the operator's own taxonomy.
+func (a *App) PostOfferFields(w http.ResponseWriter, r *http.Request) {
+	// A map rather than a struct, because the signal names are the operator's
+	// field ids and no Go type can be written for a set that is data.
+	var in map[string]any
+	if err := datastar.ReadSignals(r, &in); err != nil {
+		a.flash(w, r, "offer-flash", "error", "Could not read the form.")
+		return
+	}
+	id := param(r, "id")
+
+	o, err := a.Offers.Offer(r.Context(), id)
+	if err != nil {
+		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+		return
+	}
+	if o.CategoryID == "" {
+		a.flash(w, r, "offer-flash", "error",
+			"File this under a category first, and its questions will appear here.")
+		return
+	}
+
+	fields, err := a.Taxonomies.OfferFields(r.Context(), id, o.CategoryID)
+	if err != nil {
+		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+		return
+	}
+	for _, f := range fields {
+		raw, ok := in[view.FieldSignal(f.ID)]
+		if !ok {
+			// The client did not send this one. Leaving the stored answer alone is
+			// the only safe reading: a payload that omits a field has said nothing
+			// about it, and treating silence as "clear it" would erase answers
+			// whenever the markup and the handler disagree about a name.
+			continue
+		}
+		if err := a.Taxonomy.Answer(r.Context(), id, f.ID, signalText(raw)); err != nil {
+			a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+			return
+		}
+	}
+	a.Broadcast(id)
+	a.flash(w, r, "offer-flash", "ok", "Saved.")
+}
+
+// signalText renders one datastar signal as the text a field value is stored as.
+//
+// ⚠ A CHECKBOX SENDS A JSON BOOLEAN, NOT A STRING. Every other control on this
+// screen sends a string, and a bool arriving where a string was expected is
+// exactly the mismatch that makes a yes/no answer silently never save. A number
+// is handled for the same reason: nothing binds one today, but a future
+// type="number" input would send one, and returning "" for it would look like
+// the operator had cleared the field.
+func signalText(v any) string {
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case bool:
+		if t {
+			return "1"
+		}
+		return ""
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case nil:
+		return ""
+	default:
+		return strings.TrimSpace(fmt.Sprint(t))
+	}
 }
 
 // PostPrices records the outcome of the pricing research step.

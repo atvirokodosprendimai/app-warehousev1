@@ -22,6 +22,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/render"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/view"
 )
@@ -51,11 +52,16 @@ type App struct {
 	Locations core.LocationReader
 	Rates     core.RateReader
 	Carts     core.CartReader
+	// Taxonomies is the operator's own tree of what a thing IS, and the questions
+	// each node asks (ADR-021). ⚠ Not the marketplace category, which is
+	// Offer.Categories and belongs to the Offer service.
+	Taxonomies core.TaxonomyReader
 
 	// Write services.
 	Auth     *auth.Service
 	Offer    *offer.Service
 	Location *location.Service
+	Taxonomy *taxonomy.Service
 	Cart     CartService
 
 	// Blobs serves photo bytes.
