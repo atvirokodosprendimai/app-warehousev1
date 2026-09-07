@@ -58,6 +58,34 @@ Then open http://localhost:8080. **The first account you create becomes the
 administrator**, and that page closes permanently afterwards. There is no public
 registration: every later account is created by an administrator.
 
+### Configuration
+
+Copy the example and edit it:
+
+    cp .env.example .env
+
+`.env` is gitignored; `.env.example` is the documentation and lists every
+variable with what it does. A missing `.env` is fine — a deployment that sets
+real environment variables should not have one.
+
+**`.env` fills gaps only.** Lowest priority first:
+
+    built-in default  <  .env  <  real environment variable  <  Settings page
+
+So a one-off override needs no edit:
+
+    EBAY_CATEGORY=1234 ./warehouse
+
+and for the public address and the eBay defaults, whatever an administrator has
+saved at **Settings** beats all three — those variables are the *start-up
+default* a fresh installation uses until somebody sets them in the application,
+which takes effect without a restart.
+
+`ENV_FILE` names a different file, and is read from the real environment because
+a setting that says where the settings are cannot live in the file it names. A
+line that is not blank, a comment or `KEY=VALUE` stops the application with its
+line number rather than booting with a setting silently missing.
+
 | Variable | Default | What it is |
 |---|---|---|
 | `ADDR` | `:8080` | Listen address |

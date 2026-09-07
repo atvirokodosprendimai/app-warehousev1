@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -44,6 +45,27 @@ func main() {
 // It is separate from main so that every failure path returns an error instead
 // of calling os.Exit from somewhere deep, which would skip the deferred closes.
 func run(log *slog.Logger) error {
+	// Before the configuration is read, not after: loadConfig reads the process
+	// environment, so a .env that arrived later would have no effect at all.
+	//
+	// ENV_FILE names another path, and is itself read from the real environment
+	// because a setting that says where to find the settings cannot live in the
+	// file it points at.
+	envFile := defaultEnvFile
+	if v, ok := os.LookupEnv("ENV_FILE"); ok && strings.TrimSpace(v) != "" {
+		envFile = v
+	}
+	if err := loadDotEnv(envFile); err != nil {
+		return err
+	}
+	// Say so when a file was used. "Which config is this process actually
+	// running on" is the first question of every deployment problem, and a
+	// silently-loaded file is the reason it is hard to answer.
+	if _, err := os.Stat(envFile); err == nil {
+		log.Info("configuration file loaded", "path", envFile,
+			"note", "it fills gaps only — a real environment variable wins over it")
+	}
+
 	cfg, err := loadConfig()
 	if err != nil {
 		return err

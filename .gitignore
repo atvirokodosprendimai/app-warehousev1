@@ -24,8 +24,22 @@ profile.cov
 go.work
 go.work.sum
 
-# env file
+# Local configuration. `.env.example` is deliberately NOT ignored — it is the
+# documentation and must be committed.
 .env
+.env.local
+.env.*.local
+
+# ⚠ Editor swap and backup files, and this entry is not tidiness. A `.env.swp`
+# holds the BUFFER of the file it belongs to, so ignoring `.env` while leaving
+# its swap file tracked publishes the contents anyway. One was caught in a
+# commit on 2026-09-07 by reading the `git show --stat` output; `git add -A` had
+# swept it in exactly as it once swept in the runtime database.
+*.swp
+*.swo
+*.swn
+*~
+.*.sw[a-p]
 
 # Runtime state. DB_PATH and PHOTOS_DIR default under data/, so simply running
 # the binary from the repository root creates these — which is how the database

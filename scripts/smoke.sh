@@ -62,6 +62,52 @@ echo "== build the image fixture =="
   echo "  FAIL could not create the test image"; exit 1; }
 [ -s "$RUN/photo.png" ] && echo "  ok   image fixture created"
 
+# ── .env, before the main server starts ──────────────────────────────────────
+#
+# Everything below this block sets REAL environment variables, and a real
+# variable wins over a .env — so nothing else in this script could ever exercise
+# the file. This runs the binary twice more, from a directory that has one, and
+# asserts both halves of the rule: the file is read, and a real variable still
+# beats it. The second half is the one that matters: if the file won, a one-off
+# override would silently do nothing.
+echo "== .env =="
+EDIR="$RUN/envtest"
+mkdir -p "$EDIR"
+EPORT=$((PORT + 1))
+{
+  echo "# a comment, then a blank line"
+  echo ""
+  echo "ADDR=127.0.0.1:$EPORT"
+  echo "PUBLIC_BASE_URL=https://from-the-file.example.com"
+  echo "DB_PATH=$EDIR/e.db"
+  echo "PHOTOS_DIR=$EDIR/photos"
+  echo "FETCH_RATES=false"
+  echo "export EBAY_LOCATION='Kaunas, Lithuania'   # quoted, exported, commented"
+} > "$EDIR/.env"
+
+# ⚠ `exec`, and the reason is not style. Without it, `( cd X && cmd ) &`
+# backgrounds the whole AND-list, so $! is the SUBSHELL's pid and the server is
+# its child — the kill below then reaps the wrapper and leaves the server
+# holding the port. That happened: a stray process survived a run and the next
+# one silently connected to it, so an assertion about the CURRENT binary passed
+# or failed depending on what an earlier run had left behind. `exec` replaces
+# the subshell with the server, so $! is the process this script must kill.
+( cd "$EDIR" && exec "$S/warehouse" > "$EDIR/boot.log" 2>&1 ) & echo $! > "$EDIR/pid"
+curl -fsS --retry 20 --retry-delay 1 --retry-all-errors \
+  "http://127.0.0.1:$EPORT/healthz" -o /dev/null 2>/dev/null
+kill "$(cat "$EDIR/pid")" 2>/dev/null
+check ".env is read at start-up"          "configuration file loaded"        "$EDIR/boot.log"
+check ".env supplies the public address"  "https://from-the-file.example.com" "$EDIR/boot.log"
+check ".env supplies the listen address"  "127.0.0.1:$EPORT"                 "$EDIR/boot.log"
+
+( cd "$EDIR" && PUBLIC_BASE_URL="https://from-the-environment.example.com" \
+  exec "$S/warehouse" > "$EDIR/boot2.log" 2>&1 ) & echo $! > "$EDIR/pid2"
+curl -fsS --retry 20 --retry-delay 1 --retry-all-errors \
+  "http://127.0.0.1:$EPORT/healthz" -o /dev/null 2>/dev/null
+kill "$(cat "$EDIR/pid2")" 2>/dev/null
+check  "a real variable beats .env"   "https://from-the-environment.example.com" "$EDIR/boot2.log"
+absent "the .env value did not win"   "from-the-file.example.com"                "$EDIR/boot2.log"
+
 ADDR=":$PORT" \
 DB_PATH="$RUN/w.db" \
 PHOTOS_DIR="$RUN/photos" \
