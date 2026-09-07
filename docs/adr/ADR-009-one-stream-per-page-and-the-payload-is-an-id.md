@@ -126,7 +126,7 @@ directory: this is a retrospective record.
 
 ## Out of Scope
 
-- A browser test that a patch is actually applied (deferred: docs/adr/BACKLOG.md)
+- A browser test that a patch is actually applied (permanent: fact: built on 2026-09-07 and therefore no longer deferred anywhere; citation: `scripts/browser/taxonomy.js` asserts that choosing a category makes its questions appear with no save and no reload, and that one press of a starter template repaints the tree — both of which are SSE patches landing in a real document, and both of which fail if the patch is sent to an element that is not there)
 - Reconnection with event replay (permanent: boundary: an id-only payload means a reconnecting client re-reads current state anyway, which is what replay would be for)
 - Streaming to anonymous visitors (permanent: boundary: the only unauthenticated route is the photo capability — ADR-007)
 - Per-widget streams (permanent: fact: browsers cap concurrent connections per origin, so a page's widgets would compete for that budget; citation: url https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)

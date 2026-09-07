@@ -15,27 +15,41 @@ that a deferral resurfaces instead of quietly becoming permanent.
 These are not the same kind of thing as the rest of this file. Each one is a gap
 in how this repository knows whether it works.
 
-### Nobody has opened the application in a browser
+### The screens nobody looks at
 
-**Deferred by:** ADR-008 (no forms except the photo upload), ADR-009 (one stream per page), ADR-015 (an upload says it is uploading)
+**Deferred by:** ADR-008 (no forms except the photo upload)
 
-Eight defects have now been found by a person using the application after the
-server-side suite was green, and every one was invisible to that suite **by
-construction**: an upload that never fired, photographs that could not be opened
-on a phone, a saved batch with no link to it, places that could not be edited,
-the New offer button missing from every page but two, and a questions card that
-never appeared when a category was chosen. A server-side suite cannot see
-reachability or a client-side contract.
+The browser walks assert behaviour, and behaviour is not the whole of a screen.
+ADR-021 shipped two of them with eleven class names that had no stylesheet rules:
+every Go test, the smoke walk AND the browser walk passed, because none of them
+looks at a class name. The screens WORKED and were unstyled, and it was found by
+opening the screenshot the walk had been writing all along.
 
-Two Playwright walks now exist and have each caught a real defect, but they live
-in a scratch directory outside the repository and are deleted with the session
-that wrote them.
+CI now keeps those screenshots as an artifact, which makes looking possible. It
+does not make anybody look.
 
-**What would make this real:** moving those walks into the repository and running
-them in CI, so the check that has caught two defects survives the session that
-wrote it.
+**What would make this real:** a check that compares a screenshot against a
+reference, or an eye on the artifact after a change to `app.css`. The first is a
+new class of test with its own failure modes (a font renders one pixel
+differently and the build goes red); the second is a habit, not a check. Neither
+is built, and the entry exists so the gap is not mistaken for closed by the walks
+that now run.
 
 ---
+
+### Closed, and kept here so nobody rediscovers them
+
+**Nobody has opened the application in a browser** — closed 2026-09-07.
+`scripts/browser/` holds two Playwright walks, run by `scripts/browser.sh` and by
+the `browser` job on every push. Eight defects had been found by a person after
+the server-side suite was green, every one invisible to it by construction: an
+upload that never fired, photographs that could not be opened on a phone, a saved
+batch with no link to it, places that could not be edited, a New offer button
+missing from every page but two, and a questions card that never appeared when a
+category was chosen. ⚠ The two walks had ALREADY each caught a real defect while
+living in a scratch directory that is deleted with the session that wrote it — a
+check that does not survive its author is a demonstration, not a check.
+
 
 ### Closed, and kept here so nobody rediscovers them
 

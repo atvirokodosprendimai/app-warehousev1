@@ -1,0 +1,10 @@
+{
+  "name": "app-warehousev1-browser-walks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Real-browser walks of the warehouse application. See scripts/browser.sh.",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.63.0"
+  }
+}

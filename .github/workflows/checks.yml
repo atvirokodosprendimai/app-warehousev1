@@ -72,3 +72,50 @@ jobs:
       # It needs nothing but Go, bash and curl, all of which the runner has.
       - name: smoke
         run: bash scripts/smoke.sh
+
+  # ⚠ A SEPARATE JOB, and deliberately not a step in the one above. It needs a
+  # browser download and a node toolchain the Go checks have no use for, and it
+  # is the slowest thing here — so a broken build should tell you within a minute
+  # from `checks` rather than after Chromium has finished installing. A red walk
+  # still fails the workflow, which is the point.
+  browser:
+    name: browser walks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scripts/browser/package-lock.json
+
+      - name: install playwright
+        working-directory: scripts/browser
+        # npm ci, not npm install: it installs exactly the lockfile and fails if
+        # package.json and the lock have drifted, which is the same discipline
+        # `go test` gets from go.sum.
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: browser walks
+        run: bash scripts/browser.sh
+
+      # ★ THE SCREENSHOTS ARE WORTH KEEPING EVEN WHEN THE WALK PASSES. ADR-021
+      # shipped two screens with eleven class names that had no stylesheet rules:
+      # every Go test, the smoke walk AND the browser walk passed, because none
+      # of them looks at a class name. It was found by opening the screenshot the
+      # walk had been writing all along. A walk is only as good as somebody
+      # reading its output, so the output has to outlive the runner.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-screenshots
+          path: scripts/browser/shots/
+          if-no-files-found: ignore

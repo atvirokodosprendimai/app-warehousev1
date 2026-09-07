@@ -157,4 +157,4 @@ tests would restore the state in which the defect shipped.
 
 ## Follow-ups
 
-- [ ] A browser-driven check is the real remedy for the class of defect this record describes. Recorded in `docs/adr/BACKLOG.md`; not built.
+- [x] A browser-driven check is the real remedy for the class of defect this record describes. **Built 2026-09-07**: `scripts/browser/` holds two Playwright walks and `scripts/browser.sh` runs them against the real binary with a fresh database each; the `browser` job in `.github/workflows/checks.yml` runs them on every push and keeps the screenshots as an artifact. ⚠ A fresh database PER WALK is load-bearing rather than hygiene — each walk bootstraps the first administrator, and ADR-006 closes that route for ever once an account exists.

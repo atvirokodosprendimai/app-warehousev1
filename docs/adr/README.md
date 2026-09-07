@@ -91,10 +91,11 @@ Neither was visible from reading the records. Both took one mutation each.
 Four gaps, all in BACKLOG.md, and the first is the largest thing wrong with this
 repository:
 
-1. **Nobody has opened the application in a browser as part of any check.** Eight
-   defects have now been found by a person after the server-side suite was green,
-   every one invisible to it by construction. Two Playwright walks exist and have
-   each caught a real defect, but they live outside the repository.
+1. **Nothing looks at what the screens LOOK like.** The browser walks assert
+   behaviour; ADR-021 shipped two screens with eleven class names that had no
+   stylesheet rules and every check passed, because none of them reads a class
+   name. CI keeps the screenshots now, which makes looking possible without
+   making anybody look.
 
 Closed on 2026-09-07, and listed so they are not rediscovered:
 
