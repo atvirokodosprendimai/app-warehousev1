@@ -8,7 +8,7 @@
 **Consumes:** `core.Offer.NeedsDescribing`, `core.OfferFilter.NeedsDescribing` (T1)
 **Data dependency:** hermetic
 **Proof map:** v1
-**Rests-on:** `the sidebar entry carrying its count`, `the needs_describing query-string filter`, `the untitled row rendering`, `the intake screen not demanding a title`
+**Rests-on:** `the sidebar entry carrying its count`, `the needs_describing query-string filter`, `the untitled row rendering`, `no form between a person and the camera`
 
 ## Goal
 
@@ -51,7 +51,7 @@ set -o pipefail
 go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate && \
 go test ./internal/web/view/ -run '^TestUntitledOffersRenderAsUntitled$' -count=1 2>&1 | tee /tmp/adr019t2-new.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr019t2-new.out && \
-go test ./internal/web/view/ -run '^(TestUntitledOffersRenderAsUntitled|TestTheDescribingQueueIsReachableFromTheMenu|TestIntakeDoesNotDemandATitle|TestRowsPathKeepsTheDescribingFilter|TestNoFormsOutsideFileUpload|TestEveryIndicatorSignalHasAConsumer)$' -count=1 2>&1 | tee /tmp/adr019t2-named.out && \
+go test ./internal/web/view/ -run '^(TestUntitledOffersRenderAsUntitled|TestTheDescribingQueueIsReachableFromTheMenu|TestCreatingAnOfferAsksNothingFirst|TestRowsPathKeepsTheDescribingFilter|TestNoFormsOutsideFileUpload|TestEveryIndicatorSignalHasAConsumer)$' -count=1 2>&1 | tee /tmp/adr019t2-named.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr019t2-named.out && \
 go test ./... -count=1 2>&1 | tee /tmp/adr019t2-reg.out && \
 ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr019t2-reg.out && \
@@ -70,7 +70,7 @@ request proves the route answers.
 |-----------|------|----------|--------|-------|
 | `TestUntitledOffersRenderAsUntitled` | `internal/web/view/queue_contract_test.go` | An untitled row shows the word, its reference and its photo count, never a blank cell | — | S1, S6 |
 | `TestTheDescribingQueueIsReachableFromTheMenu` | `internal/web/view/queue_contract_test.go` | The sidebar renders a link to `/offers?needs_describing=1` carrying its count | — | S1, S2, S5 |
-| `TestIntakeDoesNotDemandATitle` | `internal/web/view/queue_contract_test.go` | Intake carries no `required` on the title and says where an unnamed item goes | — | S1, S7 |
+| `TestCreatingAnOfferAsksNothingFirst` | `internal/web/view/intake_contract_test.go` | The New offer control CREATES rather than linking to a form, carries no `<form>`, and the empty state does not link to the deleted address. ⚠ **SUBSTITUTED 2026-09-07.** This row named `TestIntakeDoesNotDemandATitle` in `queue_contract_test.go`, which ADR-020 retired when it deleted the intake screen — so the fence above named a test that no longer existed and quietly exercised five of six. The successor is not a weaker proof of ADR-019's property but a stronger one: the retired test asserted the title field carried no `required`, and this one asserts there is no field to demand anything, because pressing the control creates the draft outright | — | S1, S7 |
 | `TestRowsPathKeepsTheDescribingFilter` | `internal/web/view/queue_contract_test.go` | The live-search path keeps the filter, so typing in the box does not silently widen the queue to every offer | — | S4 |
 | `TestNoFormsOutsideFileUpload` | `internal/web/view/upload_contract_test.go` | The change introduced no form | — | — |
 | `TestEveryIndicatorSignalHasAConsumer` | `internal/web/view/upload_contract_test.go` | Any indicator added here is wired to something | — | — |
@@ -92,6 +92,10 @@ acceptance digest of the run that killed it.
 - 2026-09-07 · f788c73* · mutant killed · exit 2 · `internal/web/handlers_offer.go` · the menu entry then links to an address that quietly returns every offer, so the cataloguer works from a list that is not the queue · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the needs_describing query-string filter
 - 2026-09-07 · f788c73* · mutant killed · exit 1 · `internal/web/view/offers.templ` · an untitled row then renders an empty cell, which reads as a rendering fault and gets reported as a bug rather than picked up as work · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the untitled row rendering
 - 2026-09-07 · f788c73* · mutant killed · exit 1 · `internal/web/view/screens.templ` · a required title puts the demand back on the photographer, who is holding an object they often cannot identify — which is the whole thing ADR-019 removes · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · covers:the intake screen not demanding a title
+- 2026-09-07 · 02c0688* · mutant killed · exit 1 · `internal/web/view/layout.templ` · the Needs describing entry loses its count, so the menu looks identical whether three groups are waiting or none are and nobody is told there is work to pick up · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · covers:the sidebar entry carrying its count
+- 2026-09-07 · 02c0688* · mutant killed · exit 2 · `internal/web/handlers_offer.go` · the menu entry then links to an address that quietly returns every offer in the warehouse, so the cataloguer works from a list that is not the queue and cannot tell · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · covers:the needs_describing query-string filter
+- 2026-09-07 · 02c0688* · mutant killed · exit 1 · `internal/web/view/offers.templ` · an untitled row renders an empty cell, which reads as a rendering fault and gets reported as a bug rather than picked up as the work it is · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · covers:the untitled row rendering
+- 2026-09-07 · 02c0688* · mutant killed · exit 1 · `internal/web/view/fragments.templ` · the New offer control goes back to being a link to a form, putting the "aditional step" M named back between a person holding an object and the camera — and the form it pointed at asked for a title ADR-019 exists to say nobody has yet · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · covers:no form between a person and the camera
 
 ## Invariants
 
@@ -126,3 +130,8 @@ To be completed by `adr-verify` during execution.
 - 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:12671
 - 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:13965
 - 2026-09-07 · f788c73* · exit 0 · `set -o pipefail …` · acceptance-sha256:6bb6c79446219d904b6bd6ed3f56b61155dcf115b0d43ec69a75cf57e47ae3fa · ms:13812
+- 2026-09-07 · 02c0688* · exit 0 · `set -o pipefail …` · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · ms:15011
+- 2026-09-07 · 02c0688* · exit 0 · `set -o pipefail …` · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · ms:14546
+- 2026-09-07 · 02c0688* · exit 0 · `set -o pipefail …` · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · ms:14411
+- 2026-09-07 · 02c0688* · exit 0 · `set -o pipefail …` · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · ms:14916
+- 2026-09-07 · 02c0688* · exit 0 · `set -o pipefail …` · acceptance-sha256:a27d261978d88802c164818df04410ac5f2fc8ee2ca42e6cbe3e1cbe83d77781 · ms:14538
