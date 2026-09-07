@@ -939,3 +939,76 @@ tbody tr:hover { background: var(--surface-2); }
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 .right { margin-left: auto; }
+
+/* ---------- taxonomy (ADR-021) ---------- */
+
+/* A list of nodes read as a tree. list-style is removed deliberately: the
+   default disc bullets read as prose, and the indentation carried by the path
+   text is what actually shows the shape. */
+.tree { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.tree-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+.tree-row:hover { background: var(--surface-2); }
+.tree-link { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+/* The selected node, so a long tree still says where you are. */
+.tree-row.is-current { background: var(--accent-soft); }
+.tree-row.is-current .code { color: var(--accent); }
+
+/* A question's provenance and its export state, read at a glance rather than by
+   opening each one. */
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px; font-weight: 600;
+  white-space: nowrap;
+}
+
+/* One ancestor's worth of questions on the offer editor, and its heading. The
+   heading is small on purpose: it labels a group inside a card, and an h3 at
+   card-title size would compete with the card's own name. */
+.field-group { display: flex; flex-direction: column; gap: 14px; }
+.field-group-head {
+  font-size: 11.5px; font-weight: 650;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Controls that belong on one line and may wrap on a phone rather than shrink —
+   the same choice the top bar makes, and for the same reason: a 44px target and
+   a full label are worth more than one unbroken row. */
+.row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row-inline .input { flex: 1 1 8ch; min-width: 0; }
+
+/* A number field's unit, beside the value and never inside it. */
+.unit { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+
+.btn-small { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
+@media (pointer: coarse) {
+  /* A destructive control keeps the full touch target even when it is small on
+     a mouse: this is the button that deletes a question and its answers. */
+  .btn-small { min-height: 44px; padding: 0 14px; }
+}
+
+.hint-inline { color: var(--text-faint); font-weight: 400; font-size: 12.5px; }
+
+/* A yes/no question's checkbox. ⚠ .field is a COLUMN flex container, so a bare
+   checkbox is stretched by align-items: stretch and drifts away from the label
+   it belongs to — which is what it did until somebody looked at the rendered
+   page. align-self pins it back to the start, and the explicit size gives it a
+   target worth tapping. */
+.field > input[type="checkbox"] {
+  align-self: start;
+  width: 18px; height: 18px;
+  accent-color: var(--accent);
+}
+@media (pointer: coarse) {
+  .field > input[type="checkbox"] { width: 22px; height: 22px; }
+}

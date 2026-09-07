@@ -78,6 +78,19 @@ func taxonomySignals(t Taxonomy) string {
 		"}"
 }
 
+// answerCount renders how many answers a delete will take with it.
+//
+// Singular when there is one. The warning is read at the moment somebody is
+// about to destroy data, and "1 answers" is the kind of small wrongness that
+// makes a person trust the sentence less exactly when they should be reading it
+// carefully.
+func answerCount(n int) string {
+	if n == 1 {
+		return "1 answer"
+	}
+	return itoa(n) + " answers"
+}
+
 // kindOr defaults an empty kind, so the add form opens on something valid.
 func kindOr(k core.FieldKind, fallback core.FieldKind) string {
 	if k == "" {
@@ -296,7 +309,7 @@ templ taxonomyFieldsCard(t Taxonomy) {
 									  has to be visible.
 									-->
 									if t.ValueCounts[f.ID] > 0 {
-										Delete ({ itoa(t.ValueCounts[f.ID]) } answers)
+										Delete ({ answerCount(t.ValueCounts[f.ID]) })
 									} else {
 										Delete
 									}

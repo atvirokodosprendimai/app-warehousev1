@@ -158,6 +158,20 @@ func TestDeletingAFieldSaysWhatItTakes(t *testing.T) {
 		t.Error("a question with no answers still warns about losing them; a warning " +
 			"that always fires is a warning nobody reads")
 	}
+
+	// ⚠ Singular when there is one. Found by looking at the rendered screen: it
+	// said "Delete (1 answers)". The warning is read at the moment somebody is
+	// about to destroy data, and that kind of small wrongness makes a person
+	// trust the sentence less exactly when they should be reading it carefully.
+	one := taxonomyFixture()
+	one.ValueCounts = map[string]int{"f-code": 1}
+	single := renderString(t, TaxonomyScreen(one))
+	if !strings.Contains(single, "Delete (1 answer)") {
+		t.Error(`a single answer is announced as "1 answers"`)
+	}
+	if strings.Contains(single, "1 answers") {
+		t.Error(`the plural leaked back in: "1 answers"`)
+	}
 }
 
 // TestEveryFieldKindCanBeChosen checks the operator can actually reach all five.
