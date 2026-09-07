@@ -77,6 +77,13 @@ templ PageShell(p Page, actions templ.Component, body templ.Component) {
 						</div>
 					</header>
 					<main id="main" class="content">
+						<!--
+						  A message slot that exists on EVERY page, because the New offer
+						  button does (ADR-020). Before it, a failure to create had nowhere
+						  to land except a screen the operator was no longer on, so it was
+						  patched into an element that was not there and vanished silently.
+						-->
+						<div id="app-flash"></div>
 						@body
 					</main>
 				</div>

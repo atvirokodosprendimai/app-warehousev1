@@ -102,36 +102,23 @@ func TestTheDescribingQueueIsReachableFromTheMenu(t *testing.T) {
 	}
 }
 
-// TestIntakeDoesNotDemandATitle is the photographer's side of ADR-019.
+// TestIntakeDoesNotDemandATitle was RETIRED on 2026-09-07 by ADR-020.
 //
-// The whole point is that somebody holding an object they cannot identify may
-// photograph it anyway. A `required` attribute on the title, or a screen that
-// does not say what happens to an unnamed item, puts the demand back.
-func TestIntakeDoesNotDemandATitle(t *testing.T) {
-	html := renderString(t, IntakeScreen(nil))
-
-	i := strings.Index(html, `id="n-title"`)
-	if i < 0 {
-		t.Fatal("the intake title field is gone, so this test asserts nothing")
-	}
-	start := strings.LastIndex(html[:i], "<input")
-	end := strings.Index(html[i:], ">")
-	if start < 0 || end < 0 {
-		t.Fatal("malformed title input")
-	}
-	input := html[start : i+end]
-	if strings.Contains(input, "required") {
-		t.Errorf("the intake title is still required, so a photographer must name a thing "+
-			"before they may take a picture of it — which is what ADR-019 removes. Input: %s", input)
-	}
-
-	// Permitting it silently is not enough: an operator who leaves a field blank
-	// needs to be told where the item went, or they will assume it was lost.
-	if !strings.Contains(html, "describ") {
-		t.Error("intake never mentions describing, so somebody who leaves the name blank is " +
-			"not told the item lands in a queue for somebody else")
-	}
-}
+// It rendered `IntakeScreen` and asserted the title field carried no `required`
+// attribute, and that the screen said where an unnamed item goes. Both were true
+// and both were worth pinning while that screen existed.
+//
+// ADR-020 DELETED the screen: pressing "New offer" now creates the draft and
+// lands the operator on its photographs, so there is no field left to demand
+// anything. The property this test protected is not weakened but subsumed — a
+// screen that does not exist cannot ask for a title.
+//
+// ⚠ Retired in place rather than deleted, because the ADR-019 property it
+// carried is still live and somebody re-reading that record needs to find where
+// its proof went. Its successor is
+// `intake_contract_test.go::TestCreatingAnOfferAsksNothingFirst`, which asserts
+// the control CREATES instead of navigating to a form, and
+// `smoke.sh`'s check that `/offers/new` now returns 404.
 
 // TestRowsPathKeepsTheDescribingFilter stops the live search widening the queue.
 //

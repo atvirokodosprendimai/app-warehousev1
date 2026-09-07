@@ -170,50 +170,23 @@ func offerFilterFrom(r *http.Request) core.OfferFilter {
 	return f
 }
 
-// GetIntake renders the new-offer screen.
-func (a *App) GetIntake(w http.ResponseWriter, r *http.Request) {
-	locs, err := a.Locations.AllLocations(r.Context())
-	if err != nil {
-		a.Log.Warn("locations unavailable for intake", "err", err)
-	}
-	p := a.page(r, "New offer", "offers")
-	_ = view.PageShell(p, nil, view.IntakeScreen(locs)).Render(r.Context(), w)
-}
-
-// intakeSignals is what the new-offer screen sends.
-type intakeSignals struct {
-	Title    string `json:"newTitle"`
-	SKU      string `json:"newSku"`
-	Location string `json:"newLocation"`
-}
-
-// PostOffers creates an offer from a title alone.
+// PostOffers creates an empty draft and sends the operator to its photographs.
 //
-// No price is asked for and none is required. The flow is photograph, title,
-// shelve — and price later, once the operator has found out what the thing can
-// actually fetch.
+// ⚠ IT READS NOTHING, deliberately (ADR-020). There is no body to parse and no
+// signals to declare, which is what lets the button live in the top bar on every
+// page rather than only on a screen that seeded the right signals.
+//
+// Every question the deleted intake screen asked was already optional: the title
+// since ADR-019, the reference because ADR-010 has the database allocate one, and
+// the location because the editor carries its own card for it. Asking them bought
+// nothing and cost the operator a form while they were holding the object.
 func (a *App) PostOffers(w http.ResponseWriter, r *http.Request) {
-	var in intakeSignals
-	if err := datastar.ReadSignals(r, &in); err != nil {
-		a.flash(w, r, "intake-msg", "error", "Could not read the form.")
-		return
-	}
-
-	o, err := a.Offer.Create(r.Context(), in.Title, in.SKU)
+	o, err := a.Offer.Create(r.Context(), "", "")
 	if err != nil {
-		a.flash(w, r, "intake-msg", "error", a.userMessage(err))
+		// The button is global, so the message has to land somewhere that exists on
+		// every page — #app-flash in the layout, not the intake screen's old slot.
+		a.flash(w, r, "app-flash", "error", a.userMessage(err))
 		return
-	}
-
-	if in.Location != "" {
-		o.LocationID = in.Location
-		if err := a.Offer.Update(r.Context(), o); err != nil {
-			// The offer exists; only the shelving failed. Say so precisely rather
-			// than implying nothing was created, which would invite a duplicate.
-			a.flash(w, r, "intake-msg", "error",
-				"Created, but could not shelve it: "+a.userMessage(err))
-			return
-		}
 	}
 
 	sse := render.NewSSE(w, r)
@@ -290,9 +263,12 @@ type offerSignals struct {
 	OwnerAmount   string `json:"ownerAmount"`
 	OwnerCurrency string `json:"ownerCurrency"`
 	Location      string `json:"offerLocation"`
-	SoldAmount    string `json:"soldAmount"`
-	SoldCurrency  string `json:"soldCurrency"`
-	SoldDate      string `json:"soldDate"`
+	// Sku is editable since ADR-020: deleting the intake screen removed the only
+	// place a reference could be typed, so it moved to the Details card.
+	Sku          string `json:"offerSku"`
+	SoldAmount   string `json:"soldAmount"`
+	SoldCurrency string `json:"soldCurrency"`
+	SoldDate     string `json:"soldDate"`
 	// EbayCategory is this offer's own eBay category, overriding the default
 	// configured at Settings. Empty means "use the default" — clearing it and
 	// never having set one are deliberately the same state (ADR-016).
@@ -319,6 +295,12 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	o.Title = in.Title
 	o.Description = in.Description
 	o.Condition = in.Condition
+	// An empty reference means "the client did not send one", never "clear it":
+	// the column is UNIQUE and NOT NULL, and Service.Create already allocated a
+	// value, so blanking it here would be a write nobody asked for.
+	if strings.TrimSpace(in.Sku) != "" {
+		o.SKU = strings.TrimSpace(in.Sku)
+	}
 
 	if err := a.Offer.Update(r.Context(), o); err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))

@@ -40,13 +40,24 @@ templ InboxBanner(open int) {
 	</div>
 }
 
-// NewOfferAction is the top-bar button that starts an intake.
+// NewOfferAction is the top-bar button that creates an offer.
 //
-// It is a link rather than a datastar action because it navigates: the intake
-// screen has its own URL, so it should be bookmarkable, openable in a new tab,
-// and reachable with the back button afterwards.
+// It POSTS rather than navigating (ADR-020). There is no intake screen left to
+// navigate to: every question that screen asked was already optional — the title
+// since ADR-019, the reference because ADR-010 gives the database that job, and
+// the location because the editor has its own card for it — so it stood between
+// a person holding an object and the camera while collecting nothing.
 templ NewOfferAction() {
-	<a class="btn btn-primary" href="/offers/new">New offer</a>
+	<button
+		class="btn btn-primary"
+		type="button"
+		data-on:click="@post('/offers')"
+		data-indicator:_busy
+		data-attr:disabled="$_busy"
+	>
+		<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+		<span>New offer</span>
+	</button>
 }
 
 // AuthMessage is the sign-in screen's message slot.

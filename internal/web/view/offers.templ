@@ -14,7 +14,13 @@ templ OfferTable(id string, rows []OfferRow, showOwner bool, addToCart bool) {
 	<div id={ id }>
 		if len(rows) == 0 {
 			@Empty("📦", "Nothing here yet", "Offers you add will appear in this list.") {
-				<a class="btn btn-primary" href="/offers/new">Add the first offer</a>
+				<button
+					class="btn btn-primary"
+					type="button"
+					data-on:click="@post('/offers')"
+					data-indicator:_busy
+					data-attr:disabled="$_busy"
+				>Add the first offer</button>
 			}
 		} else {
 			<div class="table-wrap">

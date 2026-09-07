@@ -229,6 +229,45 @@ and is not applied to `submissions`.
 
 ## Interface
 
+### Showing and editing how many of a thing we hold
+
+**Deferred by:** ADR-020 (intake is one click, and the camera is first)
+
+`core.Offer.Quantity` has existed since the first migration. It is constrained by
+the schema (`INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0)`), refused when
+negative by `Offer.Validate`, rewritten by `Repo.UpdateOffer`, read back by the
+cart, and written by BOTH exporters — eBay's `*Quantity` and Shopify's `Variant
+Inventory Qty`.
+
+⚠ **`internal/web` never sets it.** Every offer therefore carries the database
+default of 1, and a warehouse holding five of something tells a marketplace it
+holds one. That is a wrong number leaving the building, not merely a missing
+input, which is why it is recorded here rather than left implicit.
+
+ADR-020 deferred it because it is not a flow decision: exposing a field that
+already exists end to end is presentation, and carries no record for the same
+reason the mobile drawer and the responsive listing carry none.
+
+**What would make this real:** it is real now — this entry exists to say the
+deferral was ADR-020's scope boundary, not a judgement that the number does not
+matter.
+
+### Deleting an abandoned draft in one gesture
+
+**Deferred by:** ADR-020 (intake is one click, and the camera is first)
+
+ADR-020 makes "New offer" write to the database on the click, so a press followed
+by second thoughts leaves an untitled draft behind. ADR-019's "Needs describing"
+queue is where those become visible, and an offer can already be deleted — but
+only by opening it first.
+
+A confirmation step before creating was considered and refused: it is exactly the
+step ADR-020 exists to delete. Making the DISPOSAL cheap is the right answer if
+the litter becomes a nuisance, and it belongs on the queue, beside the row.
+
+**What would make this real:** somebody actually accumulating abandoned drafts
+and saying so.
+
 ### Every busy indicator gets its own signal
 
 **Deferred by:** ADR-015 (an upload says it is uploading)

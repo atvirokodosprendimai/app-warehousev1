@@ -224,7 +224,6 @@ func TestRemoveIsNotNestedInsideThePhotoLink(t *testing.T) {
 func TestNoFormsOutsideFileUpload(t *testing.T) {
 	cases := map[string]templ.Component{
 		"auth":     AuthPage(Auth{}),
-		"intake":   IntakeScreen(nil),
 		"offers":   OffersScreen(OfferList{Currencies: core.KnownCurrencies()}),
 		"carts":    CartsScreen(Carts{}),
 		"users":    UsersScreen(Users{}),
@@ -327,7 +326,6 @@ func everyIndicatorSurface(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{
 		"auth":       renderString(t, AuthPage(Auth{})),
-		"intake":     renderString(t, IntakeScreen(nil)),
 		"offers":     renderString(t, OffersScreen(OfferList{Currencies: core.KnownCurrencies()})),
 		"carts":      renderString(t, CartsScreen(Carts{})),
 		"users":      renderString(t, UsersScreen(Users{})),

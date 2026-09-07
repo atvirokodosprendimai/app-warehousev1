@@ -24,23 +24,32 @@ templ OfferScreen(d OfferDetail) {
 		  what you meet first: .cols is one column below 861px, so the page becomes
 		  these two stacks read end to end.
 
-		  Photographs therefore sit directly under Details — describing a thing and
-		  photographing it is one task — and Pricing follows them instead of
-		  separating them. ADR-004 makes the price a later, researched step, so the
-		  previous order put the one card the domain says to defer between an
-		  operator and the camera, four cards down a phone screen.
+		  M set this order directly (ADR-020): "1step click offer, 2nd upload
+		  photos 3rd - all other info", then "status: listing, draf, pending etc.
+		  should be last block".
+
+		  So PHOTOGRAPHS COME FIRST. Pressing New offer creates the draft and lands
+		  here, and the operator is still holding the object — the camera is the
+		  only thing they need in that moment. Details follows, because describing
+		  and photographing are one task. Pricing follows those, since ADR-004
+		  makes the price a later, researched step.
+
+		  STATUS IS LAST, and it is the only card here that is not data entry:
+		  every other card records what the thing IS, while this one decides what
+		  the business does with it. It used to head the second column, which on a
+		  phone put "Listed / Draft / Pending" between the photographs and the price.
 		-->
 		<div class="cols">
 			<div class="stack">
-				@offerDetailsCard(d)
 				@OfferPhotosCard(d)
+				@offerDetailsCard(d)
 				@offerPricingCard(d)
 			</div>
 			<div class="stack">
-				@OfferStatusCard(d)
 				@offerLocationCard(d)
 				@OfferCartsCard(d)
 				@offerMarketplaceCard(d)
+				@OfferStatusCard(d)
 			</div>
 		</div>
 	</div>
@@ -62,6 +71,7 @@ func offerSignals(d OfferDetail) string {
 		"ownerAmount: " + jsString(decimalOrEmpty(o.Owner)) + ", " +
 		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
 		"offerLocation: " + jsString(o.LocationID) + ", " +
+		"offerSku: " + jsString(o.SKU) + ", " +
 		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
 		"}"
 }
@@ -70,8 +80,6 @@ templ offerDetailsCard(d OfferDetail) {
 	<div class="card">
 		<div class="card-head">
 			<h2>Details</h2>
-			<span class="spacer"></span>
-			<span class="code faint">{ d.Row.Offer.SKU }</span>
 		</div>
 		<div class="card-body stack">
 			<div class="field">
@@ -86,6 +94,21 @@ templ offerDetailsCard(d OfferDetail) {
 			<div class="field">
 				<label for="o-cond">Condition</label>
 				<input id="o-cond" class="input" type="text" placeholder="used — good" data-bind:offer-condition/>
+			</div>
+			<!--
+			  The reference lives here since ADR-020, because deleting the intake
+			  screen took away the only place it could be typed. It is allocated by
+			  the database (ADR-010) and shown rather than asked for, but it stays
+			  EDITABLE: somebody re-cataloguing existing stock has references already
+			  written on the boxes, and a typo made at intake used to be permanent.
+			-->
+			<div class="field">
+				<label for="o-sku">Reference</label>
+				<input id="o-sku" class="input code" type="text" data-bind:offer-sku/>
+				<span class="hint">
+					Generated for you, and used as the Shopify handle and the eBay custom
+					label. Once the offer is published it should not change.
+				</span>
 			</div>
 			<div>
 				<button

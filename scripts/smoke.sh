@@ -197,14 +197,36 @@ curl -fsS -b "$COOKIES" "$BASE/warehouse" -o "$RUN/wh3.html"
 check "the child's address followed the rename" "KAUNAS-GARAGE/S3" "$RUN/wh3.html"
 absent "and the old address is gone" "KAUNAS/S3" "$RUN/wh3.html"
 
-echo "== intake: title only, no price =="
+echo "== intake: one click, no body at all, then name it (ADR-020) =="
+# ⚠ THE ABSENCE OF A REQUEST BODY IS THE ASSERTION, not an economy. The button
+# lives in the top bar on every page, so the create endpoint must not depend on
+# signals that only one screen declared. If it ever needs a body again, the
+# button silently stops working everywhere except wherever that body comes from.
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
   -H 'Content-Type: application/json' \
-  -d '{"newTitle":"Vintage brass desk lamp","newSku":"","newLocation":""}' \
   -o "$RUN/offer.txt"
-check "offer created from a title alone" "/offers/" "$RUN/offer.txt"
+check "one click creates an offer with no input at all" "/offers/" "$RUN/offer.txt"
 OFFER_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/offer.txt" | head -1 | cut -d/ -f3)
 echo "  offer id: $OFFER_ID"
+
+# The intake SCREEN is gone, not merely unlinked. An address that still answers
+# would be a second way to create an offer, reachable by anyone who bookmarked
+# it, and nothing else in this script would notice.
+NEWCODE=$(curl -s -b "$COOKIES" -o /dev/null -w '%{http_code}' "$BASE/offers/new")
+if [ "$NEWCODE" = "404" ]; then
+  echo "  ok   the intake screen is gone (/offers/new returns 404)"
+else
+  echo "  FAIL /offers/new still answers $NEWCODE — the deleted screen is still reachable"
+  fail=$((fail + 1))
+fi
+
+# Step 3 of M's flow: "all other info", starting with the name. This is an
+# ordinary save through the editor's own endpoint, not a special intake path.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Vintage brass desk lamp","offerDescription":"","offerCondition":""}' \
+  -o "$RUN/named.txt"
+check "naming it afterwards is an ordinary save" "Saved" "$RUN/named.txt"
 
 curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer.html"
 check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
@@ -235,7 +257,6 @@ check "unpriced draft is in the pricing queue" "Vintage brass desk lamp" "$RUN/p
 echo "== ADR-019: one person photographs, another describes =="
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
   -H 'Content-Type: application/json' \
-  -d '{"newTitle":"","newSku":"","newLocation":""}' \
   -o "$RUN/unnamed.txt"
 check "an offer can be created with NO title at all" "/offers/" "$RUN/unnamed.txt"
 UNNAMED_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed.txt" | head -1 | cut -d/ -f3)
@@ -273,7 +294,6 @@ check "and the name stuck" "Enamel advertising sign" "$RUN/described.html"
 # the only state that isolates this rule.
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
   -H 'Content-Type: application/json' \
-  -d '{"newTitle":"","newSku":"","newLocation":""}' \
   -o "$RUN/unnamed2.txt"
 UNNAMED2_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed2.txt" | head -1 | cut -d/ -f3)
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED2_ID/prices" \
