@@ -148,4 +148,4 @@ change.
 
 ## Follow-ups
 
-- [ ] A check that no handler calls `datastar.NewSSE` directly would be cheap — a source grep in a test — and would close the third risk. Not built.
+- [x] A check that no handler calls `datastar.NewSSE` directly would be cheap — a source grep in a test — and would close the third risk. **Built 2026-09-07**: `internal/web/render/sse_test.go::TestNothingOpensAStreamWithoutGoingThroughThisPackage` walks `internal/` and allows the constructor only in `render/sse.go`. It fails if it finds NO mention at all, because a walk that read nothing looks identical to a rule that holds.

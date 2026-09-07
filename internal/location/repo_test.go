@@ -10,86 +10,40 @@ import (
 	"time"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
-
-	// modernc.org/sqlite is the CGO-free driver, registered as "sqlite". The
-	// tests open their own database rather than importing internal/store, so a
-	// failure here is this package's and not the store's.
-	_ "modernc.org/sqlite"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
 
-// testSchema is the part of migrations/00001_init.sql this package touches,
-// copied so the tests do not depend on a migration runner. The offers table is
-// here for one reason: it is what makes a location occupied, and its ON DELETE
-// RESTRICT is the refusal [Service.Delete] has to surface.
-const testSchema = `
-CREATE TABLE locations (
-    id                TEXT PRIMARY KEY,
-    parent_id         TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-    kind              TEXT NOT NULL CHECK (kind IN
-                          ('site','building','room','aisle','shelf','segment','bin')),
-    code              TEXT NOT NULL,
-    path              TEXT NOT NULL UNIQUE,
-    label             TEXT NOT NULL DEFAULT '',
-    custodian         TEXT NOT NULL DEFAULT '',
-    custodian_contact TEXT NOT NULL DEFAULT '',
-    city              TEXT NOT NULL DEFAULT '',
-    country           TEXT NOT NULL DEFAULT '',
-    notes             TEXT NOT NULL DEFAULT '',
-    created_at        TEXT NOT NULL,
-    UNIQUE (parent_id, code)
-) STRICT;
-CREATE INDEX locations_parent_idx ON locations (parent_id);
-CREATE INDEX locations_path_idx ON locations (path);
-
-CREATE TABLE offers (
-    id             TEXT PRIMARY KEY,
-    sku            TEXT NOT NULL UNIQUE,
-    title          TEXT NOT NULL,
-    status         TEXT NOT NULL DEFAULT 'draft',
-    shop_minor     INTEGER NOT NULL DEFAULT 0,
-    location_id    TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-    created_at     TEXT NOT NULL,
-    updated_at     TEXT NOT NULL
-) STRICT;
-`
-
-// newRepo opens a private database and returns a Repo wired the way the
-// application wires one: a query_only reader and an immediate-locking writer
-// over the same file. The reader is query_only on purpose — a read method that
-// reached for the write handle would still pass, but a write that reached for
-// the read handle is refused by the driver, which is the direction that can
-// corrupt the tree.
+// newRepo opens a private database, runs the REAL migrations over it, and
+// returns a Repo wired the way the application wires one: a query_only reader
+// and an immediate-locking writer over the same file. The reader is query_only
+// on purpose — a read method that reached for the write handle would still pass,
+// but a write that reached for the read handle is refused by the driver, which
+// is the direction that can corrupt the tree.
 //
 // The write handle is returned as well, for the fixtures that have to insert
 // rows this package does not own.
+//
+// ⚠ IT USED TO CARRY A COPY OF `locations` AND A CUT-DOWN `offers`, "copied so
+// the tests do not depend on a migration runner". The `offers` copy had eight
+// columns; the real table has more than twenty. That is drift of exactly the
+// kind ADR-013 was written about, and it had already happened here: the copy and
+// the tests using it agreed with each other perfectly while describing a table
+// production does not have. A copied schema cannot detect its own drift, because
+// it defines the thing the test then measures.
 func newRepo(t *testing.T) (*Repo, *sql.DB) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "t.db")
 
-	write, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_txlock=immediate")
+	db, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
-		t.Fatalf("open writer: %v", err)
+		t.Fatalf("open: %v", err)
 	}
-	write.SetMaxOpenConns(1)
-	write.SetMaxIdleConns(1)
-	if _, err := write.Exec(testSchema); err != nil {
-		t.Fatalf("create schema: %v", err)
+	if err := store.Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	read, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_pragma=query_only(1)")
-	if err != nil {
-		write.Close()
-		t.Fatalf("open reader: %v", err)
-	}
-	t.Cleanup(func() {
-		read.Close()
-		write.Close()
-	})
-	return NewRepo(read, write), write
+	return NewRepo(db.Read, db.Write), db.Write
 }
 
 // insert puts one row in directly, so that the read methods are tested against

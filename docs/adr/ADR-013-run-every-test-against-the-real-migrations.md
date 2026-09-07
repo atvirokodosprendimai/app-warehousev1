@@ -151,4 +151,6 @@ copied fixtures that produced the drift.
 
 ## Follow-ups
 
-- [ ] Add a CI workflow running `gofmt -l`, `go vet ./...`, `go test ./...` and `scripts/smoke.sh` on every push. Recorded in `docs/adr/BACKLOG.md`. **Not built — this is the single largest gap in the repository.**
+- [x] Add a CI workflow running `gofmt -l`, `go vet ./...`, `go test ./...` and `scripts/smoke.sh` on every push. **Built 2026-09-07**: `.github/workflows/checks.yml`. ⚠ `gofmt -l` exits 0 while listing files, so that step reads its OUTPUT rather than its status; nothing in the workflow decides pass or fail through a pipe.
+- [x] Convert the four packages that still built their own test schema. **Built 2026-09-07**: `internal/fx`, `internal/auth`, `internal/location` and `internal/cart` now run the real migrations, and `internal/store/schema_guard_test.go::TestNoTestBuildsItsOwnCopyOfTheSchema` walks the whole tree so this record's claim can no longer outrun its enforcement. ⚠ `internal/location`'s copy of `offers` had EIGHT columns where the real table has more than twenty — the drift this record predicted had already happened.
+- [x] Exercise the down migrations. **Built 2026-09-07**: `internal/store/migrate_test.go::TestEveryMigrationCanBeRolledBack` runs the whole set down to zero, asserts no application table survives, and re-applies it. ⚠ The re-apply is the real assertion: goose reports success for a Down section that drops nothing.

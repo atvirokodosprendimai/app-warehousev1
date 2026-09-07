@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -39,6 +40,122 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if v1 != v2 {
 		t.Errorf("re-running migrations moved the version %d -> %d", v1, v2)
 	}
+}
+
+// migrateDownToZero rolls the whole set backward.
+//
+// It drives goose directly rather than through a `store` function, because there
+// is no rollback path in the application: the binary migrates UP on every boot
+// and nothing has ever needed to go the other way. Adding a production API whose
+// only caller is this test would be inventing a surface to justify a check.
+func migrateDownToZero(t *testing.T, db *sql.DB) {
+	t.Helper()
+	goose.SetBaseFS(migrations.FS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		t.Fatalf("goose dialect: %v", err)
+	}
+	goose.SetLogger(goose.NopLogger())
+	if err := goose.DownTo(db, ".", 0); err != nil {
+		t.Fatalf("rolling the migrations back: %v", err)
+	}
+}
+
+// TestEveryMigrationCanBeRolledBack exercises the direction none of them has
+// ever been run in.
+//
+// ⚠ EVERY MIGRATION IN THIS REPOSITORY HAS A `-- +goose Down` SECTION AND, UNTIL
+// THIS TEST, NOT ONE OF THEM HAD EVER EXECUTED. `TestMigrateIsIdempotent` runs
+// the set forward twice; nothing ran it backward. A down migration that does not
+// work is discovered during the incident it was written for — at the moment
+// somebody needs it and has least time to debug it.
+//
+// ★ THE SECOND `Migrate` IS THE REAL ASSERTION, not the rollback itself. goose
+// reports success for a Down section that drops nothing, so "it rolled back
+// without erroring" proves very little. Re-applying the whole set afterwards is
+// what catches it: a table a Down forgot to drop makes the next CREATE TABLE
+// fail, and a foreign key dropped in the wrong ORDER fails on the way down.
+// Migration 00009 is the live example — it drops `offers.category_id` BEFORE the
+// tables it references, and that ordering is load-bearing rather than tidy.
+func TestEveryMigrationCanBeRolledBack(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrating up: %v", err)
+	}
+	up, err := Version(db.Write)
+	if err != nil {
+		t.Fatalf("Version: %v", err)
+	}
+	if up == 0 {
+		t.Fatal("schema version is 0 after migrating; nothing ran, so rolling " +
+			"back would prove nothing either")
+	}
+
+	migrateDownToZero(t, db.Write)
+
+	if v, err := Version(db.Write); err != nil {
+		t.Fatalf("Version after rollback: %v", err)
+	} else if v != 0 {
+		t.Errorf("rolling back left the schema at version %d, not 0", v)
+	}
+
+	// Nothing of ours may survive. goose keeps its own bookkeeping table, and
+	// SQLite keeps internal ones; anything else is a table some Down forgot.
+	left := applicationTables(t, db.Write)
+	if len(left) > 0 {
+		t.Errorf("these tables survived a full rollback: %s. A Down section that "+
+			"drops nothing still reports success, so the only way this is caught "+
+			"is by looking at what is actually left", strings.Join(left, ", "))
+	}
+
+	// ★ And the set must go back up over the wreckage. This is what a real
+	// rollback is FOR: undo the release, fix it, deploy again.
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("re-applying the migrations after a rollback: %v. The rollback "+
+			"left the database in a state its own migrations cannot start from, "+
+			"which is worse than not being able to roll back at all", err)
+	}
+	again, err := Version(db.Write)
+	if err != nil {
+		t.Fatalf("Version after re-applying: %v", err)
+	}
+	if again != up {
+		t.Errorf("the schema came back to version %d rather than %d", again, up)
+	}
+}
+
+// applicationTables lists the tables this repository's migrations created, which
+// is every table except goose's bookkeeping and SQLite's own internals.
+func applicationTables(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+	rows, err := db.Query(`
+		SELECT name FROM sqlite_master
+		WHERE type = 'table'
+		  AND name NOT LIKE 'sqlite_%'
+		  AND name <> 'goose_db_version'
+		ORDER BY name`)
+	if err != nil {
+		t.Fatalf("listing tables: %v", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scanning table name: %v", err)
+		}
+		out = append(out, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("listing tables: %v", err)
+	}
+	return out
 }
 
 // TestSchemaRefusesASoldOfferWithNoDate pins the CHECK constraint at the

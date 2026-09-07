@@ -7,58 +7,42 @@ import (
 	"path/filepath"
 	"testing"
 
-	// modernc.org/sqlite is the CGO-free driver, registered as "sqlite".
-	_ "modernc.org/sqlite"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
 
-// createFxRates is fx_rates as migrations/00001_init.sql defines it, copied
-// rather than imported: these tests must not depend on the sibling store
-// package, and a copy that drifts from the migration shows up as a failing test
-// here rather than as a surprise in production.
-const createFxRates = `
-CREATE TABLE fx_rates (
-    as_of      TEXT NOT NULL,
-    quote      TEXT NOT NULL,
-    rate       TEXT NOT NULL,
-    fetched_at TEXT NOT NULL,
-    PRIMARY KEY (as_of, quote)
-) STRICT;`
-
-// newTestDB opens a fresh SQLite database in a temp directory and returns the
-// reader and writer handles a Repo expects.
+// newTestDB opens a fresh database, runs the REAL migrations over it, and
+// returns the reader and writer handles a Repo expects.
 //
-// The writer carries _txlock=immediate for the same reason the application's
-// does: a transaction that reads before it writes would otherwise have to
-// upgrade its lock, and SQLite fails an upgrade conflict without waiting.
+// ⚠ IT USED TO CARRY A COPY OF `CREATE TABLE fx_rates`, with a comment saying
+// the copy was acceptable because a drift would show up as a failing test here.
+// That is the same comment `internal/offer` and `internal/submission` carried
+// before their copies drifted and left the suite green against a schema
+// production does not have — which is what ADR-013 was written about. The copy
+// cannot detect its own drift: it defines the table the test then uses, so both
+// sides move together and agree with each other while disagreeing with
+// production.
+//
+// The old comment also said these tests "must not depend on the sibling store
+// package". Nothing needed that: it is a TEST-ONLY import of a package that sits
+// below this one and imports nothing from it, and four other packages here
+// already do exactly this.
+//
+// store.Open also gives these tests the real handle split rather than a
+// hand-copied DSN — one writer with _txlock=immediate, and a reader carrying
+// query_only(1) so the driver REFUSES a write on the read path.
 func newTestDB(t *testing.T) (read, write *sql.DB) {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "fx_test.db")
-	const pragmas = "_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"
-
-	write, err := sql.Open("sqlite", "file:"+path+"?"+pragmas+"&_txlock=immediate")
+	db, err := store.Open(filepath.Join(t.TempDir(), "fx_test.db"))
 	if err != nil {
-		t.Fatalf("open writer: %v", err)
+		t.Fatalf("open: %v", err)
 	}
-	// SQLite admits one writer; a larger pool would only queue less visibly.
-	write.SetMaxOpenConns(1)
-	if _, err := write.Exec(createFxRates); err != nil {
-		write.Close()
-		t.Fatalf("create fx_rates: %v", err)
+	if err := store.Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
-
-	// Opened after the writer has created the file: query_only(1) cannot.
-	read, err = sql.Open("sqlite", "file:"+path+"?"+pragmas+"&_pragma=query_only(1)")
-	if err != nil {
-		write.Close()
-		t.Fatalf("open reader: %v", err)
-	}
-
-	t.Cleanup(func() {
-		read.Close()
-		write.Close()
-	})
-	return read, write
+	t.Cleanup(func() { _ = db.Close() })
+	return db.Read, db.Write
 }
 
 // newTestRepo returns a Repo over a fresh database, plus the reader handle so a

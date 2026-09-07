@@ -345,7 +345,21 @@ func (a *App) userMessage(err error) string {
 		errors.Is(err, location.ErrCycle),
 		errors.Is(err, export.ErrIncomplete),
 		errors.Is(err, export.ErrOptions),
-		errors.Is(err, export.ErrUnknownProfile):
+		errors.Is(err, export.ErrUnknownProfile),
+		// ⚠ THE TAXONOMY'S REFUSALS WERE MISSING FROM THIS LIST FROM THE DAY
+		// ADR-021 SHIPPED. Every one of them is a sentence an operator can act
+		// on — this code is already used, that node still has children, that
+		// move would put a category inside itself — and without them all six
+		// arrived as "Something went wrong. The details are in the server log."
+		// Worse than unhelpful: each was also logged at ERROR as unexpected, so
+		// the ordinary act of typing a code somebody already used looked like a
+		// fault in the application.
+		errors.Is(err, taxonomy.ErrCodeTaken),
+		errors.Is(err, taxonomy.ErrPathTaken),
+		errors.Is(err, taxonomy.ErrFieldCodeTaken),
+		errors.Is(err, taxonomy.ErrHasChildren),
+		errors.Is(err, taxonomy.ErrCategoryInUse),
+		errors.Is(err, taxonomy.ErrCycle):
 		return err.Error()
 	}
 	a.Log.Error("unexpected error", "err", err)

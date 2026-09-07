@@ -91,17 +91,25 @@ Neither was visible from reading the records. Both took one mutation each.
 Four gaps, all in BACKLOG.md, and the first is the largest thing wrong with this
 repository:
 
-1. **There is no CI.** Every check runs only when a person chooses to run it.
-   GitHub's default-setup CodeQL reports green, which puts a tick against commits
-   whose actual checks nobody ran.
-2. **Nobody has opened the application in a browser.** Seven defects have now been
-   found by a person after the server-side suite was green, every one invisible to
-   it by construction.
-3. **Four packages still build their own test schema** — `internal/fx`,
-   `internal/location`, `internal/cart` and `internal/auth`, nine copied
-   `CREATE TABLE` statements between them. ADR-013 claimed there were none for a
-   day before this was noticed.
-4. **Down migrations have never been run.**
+1. **Nobody has opened the application in a browser as part of any check.** Eight
+   defects have now been found by a person after the server-side suite was green,
+   every one invisible to it by construction. Two Playwright walks exist and have
+   each caught a real defect, but they live outside the repository.
+
+Closed on 2026-09-07, and listed so they are not rediscovered:
+
+2. ~~There is no CI.~~ `.github/workflows/checks.yml` runs `gofmt`, `go vet`,
+   `go test` and `scripts/smoke.sh` on every push. Before it, GitHub's
+   default-setup CodeQL reported green against commits whose real checks nobody
+   had run.
+3. ~~Four packages still build their own test schema.~~ `internal/fx`,
+   `internal/auth`, `internal/location` and `internal/cart` run the real
+   migrations; `internal/store/schema_guard_test.go` enforces it tree-wide, which
+   ADR-013's own Enforced-by test could not. The drift it predicted had already
+   happened in `internal/location`.
+4. ~~Down migrations have never been run.~~
+   `TestEveryMigrationCanBeRolledBack` runs the set down to zero, checks nothing
+   survived, and puts it back up again.
 
 ## Checking these records
 

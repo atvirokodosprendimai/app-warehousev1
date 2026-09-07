@@ -414,3 +414,62 @@ func TestTheRegistryMatchesTheProfilesCoreKnows(t *testing.T) {
 		}
 	}
 }
+
+// TestNoRegisteredProfileEverExportsTheOwnerPrice is ADR-003's rule asked of the
+// REGISTRY rather than of the two profiles somebody remembered to write a test
+// for.
+//
+// ⚠ THIS CLOSES THE ONE GAP ADR-003 NAMED IN ITS OWN RISKS. `Shopify` and `EBay`
+// each have a hand-written owner-price test, and a third profile would have
+// neither until somebody thought to add one — which is exactly the moment nobody
+// is thinking about the owner price. Written this way a new exporter is covered
+// by existing in the registry: the loop finds it, and the day it leaks the
+// business's private cost into a public catalogue this test fails without anyone
+// having predicted it.
+//
+// ★ IT ASSERTS THE SHOP PRICE IS PRESENT TOO, AND THAT IS NOT DECORATION. A
+// negative assertion — "this string does not appear" — is satisfied just as well
+// by an empty file, a crashed exporter or a typo'd fixture as by the rule
+// holding. Without the positive control this test would report ok on a run where
+// nothing was exported at all.
+func TestNoRegisteredProfileEverExportsTheOwnerPrice(t *testing.T) {
+	if len(registry) == 0 {
+		t.Fatal("the registry is empty, so this test asserts nothing about anything")
+	}
+
+	for _, e := range registry {
+		t.Run(e.Name(), func(t *testing.T) {
+			offer := testOffer("LAMP-01", 3)
+			out := render(t, e, []core.Offer{offer}, testOptions())
+
+			// The positive control first: if the shop price is missing, the
+			// export did not happen and every check below is vacuous.
+			if !strings.Contains(out, "125.00") {
+				t.Fatalf("the shop price is absent from the %s export, so this "+
+					"profile rendered nothing and the leak checks below would "+
+					"pass over an empty file:\n%s", e.Name(), out)
+			}
+
+			for _, leak := range []string{ownerDecimal, "3077"} {
+				if strings.Contains(out, leak) {
+					t.Errorf("the owner price %q reaches the %s catalogue. That "+
+						"figure is what the person whose warehouse this stock sits "+
+						"in wants to be paid — publishing it hands a marketplace, "+
+						"and every competitor reading it, the business's own "+
+						"cost:\n%s", leak, e.Name(), out)
+				}
+			}
+
+			// And cell by cell, in case a future column renders it in a shape the
+			// substring check would not recognise.
+			for r, row := range records(t, out) {
+				for c, cell := range row {
+					if cell == ownerDecimal || cell == "3077" {
+						t.Errorf("the %s export carries the owner price alone in "+
+							"row %d, column %d", e.Name(), r, c)
+					}
+				}
+			}
+		})
+	}
+}

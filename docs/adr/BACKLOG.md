@@ -15,71 +15,51 @@ that a deferral resurfaces instead of quietly becoming permanent.
 These are not the same kind of thing as the rest of this file. Each one is a gap
 in how this repository knows whether it works.
 
-### Every check runs on every push
-
-**Deferred by:** ADR-013 (run every test against the real migrations)
-
-The repository has **no CI workflow**. `gofmt -l`, `go vet ./...`,
-`go test ./...` and `scripts/smoke.sh` all exist, all pass, and all run only when
-a person on a laptop chooses to run them.
-
-GitHub's default-setup CodeQL *does* run on this repository and reports success.
-That is worse than silence: it puts a green tick against a commit whose actual
-checks nobody ran, and a green tick is read as "checked".
-
-**What would make this real:** it already is. This is the largest open gap in the
-repository, and the only reason it is deferred rather than done is that nobody
-has asked for it.
-
 ### Nobody has opened the application in a browser
 
 **Deferred by:** ADR-008 (no forms except the photo upload), ADR-009 (one stream per page), ADR-015 (an upload says it is uploading)
 
-Six defects were found by a person using the application after the server-side
-suite was green, and every one was invisible to that suite **by construction**:
-an upload that never fired, photographs that could not be opened on a phone, a
-saved batch with no link to it, places that could not be edited. A server-side
-suite cannot see reachability or a client-side contract.
+Eight defects have now been found by a person using the application after the
+server-side suite was green, and every one was invisible to that suite **by
+construction**: an upload that never fired, photographs that could not be opened
+on a phone, a saved batch with no link to it, places that could not be edited,
+the New offer button missing from every page but two, and a questions card that
+never appeared when a category was chosen. A server-side suite cannot see
+reachability or a client-side contract.
 
-The markup contract test added afterwards
-(`internal/web/view/upload_contract_test.go`) closes the specific hole it was
-written for and nothing wider. Nothing checks that datastar hydrates at all, that
-a patch is applied, that the layout survives a phone-sized viewport, or that
-focus and contrast are usable.
+Two Playwright walks now exist and have each caught a real defect, but they live
+in a scratch directory outside the repository and are deleted with the session
+that wrote them.
 
-**What would make this real:** walking intake → price → photo → cart → export on
-a phone-sized viewport, and fixing what only a person can see. Then a
-browser-driven test for the paths that matter.
+**What would make this real:** moving those walks into the repository and running
+them in CI, so the check that has caught two defects survives the session that
+wrote it.
 
-### Down migrations are never exercised
+---
 
-**Deferred by:** ADR-013 (run every test against the real migrations)
+### Closed, and kept here so nobody rediscovers them
 
-Every migration has a `-- +goose Down` section and none of them has ever been
-run. `TestMigrateIsIdempotent` runs the set forward twice; nothing runs it
-backward. A down migration that does not work is discovered during the incident
-it was written for.
+**Every check runs on every push** — closed 2026-09-07 by
+`.github/workflows/checks.yml`. The repository had no CI at all while GitHub's
+default-setup CodeQL reported green, which put a tick against commits whose
+actual checks nobody had run. ⚠ `gofmt -l` exits 0 while listing files, so that
+step reads its output rather than its status.
 
-### Four packages still build their own test schema
+**Down migrations are never exercised** — closed 2026-09-07 by
+`internal/store/migrate_test.go::TestEveryMigrationCanBeRolledBack`. Every
+migration had a `-- +goose Down` section and not one had ever executed. ⚠ The
+rollback is not the assertion: goose reports success for a Down that drops
+nothing, so the test re-applies the whole set afterwards and asserts no
+application table survived the way down.
 
-**Deferred by:** ADR-013 (run every test against the real migrations)
-
-`internal/fx` (1 copied `CREATE TABLE`), `internal/location` (2),
-`internal/cart` (5) and `internal/auth` (1) never run the migrations — they
-build a schema of their own, each with a comment explaining why the copy is
-acceptable. That is the same comment `internal/offer` and `internal/submission`
-carried before their copies drifted and left the suite green against a schema
-production does not have.
-
-⚠ ADR-013 claimed "No package holds a copy of any schema statement" from
-2026-09-06 until 2026-09-07, when this was found while reading `internal/fx` for
-an unrelated reason. The claim was false when written; the record now says so.
-Its `Enforced-by` test lives in `internal/offer`, so it proves that one package
-runs the migrations and is structurally blind to these four — a record can be
-mutation-verified and still overstate its reach.
-
-**What would make this real:** nine statements, four helpers. Each conversion may
-surface drift that has already happened, which is the point of doing it.
+**Four packages still build their own test schema** — closed 2026-09-07.
+`internal/fx`, `internal/auth`, `internal/location` and `internal/cart` run the
+real migrations, and `internal/store/schema_guard_test.go` walks the whole tree
+so ADR-013's claim can no longer outrun the one package its Enforced-by test
+happened to live in. ⚠ The predicted drift had ALREADY happened:
+`internal/location`'s copy of `offers` declared eight columns where the real
+table has more than twenty, and every test using it agreed with the copy
+perfectly.
 
 ---
 

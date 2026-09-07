@@ -2,139 +2,45 @@ package cart
 
 import (
 	"context"
-	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
 
-	// modernc.org/sqlite is the CGO-free driver; it registers itself as "sqlite".
-	_ "modernc.org/sqlite"
-
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
 
-// schemaStatements is the part of migrations/00001_init.sql and
-// migrations/00002_carts.sql this package needs, copied verbatim so the suite
-// depends on no sibling package. Keep it in step with those migrations: a drift
-// here makes the tests pass against a schema production does not have.
+// newTestRepo opens a fresh database in the test's temp directory, runs the REAL
+// migrations over it, and returns a Repo.
 //
-// locations is included even though no test shelves anything, because offers
-// carries a foreign key onto it and SQLite reports a missing parent table as an
-// error on the child's very first insert.
-var schemaStatements = []string{
-	`CREATE TABLE locations (
-	    id                TEXT PRIMARY KEY,
-	    parent_id         TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    kind              TEXT NOT NULL CHECK (kind IN
-	                          ('site','building','room','aisle','shelf','segment','bin')),
-	    code              TEXT NOT NULL,
-	    path              TEXT NOT NULL UNIQUE,
-	    label             TEXT NOT NULL DEFAULT '',
-	    custodian         TEXT NOT NULL DEFAULT '',
-	    custodian_contact TEXT NOT NULL DEFAULT '',
-	    city              TEXT NOT NULL DEFAULT '',
-	    country           TEXT NOT NULL DEFAULT '',
-	    notes             TEXT NOT NULL DEFAULT '',
-	    created_at        TEXT NOT NULL,
-	    UNIQUE (parent_id, code)
-	) STRICT`,
-	`CREATE TABLE offers (
-	    id             TEXT PRIMARY KEY,
-	    sku            TEXT NOT NULL UNIQUE,
-	    title          TEXT NOT NULL,
-	    description    TEXT NOT NULL DEFAULT '',
-	    condition      TEXT NOT NULL DEFAULT '',
-	    status         TEXT NOT NULL DEFAULT 'draft' CHECK (status IN
-	                       ('draft','listed','pending','sold','archived')),
-	    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
-	    shop_minor     INTEGER NOT NULL DEFAULT 0,
-	    shop_currency  TEXT NOT NULL DEFAULT 'EUR',
-	    owner_minor    INTEGER NOT NULL DEFAULT 0,
-	    owner_currency TEXT NOT NULL DEFAULT 'EUR',
-	    sold_minor     INTEGER NOT NULL DEFAULT 0,
-	    sold_currency  TEXT NOT NULL DEFAULT '',
-	    sold_at        TEXT,
-	    location_id    TEXT REFERENCES locations (id) ON DELETE RESTRICT,
-	    created_at     TEXT NOT NULL,
-	    updated_at     TEXT NOT NULL,
-	    CHECK (status <> 'sold' OR sold_at IS NOT NULL),
-	    CHECK (status NOT IN ('listed','pending') OR shop_minor > 0)
-	) STRICT`,
-	`CREATE INDEX offers_status_idx ON offers (status)`,
-	`CREATE TABLE offer_photos (
-	    id           TEXT PRIMARY KEY,
-	    offer_id     TEXT NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
-	    position     INTEGER NOT NULL DEFAULT 0,
-	    filename     TEXT NOT NULL DEFAULT '',
-	    content_type TEXT NOT NULL,
-	    byte_size    INTEGER NOT NULL DEFAULT 0,
-	    sha256       TEXT NOT NULL DEFAULT '',
-	    created_at   TEXT NOT NULL
-	) STRICT`,
-	`CREATE INDEX offer_photos_offer_idx ON offer_photos (offer_id, position)`,
-	`CREATE TABLE carts (
-	    id         TEXT PRIMARY KEY,
-	    name       TEXT NOT NULL,
-	    note       TEXT NOT NULL DEFAULT '',
-	    created_at TEXT NOT NULL,
-	    updated_at TEXT NOT NULL
-	) STRICT`,
-	`CREATE TABLE cart_items (
-	    cart_id  TEXT NOT NULL REFERENCES carts (id) ON DELETE CASCADE,
-	    offer_id TEXT NOT NULL REFERENCES offers (id) ON DELETE CASCADE,
-	    position INTEGER NOT NULL DEFAULT 0,
-	    added_at TEXT NOT NULL,
-	    PRIMARY KEY (cart_id, offer_id)
-	) STRICT`,
-	`CREATE INDEX cart_items_order_idx ON cart_items (cart_id, position)`,
-	`CREATE INDEX cart_items_offer_idx ON cart_items (offer_id)`,
-}
-
-// newTestRepo opens a fresh SQLite database in the test's temp directory,
-// creates the schema, and returns a Repo over it.
-//
-// It mirrors the application's own handle split: a single writer with
+// It gets the application's own handle split for free: a single writer with
 // _txlock=immediate, and a reader carrying query_only(1). Neither pragma is
 // decoration. foreign_keys(1) is what makes the cascade assertions mean
 // something, and query_only(1) makes the suite prove that no read path writes,
 // because the driver refuses rather than merely being asked not to.
+//
+// ⚠ IT USED TO CARRY FIVE COPIED `CREATE TABLE` STATEMENTS — locations, offers,
+// offer_photos, carts and cart_items — with a comment asking whoever changed the
+// schema to "keep it in step with those migrations". That is the largest copy in
+// the repository and it was the one with most to go wrong: this package's whole
+// subject is a CASCADE, so its assertions are only as true as the foreign keys
+// in the copy. ADR-013 exists because `internal/offer` and `internal/submission`
+// carried the same request and it was not honoured; a copy cannot detect its own
+// drift, since it defines the tables the tests then measure.
 func newTestRepo(t *testing.T) *Repo {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "cart_test.db")
-	write, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)&_txlock=immediate")
+	db, err := store.Open(filepath.Join(t.TempDir(), "cart_test.db"))
 	if err != nil {
-		t.Fatalf("open writer: %v", err)
+		t.Fatalf("open: %v", err)
 	}
-	// SQLite admits one writer; a larger pool would only queue somewhere with
-	// worse diagnostics.
-	write.SetMaxOpenConns(1)
-	if err := write.Ping(); err != nil {
-		t.Fatalf("ping writer: %v", err)
+	if err := store.Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
-	for _, stmt := range schemaStatements {
-		if _, err := write.Exec(stmt); err != nil {
-			t.Fatalf("create schema: %v\n%s", err, stmt)
-		}
-	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	read, err := sql.Open("sqlite", "file:"+path+
-		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)&_pragma=query_only(1)")
-	if err != nil {
-		t.Fatalf("open reader: %v", err)
-	}
-	if err := read.Ping(); err != nil {
-		t.Fatalf("ping reader: %v", err)
-	}
-
-	t.Cleanup(func() {
-		_ = read.Close()
-		_ = write.Close()
-	})
-	return NewRepo(read, write)
+	return NewRepo(db.Read, db.Write)
 }
 
 // baseTime is a fixed instant the tests build timestamps from, so that ordering

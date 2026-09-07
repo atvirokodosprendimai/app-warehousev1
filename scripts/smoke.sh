@@ -288,6 +288,19 @@ curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
   -d '{"newCode":"CAR","newName":"Car parts","newParent":""}' \
   -o "$RUN/cat-root.txt"
 check "a root category can be created" "/categories?at=" "$RUN/cat-root.txt"
+
+# ⚠ THE HAND-TYPED PATH'S REFUSAL, WHICH WAS "Something went wrong" UNTIL NOW.
+# `App.userMessage` mapped the sentinels of auth, offer, location and export and
+# NOT those of taxonomy, so re-using a category code — the most ordinary mistake
+# on this screen — rendered as a generic fault AND was logged at ERROR as an
+# unexpected one. The template path above had its own answer; this is the half
+# that ADR-021 T2 shipped broken.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d '{"newCode":"CAR","newName":"Car parts again","newParent":""}' \
+  -o "$RUN/cat-dup.txt"
+check "a duplicate category code is refused in words" "already in use" "$RUN/cat-dup.txt"
+absent "and not as an unexplained fault" "Something went wrong" "$RUN/cat-dup.txt"
 CAR_ID=$(grep -o "at=[0-9a-f-]\{36\}" "$RUN/cat-root.txt" | head -1 | cut -d= -f2)
 
 curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \

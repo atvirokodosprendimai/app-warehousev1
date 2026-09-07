@@ -1,0 +1,74 @@
+# The checks this repository already had, finally running on their own.
+#
+# ⚠ THIS EXISTS BECAUSE A GREEN TICK WAS ALREADY BEING SHOWN FOR WORK NOBODY HAD
+# CHECKED. GitHub's default-setup CodeQL runs here and reports success, and a
+# green tick beside a commit is read as "the checks passed" — so the repository
+# was advertising a result it had never computed. `gofmt`, `go vet`, `go test`
+# and `scripts/smoke.sh` all existed, all passed, and all ran only when somebody
+# on a laptop chose to run them. ADR-013 called this the single largest gap in
+# the repository; docs/adr/BACKLOG.md said the only reason it was not built is
+# that nobody had asked.
+#
+# ⚠ NOTHING HERE MAY DECIDE PASS OR FAIL THROUGH A PIPE. This repository's own
+# rule, and it is not theoretical: piping a suite through `tail` or `grep` makes
+# the pipeline's status the LAST command's, so a failing test run reports
+# success. Every step below is a bare command whose own exit code is the verdict,
+# with one exception that is handled explicitly and commented where it happens.
+name: checks
+
+on:
+  push:
+  pull_request:
+
+# Least privilege: these checks read the tree and write nothing.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run's answer irrelevant, so
+# stop paying for it. Never applied to the default branch, where every commit's
+# result is worth keeping.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  checks:
+    name: gofmt, vet, tests, smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # From go.mod, so the toolchain here and the toolchain on a laptop can
+          # never quietly diverge — which is the failure this whole workflow is
+          # meant to make visible rather than the one it introduces.
+          go-version-file: go.mod
+          cache: true
+
+      # ⚠ `gofmt -l` EXITS 0 WHILE LISTING FILES. It reports what is unformatted
+      # on stdout and considers having reported it a success, so `run: gofmt -l .`
+      # is a step that can never fail. The output is the verdict, not the status.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-clean:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # -count=1 defeats the test cache. A cached PASS is a fact about a previous
+      # run of a previous tree, and on CI it would mean a green tick for a suite
+      # that did not execute.
+      - name: go test
+        run: go test ./... -count=1
+
+      # The smoke walk builds the real binary, serves it, and drives HTTP. It
+      # exits with its own failure count, so its status is the verdict here.
+      # It needs nothing but Go, bash and curl, all of which the runner has.
+      - name: smoke
+        run: bash scripts/smoke.sh
