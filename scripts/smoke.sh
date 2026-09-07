@@ -431,6 +431,18 @@ check "a quantity can be set at all" "Saved" "$RUN/qty.txt"
 curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/qty.html"
 check "and it comes back on the editor" "42" "$RUN/qty.html"
 
+# ⚠ THE SAVE ABOVE CARRIED NO offerCategory, AND IT USED TO UN-FILE THE OFFER.
+# The picker can legitimately be cleared — its first option is "not filed" — so
+# the handler cannot read empty as "unchanged" the way it does for the reference
+# and the quantity. It reads ABSENT as unchanged instead, which is a different
+# question and needs a pointer to answer.
+#
+# Caught here rather than in Go: internal/web has no unit tests, and the failure
+# is silent — the offer saves, says "Saved", and quietly stops being a
+# turbocharger. Everything downstream then looks like an export bug.
+check "a partial save does NOT un-file the offer" "Engine code" "$RUN/qty.html"
+check "and its answers survive it" "WVWZZZ1JZXW000001" "$RUN/qty.html"
+
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/status/listed" \
   -H 'Content-Type: application/json' -d '{}' -o "$RUN/status.txt"
 check "now listed" "Listed" "$RUN/status.txt"
@@ -515,6 +527,26 @@ absent "the OWNER price never reaches the ebay export" "30.00" "$RUN/ebay.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv?cart=$CART_ID" -o "$RUN/cart.csv"
 check "a batch exports on its own" "Vintage brass desk lamp" "$RUN/cart.csv"
+
+# ⚠ THE ONLY PLACE THE HANDLER'S LOAD IS PROVED. internal/export is pure and a
+# unit test supplies its own Offer.Fields, so forgetting to resolve them in the
+# handler produces a well-formed file with every custom column EMPTY and leaves
+# the whole Go suite green. Only a real request through the real handler catches
+# it, which is why this assertion is the reachability proof rather than a
+# formality.
+#
+# The taxonomy section above ticked "Send this to marketplaces" on VIN and left
+# it OFF on Engine code, then answered both — so this pair is the whole of M's
+# request: "in export i need to choose which taxonomies from category to export
+# to csv somehow".
+check "an EXPORTED custom field becomes an eBay item specific" "C:VIN" "$RUN/ebay.csv"
+check "and carries the answer the operator typed" "WVWZZZ1JZXW000001" "$RUN/ebay.csv"
+absent "an UNTICKED field is not an eBay column" "C:Engine code" "$RUN/ebay.csv"
+absent "and its value never leaves the building" "BKD-1968" "$RUN/ebay.csv"
+
+check "shopify takes the same field as a plain column" "VIN" "$RUN/shopify.csv"
+check "with the same answer" "WVWZZZ1JZXW000001" "$RUN/shopify.csv"
+absent "and leaves the unticked one out too" "BKD-1968" "$RUN/shopify.csv"
 
 echo "== submissions inbox =="
 STAFF="$RUN/staff.txt"

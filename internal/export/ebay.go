@@ -81,6 +81,12 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 		condition = DefaultConditionID
 	}
 
+	// The custom columns are computed from the offers actually being written, not
+	// from the whole tree — see [customColumns] for why a CSV cannot declare a
+	// fixed set here. eBay's item specifics are "C:<Label>" columns, so an
+	// exported field becomes one.
+	cols := customColumns(items)
+
 	rows := make([][]string, 0, len(items))
 	var problems []error
 	for _, o := range items {
@@ -106,7 +112,7 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 			problems = append(problems, fmt.Errorf("%w: %s: %w", ErrIncomplete, o.SKU, err))
 			continue
 		}
-		rows = append(rows, []string{
+		row := []string{
 			"Add",         // *Action
 			o.SKU,         // CustomLabel
 			category,      // *Category — this offer's own, or the configured default
@@ -120,10 +126,15 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 			"GTC",                                        // *Duration
 			opt.Location,                                 // *Location
 			"ReturnsAccepted",                            // *ReturnsAcceptedOption
-		})
+		}
+		// The variable tail. Empty where this offer's category does not ask that
+		// question, so every row is the same width as the header.
+		rows = append(rows, append(row, customCells(o, cols)...))
 	}
 	if len(problems) > 0 {
 		return fmt.Errorf("ebay: %w", errors.Join(problems...))
 	}
-	return writeCSV(w, "ebay", ebayHeader(opt.currency()), rows)
+	header := append(ebayHeader(opt.currency()),
+		customLabels(cols, func(c core.CategoryField) string { return "C:" + c.Label })...)
+	return writeCSV(w, "ebay", header, rows)
 }

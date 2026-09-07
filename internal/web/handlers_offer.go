@@ -300,10 +300,22 @@ type offerSignals struct {
 	Quantity string `json:"offerQuantity"`
 	// Category is the node in the OPERATOR's tree that says what this thing is
 	// (ADR-021). ⚠ Not EbayCategory below, which says where to list it.
-	Category     string `json:"offerCategory"`
-	SoldAmount   string `json:"soldAmount"`
-	SoldCurrency string `json:"soldCurrency"`
-	SoldDate     string `json:"soldDate"`
+	//
+	// ⚠ A POINTER, and it is the only field on this card that needs to be. The
+	// others treat empty as "the client did not send one", because none of them
+	// can be legitimately cleared. This one CAN: the picker's first option is
+	// "not filed", so an empty value is a choice the operator made — and a plain
+	// string cannot tell that choice apart from a payload that omitted the key.
+	// nil is absent; "" is cleared.
+	//
+	// Not hypothetical: the smoke walk caught it. A later save of the Details card
+	// with a partial body silently un-filed an offer that had just been
+	// categorised, and its custom columns then vanished from the export with
+	// nothing reporting anything anywhere.
+	Category     *string `json:"offerCategory"`
+	SoldAmount   string  `json:"soldAmount"`
+	SoldCurrency string  `json:"soldCurrency"`
+	SoldDate     string  `json:"soldDate"`
 	// EbayCategory is this offer's own eBay category, overriding the default
 	// configured at Settings. Empty means "use the default" — clearing it and
 	// never having set one are deliberately the same state (ADR-016).
@@ -352,8 +364,12 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	// The taxonomy category, unlike the reference and the quantity, IS clearable:
 	// it is a <select> whose first option is "not filed", so an empty value is a
 	// choice the operator made rather than a field the payload omitted. Un-filing
-	// something is a legitimate edit and there is no other control for it.
-	o.CategoryID = strings.TrimSpace(in.Category)
+	// something is a legitimate edit and there is no other control for it — which
+	// is exactly why the signal is a pointer: nil means the key was absent and the
+	// filing must be left alone.
+	if in.Category != nil {
+		o.CategoryID = strings.TrimSpace(*in.Category)
+	}
 
 	if err := a.Offer.Update(r.Context(), o); err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))

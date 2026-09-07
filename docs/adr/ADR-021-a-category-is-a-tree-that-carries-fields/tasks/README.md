@@ -30,7 +30,7 @@ fields whether or not the admin screen exists yet.
 | T1 | The tree, its fields, and the values that hang off an offer | done | — | `go test ./internal/taxonomy/ ./internal/core/ && go test ./...` |
 | T2 | An operator can shape the tree and the questions it asks | done | — | `go test ./internal/web/... && scripts/smoke.sh` |
 | T3 | An offer is asked its category's questions, root first | done | — | `go test ./internal/web/... && scripts/smoke.sh` |
-| T4 | A field can be exported, and the CSV's columns are the union over the batch | pending | — | `go test ./internal/export/... && scripts/smoke.sh` |
+| T4 | A field can be exported, and the CSV's columns are the union over the batch | done | — | `go test ./internal/export/... && scripts/smoke.sh` |
 
 Status: `pending` | `partial` | `blocked` | `done`.
 

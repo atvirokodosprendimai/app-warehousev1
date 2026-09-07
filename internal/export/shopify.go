@@ -75,6 +75,10 @@ func (Shopify) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	if err != nil {
 		return fmt.Errorf("shopify: %w", err)
 	}
+	// Computed from the offers actually being written — see [customColumns].
+	// Shopify gets a plain column named for the field's label, where eBay gets a
+	// "C:" prefix; that difference is the whole of the per-profile handling.
+	cols := customColumns(items)
 
 	rows := make([][]string, 0, len(items))
 	var problems []error
@@ -93,7 +97,7 @@ func (Shopify) Write(w io.Writer, offers []core.Offer, opt Options) error {
 		}
 		urls := photoURLs(o, opt.BaseURL)
 
-		rows = append(rows, []string{
+		rows = append(rows, append([]string{
 			handle,                   // Handle
 			o.Title,                  // Title
 			o.Description,            // Body (HTML)
@@ -114,12 +118,16 @@ func (Shopify) Write(w io.Writer, offers []core.Offer, opt Options) error {
 			"1",                      // Image Position
 			o.Title,                  // Image Alt Text
 			"active",                 // Status
-		})
+		}, customCells(o, cols)...))
 
 		// One row per image beyond the first, carrying nothing but the handle
 		// that ties it to the product above and the image itself.
+		//
+		// ⚠ Sized to the header INCLUDING the custom tail, or an image row would be
+		// narrower than the header and the file would stop being a readable CSV the
+		// moment any offer in the batch had two photographs.
 		for i, u := range urls[1:] {
-			row := make([]string, len(shopifyHeader))
+			row := make([]string, len(shopifyHeader)+len(cols))
 			row[shHandle] = handle
 			row[shImageSrc] = u
 			row[shImagePosition] = strconv.Itoa(i + 2)
@@ -129,7 +137,12 @@ func (Shopify) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	if len(problems) > 0 {
 		return fmt.Errorf("shopify: %w", errors.Join(problems...))
 	}
-	return writeCSV(w, "shopify", shopifyHeader, rows)
+	// ⚠ A COPY, not append(shopifyHeader, ...). shopifyHeader is a package-level
+	// slice, and appending to it would write into its backing array whenever the
+	// capacity allowed — one export's custom columns leaking into the next.
+	header := append(append([]string{}, shopifyHeader...),
+		customLabels(cols, func(c core.CategoryField) string { return c.Label })...)
+	return writeCSV(w, "shopify", header, rows)
 }
 
 // shopifyHandle turns a SKU into a Shopify handle: lowercased, with every run of
