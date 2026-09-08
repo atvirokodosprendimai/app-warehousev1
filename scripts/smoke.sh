@@ -577,6 +577,9 @@ check "a cart can also be created and named up front" "eBay September" "$RUN/car
 echo "== export =="
 curl -fsS -b "$COOKIES" "$BASE/export" -o "$RUN/export.html"
 check "export page says how many are ready" "1 ready" "$RUN/export.html"
+# The screen builds itself from export.Names(), so a profile appearing here is
+# the whole of its interface wiring — there is no markup naming it.
+check "the export screen offers the recar profile" "recar" "$RUN/export.html"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv" -o "$RUN/shopify.csv"
 check "shopify header" "Variant Price" "$RUN/shopify.csv"
@@ -590,6 +593,21 @@ check "ebay header" "PicURL" "$RUN/ebay.csv"
 check "ebay carries the shop price" "45.00" "$RUN/ebay.csv"
 check "ebay carries the QUANTITY we hold, not the default 1" ",42," "$RUN/ebay.csv"
 absent "the OWNER price never reaches the ebay export" "30.00" "$RUN/ebay.csv"
+
+curl -fsS -b "$COOKIES" "$BASE/export/recar.csv" -o "$RUN/recar.csv"
+# ⚠ THE HEADER IS POLISH WITH DIACRITICS AND THAT IS THE ASSERTION. It is
+# recar's own importer key, and it travels from a Go string through the CSV
+# writer, the handler and HTTP before anybody reads it — any of which could
+# mangle the encoding and produce a file that imports with empty columns.
+check "recar header keeps its diacritics end to end" "Numer katalogowy części" "$RUN/recar.csv"
+check "recar carries the shop price" "45.00" "$RUN/recar.csv"
+check "recar carries an absolute photo URL" "$BASE/p/" "$RUN/recar.csv"
+check "recar defaults an unstated condition to used" "Używany" "$RUN/recar.csv"
+absent "the OWNER price never reaches the recar export" "30.00" "$RUN/recar.csv"
+# ⚠ Recar has NO custom-field tail, unlike the other two: its template is a fixed
+# form. VIN is ticked for export and reaches eBay and Shopify above; it must not
+# invent a column here. This pins the difference where a reader can see it.
+absent "an exported custom field does not invent a recar column" "VIN" "$RUN/recar.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv?cart=$CART_ID" -o "$RUN/cart.csv"
 check "a batch exports on its own" "Vintage brass desk lamp" "$RUN/cart.csv"

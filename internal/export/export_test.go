@@ -138,7 +138,7 @@ func TestForRejectsUnknownProfile(t *testing.T) {
 }
 
 func TestNamesListsEveryProfileSorted(t *testing.T) {
-	want := []string{"ebay", "shopify"}
+	want := []string{"ebay", "recar", "shopify"}
 	if got := Names(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Names() = %v, want %v", got, want)
 	}

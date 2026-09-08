@@ -149,9 +149,15 @@ type Exporter interface {
 }
 
 // registry holds one instance per profile, in no particular order; [Names]
-// sorts. A slice rather than a map because there are two of them and each
+// sorts. A slice rather than a map because there are a handful of them and each
 // already knows its own name.
-var registry = []Exporter{Shopify{}, EBay{}}
+//
+// ⚠ ADDING A PROFILE HERE IS THE WHOLE WIRING. The export screen builds itself
+// from [Names] and asks each exporter whether it can run, so a new entry appears
+// in the interface with its own readiness message and needs no markup. It also
+// joins TestNoRegisteredProfileEverExportsTheOwnerPrice, which is the point of
+// that test looping the registry rather than naming profiles.
+var registry = []Exporter{Shopify{}, EBay{}, Recar{}}
 
 // For returns the exporter registered under name, matching case-insensitively
 // so that a profile arriving from a form or a CLI flag does not fail on "Ebay".
