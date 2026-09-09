@@ -74,7 +74,7 @@ func offerSignals(d OfferDetail) string {
 		"offerLocation: " + jsString(o.LocationID) + ", " +
 		"offerSku: " + jsString(o.SKU) + ", " +
 		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
-		"offerEbayCategory: " + jsString(o.Categories["ebay"]) + ", " +
+		"offerEbayCategory: " + jsString(o.MarketplaceValue("ebay", core.MarketplaceCategory)) + ", " +
 		"offerCategory: " + jsString(o.CategoryID) +
 		fieldSignalSeed(d) +
 		"}"

@@ -1,6 +1,6 @@
 # ADR-022: Pre-enter a marketplace's must-have values and pick each one from a list
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-09
 **Owner:** M
 **Spec:** None — no spec stage

@@ -990,9 +990,9 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if len(got.Categories) != 0 {
-		t.Errorf("a new offer has categories %v, want none — a category must not be "+
-			"required at intake", got.Categories)
+	if len(got.Marketplace) != 0 {
+		t.Errorf("a new offer has marketplace values %v, want none — a category must not be "+
+			"required at intake", got.Marketplace)
 	}
 
 	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
@@ -1006,13 +1006,13 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if got.Categories["ebay"] != "11450" {
-		t.Errorf("Categories[ebay] = %q, want %q", got.Categories["ebay"], "11450")
+	if got := got.MarketplaceValue("ebay", core.MarketplaceCategory); got != "11450" {
+		t.Errorf("ebay category = %q, want %q", got, "11450")
 	}
 	// Two profiles, two different KINDS of value on one offer — a number and a
 	// name. That is why this is a table with a TEXT column and not one column.
-	if got.Categories["shopify"] != "Lighting" {
-		t.Errorf("Categories[shopify] = %q, want %q", got.Categories["shopify"], "Lighting")
+	if got := got.MarketplaceValue("shopify", core.MarketplaceCategory); got != "Lighting" {
+		t.Errorf("shopify category = %q, want %q", got, "Lighting")
 	}
 
 	// Setting it again replaces rather than duplicating.
@@ -1020,8 +1020,8 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 		t.Fatalf("SetCategory (replace): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
-	if got.Categories["ebay"] != "20081" {
-		t.Errorf("Categories[ebay] = %q after replacing, want %q", got.Categories["ebay"], "20081")
+	if got := got.MarketplaceValue("ebay", core.MarketplaceCategory); got != "20081" {
+		t.Errorf("ebay category = %q after replacing, want %q", got, "20081")
 	}
 
 	// An empty value CLEARS it, so an operator can go back to the default
@@ -1030,8 +1030,8 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 		t.Fatalf("SetCategory (clear): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
-	if _, ok := got.Categories["ebay"]; ok {
-		t.Errorf("Categories still holds ebay after clearing: %v", got.Categories)
+	if _, ok := got.Marketplace[core.MarketplaceKey{Profile: "ebay", Field: core.MarketplaceCategory}]; ok {
+		t.Errorf("the ebay category survived being cleared: %v", got.Marketplace)
 	}
 }
 
@@ -1066,16 +1066,16 @@ func TestOffersLoadEveryRowsCategoriesInOneQuery(t *testing.T) {
 	for _, o := range got {
 		byID[o.ID] = o
 	}
-	if byID["o1"].Categories["ebay"] != "11450" {
-		t.Errorf("o1 ebay = %q, want %q", byID["o1"].Categories["ebay"], "11450")
+	if got := byID["o1"].MarketplaceValue("ebay", core.MarketplaceCategory); got != "11450" {
+		t.Errorf("o1 ebay = %q, want %q", got, "11450")
 	}
-	if byID["o3"].Categories["ebay"] != "20081" {
-		t.Errorf("o3 ebay = %q, want %q", byID["o3"].Categories["ebay"], "20081")
+	if got := byID["o3"].MarketplaceValue("ebay", core.MarketplaceCategory); got != "20081" {
+		t.Errorf("o3 ebay = %q, want %q", got, "20081")
 	}
 	// The offer in the middle has none, and must not inherit a neighbour's — the
 	// failure a per-row loop or a bad join produces.
-	if len(byID["o2"].Categories) != 0 {
-		t.Errorf("o2 has categories %v, want none", byID["o2"].Categories)
+	if len(byID["o2"].Marketplace) != 0 {
+		t.Errorf("o2 has marketplace values %v, want none", byID["o2"].Marketplace)
 	}
 }
 
@@ -1107,9 +1107,9 @@ func TestDeletingAnOfferCascadesItsCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if len(got.Categories) != 0 {
+	if len(got.Marketplace) != 0 {
 		t.Errorf("a new offer reusing a deleted id inherited %v — the category row "+
-			"outlived the offer it described", got.Categories)
+			"outlived the offer it described", got.Marketplace)
 	}
 }
 

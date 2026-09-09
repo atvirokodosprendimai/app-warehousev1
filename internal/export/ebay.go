@@ -91,7 +91,7 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	var problems []error
 	for _, o := range items {
 		// The offer's own category wins; the configured one is the fallback.
-		category := strings.TrimSpace(o.Categories[EBay{}.Name()])
+		category := strings.TrimSpace(o.MarketplaceValue(EBay{}.Name(), core.MarketplaceCategory))
 		if category == "" {
 			category = strings.TrimSpace(opt.Category)
 		}

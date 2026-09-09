@@ -8,7 +8,7 @@
 **Consumes:** none
 **Data dependency:** hermetic
 **Proof map:** v1
-**Rests-on:** `the closed vocabulary`, `the option's own validation`, `the single accessor`
+**Rests-on:** `the closed vocabulary`, `the option's own validation`, `the single accessor`, `the eBay call site`
 
 ## Goal
 
@@ -23,17 +23,17 @@ read through one accessor instead of a bare map lookup per profile.
 | `internal/core/marketplace.go` | add | The vocabulary, the option type and its validation |
 | `internal/core/marketplace_test.go` | add | The failing tests, written first |
 | `internal/core/offer.go` | edit | `Categories` → `Marketplace`; add `MarketplaceValue` |
-| `internal/core/settings.go` | edit | `ValidExportProfile` is reused by option validation; no behaviour change |
+| `internal/core/settings.go` | read, not edited | ⚠ AMENDED DURING EXECUTION: `MarketplaceOption.Validate` reuses `ValidExportProfile` unchanged, so this file was read and not touched. Listing it as an edit would have claimed a change nobody made |
 | `internal/export/ebay.go` | edit | The one existing reader of `o.Categories` — **this is the line that selects the accessor**; deleting it makes an offer export under the default and no test would say so without T1's export assertion |
 | `internal/offer/repo.go` | edit | Builds the map on read |
-| `internal/offer/service.go` | edit | `SetCategory` keeps its name until T2 widens it |
+| `internal/offer/service.go` | not edited | ⚠ AMENDED DURING EXECUTION: `SetCategory` keeps both its name and its body in T1, so nothing here changed. T2 widens it |
 | `internal/web/view/offer_detail.templ` | edit | Seeds the signal from the map |
-| `internal/export/export_test.go`, `internal/export/ebay_test.go`, `internal/export/recar_test.go`, `internal/offer/repo_test.go` | edit | Fixtures build the map |
+| `internal/export/ebay_test.go`, `internal/offer/repo_test.go` | edit | Fixtures build the map. ⚠ AMENDED: `export_test.go` and `recar_test.go` needed no change — they never set a category, which the compiler settled rather than my guess |
 
 ## Ordered Steps
 
 1. [S1] Write `TestMarketplaceFieldVocabularyIsClosed`, `TestAMarketplaceOptionRefusesWhatCannotReachACSV` and `TestOfferMarketplaceValueIsTheOnlyWayIn` in `internal/core/marketplace_test.go` and confirm they are RED — the types do not exist, so the package does not compile. [proof: acceptance]
-2. [S2] Add `core.MarketplaceField` with `FieldCategory`/`FieldCondition`/`FieldLocation`, `MarketplaceFields()` and `ValidMarketplaceField`. ⚠ CLOSED, not open: each member has a home in `export.Options`, so a fourth is a code change rather than a form field. An open vocabulary would let the settings screen mint a field nothing reads.
+2. [S2] Add `core.MarketplaceField` with `MarketplaceCategory`/`MarketplaceCondition`/`MarketplaceLocation`, `MarketplaceFields()` and `ValidMarketplaceField`. ⚠ CLOSED, not open: each member has a home in `export.Options`, so a fourth is a code change rather than a form field. An open vocabulary would let the settings screen mint a field nothing reads. ⚠ AMENDED DURING EXECUTION: this step said `FieldCategory`/`FieldCondition`/`FieldLocation`. Renamed because `core` ALREADY has a closed vocabulary whose constants are `Field…` — `FieldText`, `FieldNumber`, `FieldChoice` (ADR-021's [FieldKind]) — and two unrelated `Field…` families in one package is the same one-word collision this record exists to end, reintroduced one layer down.
 3. [S3] Add `core.MarketplaceOption` with `Validate()`. ⚠ It refuses an empty `Value` AND an empty `Label` separately: a blank value writes an empty cell into a required marketplace column, and a blank label renders a dropdown entry nobody can choose between. Refuse an unknown profile through the existing `ValidExportProfile` rather than a second list.
 4. [S4] **Delete** `Offer.Categories` and add `Offer.Marketplace map[MarketplaceKey]string`. ⚠ DELETE, never alias — the compiler is the enumerator here. `Offer.CategoryID` is a different thing one letter away (ADR-021), so a textual sweep would edit the wrong sites, which is precisely how the `Photo.ParentID` rename was done and why it was done that way. [proof: acceptance]
 5. [S5] Add `Offer.MarketplaceValue(profile string, f MarketplaceField) string`, the one read path, returning empty when unset. Fallback to a configured default is the CALLER's job — an accessor that silently substituted a default would make "this offer says nothing" indistinguishable from "this offer says the same as the default", and T4's dropdown has to tell them apart.
@@ -47,6 +47,7 @@ set -o pipefail
 go test ./internal/core/ -count=1 \
   -run '^TestMarketplaceFieldVocabularyIsClosed$|^TestAMarketplaceOptionRefusesWhatCannotReachACSV$|^TestOfferMarketplaceValueIsTheOnlyWayIn$' \
   2>&1 | tee /tmp/adr022-t1.out \
+  && go test ./internal/export/ -count=1 -run '^TestEBayPrefersTheOffersOwnCategory$' 2>&1 | tee -a /tmp/adr022-t1.out \
   && ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr022-t1.out \
   && go build ./... \
   && go test ./internal/core/ ./internal/export/ ./internal/offer/ -count=1 2>&1 | tee -a /tmp/adr022-t1.out \
@@ -77,6 +78,14 @@ and it is the only check that can see a reader nobody converted.
 
 ## Mutation Log
 
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · ValidMarketplaceField accepts every name, so the settings screen could mint a field no exporter reads · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · covers:the closed vocabulary
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · an option with a blank value is accepted, writing an empty cell into a column the marketplace requires · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · covers:the option's own validation
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · the accessor ignores the field it was asked for and always answers the category, so condition and location silently read as the category · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · covers:the single accessor
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · ValidMarketplaceField accepts every name, so the settings screen could mint a field no exporter reads · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · covers:the closed vocabulary
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · a blank value is accepted, writing an empty cell into a column the marketplace requires · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · covers:the option's own validation
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/core/marketplace.go` · the accessor ignores the field asked for and always answers the category, so condition and location silently read as the category · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · covers:the single accessor
+- 2026-09-09 · ec4d2cf* · mutant killed · exit 1 · `internal/export/ebay.go` · eBay stops reading the offers own value, so every listing silently exports under the configured default and the per-offer choice reaches nothing · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · covers:the eBay call site
+
 ## Invariants
 
 - `Offer.Owner` is not reachable through any of this; a marketplace must-have is never a price.
@@ -101,3 +110,12 @@ revisiting before the schema in T2 is committed to.
 - Any interface change — T3 and T4.
 
 ## Verification Log
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · ms:4039
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · ms:3925
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · ms:4115
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:53d62ad2cb642558dc68935ecc1ab0ffdba3365d3bfdc2bd8d07dee176a068e9 · ms:4051
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · ms:4530
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · ms:4516
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · ms:4506
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · ms:4510
+- 2026-09-09 · ec4d2cf* · exit 0 · `set -o pipefail …` · acceptance-sha256:9e09ba5a8c5a0fb857298b9cc438a4a66dcbc9cee6a6f5c39cb651a65ca1e2f5 · ms:4555

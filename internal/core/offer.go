@@ -124,19 +124,25 @@ type Offer struct {
 	LocationID string
 	// Photos are the offer's images in display order. The first is the primary.
 	Photos []Photo
-	// Categories is the marketplace category this item should be listed under,
-	// keyed by export profile name ("ebay", "shopify"). A missing entry means
-	// "use the configured default for that profile", which is the ordinary case:
+	// Marketplace holds what this item says about WHERE it is listed, keyed by
+	// export profile and marketplace field (ADR-022). A missing entry means "use
+	// the configured default for that profile", which is the ordinary case:
 	// requiring a taxonomy number at intake would block the photograph-title-
-	// shelve flow this type deliberately permits.
+	// shelve flow this type deliberately permits (ADR-004).
 	//
-	// The values are not interchangeable between profiles. eBay's is a number
-	// from its own taxonomy; Allegro's is a category NAME. That is why this is a
-	// map keyed by profile rather than one field.
+	// Read it through [Offer.MarketplaceValue] rather than indexing directly —
+	// that accessor normalises the profile the same way `export.For` does, and a
+	// bare lookup with the caller's casing silently misses.
+	//
+	// The values are not interchangeable between profiles OR between fields.
+	// eBay's category is a number from its own taxonomy; Allegro's is a category
+	// NAME. That is why the key carries both halves rather than being one string.
 	//
 	// ⚠ NOT to be confused with CategoryID below. This says WHERE TO LIST the
-	// item; CategoryID says WHAT THE ITEM IS.
-	Categories map[string]string
+	// item; CategoryID says WHAT THE ITEM IS. The two were one word apart until
+	// ADR-022 renamed this one, and BACKLOG.md had carried that collision since
+	// ADR-021.
+	Marketplace map[MarketplaceKey]string
 	// CategoryID is the node in the operator's own tree that says what this thing
 	// IS — "Car parts / Engine / Turbocharger" (ADR-021). Empty is the ordinary
 	// case and always permitted: a category is never demanded at intake, for the

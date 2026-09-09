@@ -103,11 +103,11 @@ func (r *Repo) oneOffer(ctx context.Context, where string, arg any) (core.Offer,
 	}
 	o.Photos = photos[o.ID]
 
-	cats, err := r.categoriesByOffer(ctx, []string{o.ID})
+	cats, err := r.marketplaceByOffer(ctx, []string{o.ID})
 	if err != nil {
 		return core.Offer{}, err
 	}
-	o.Categories = cats[o.ID]
+	o.Marketplace = cats[o.ID]
 	return o, nil
 }
 
@@ -149,13 +149,13 @@ func (r *Repo) Offers(ctx context.Context, f core.OfferFilter) ([]core.Offer, er
 		return nil, err
 	}
 	// And one category query for the whole page, for the same reason.
-	catsByOffer, err := r.categoriesByOffer(ctx, ids)
+	catsByOffer, err := r.marketplaceByOffer(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
 		out[i].Photos = byOffer[out[i].ID]
-		out[i].Categories = catsByOffer[out[i].ID]
+		out[i].Marketplace = catsByOffer[out[i].ID]
 	}
 	return out, nil
 }
@@ -658,12 +658,17 @@ func writeErr(op, sku string, err error) error {
 // developer tests with and becomes several hundred round trips once the
 // warehouse is real.
 //
-// An offer with no categories is simply absent from the map. Reading a missing
-// key yields a nil map, and reading a missing key from THAT yields "", which is
-// exactly what the export resolution wants — no category means fall back to the
-// configured default.
-func (r *Repo) categoriesByOffer(ctx context.Context, offerIDs []string) (map[string]map[string]string, error) {
-	out := make(map[string]map[string]string, len(offerIDs))
+// An offer with no marketplace values is simply absent from the map. Reading a
+// missing key yields a nil map, and reading a missing key from THAT yields "",
+// which is exactly what the export resolution wants — nothing set means fall
+// back to the configured default.
+//
+// ⚠ IT READS `offer_categories`, WHICH HOLDS ONLY CATEGORIES, so every row it
+// returns carries [core.MarketplaceCategory]. ADR-022 T2 widens the table to
+// carry the other fields; until then this is the honest shape — the map is keyed
+// for what it will hold, and today it holds one third of it.
+func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[string]map[core.MarketplaceKey]string, error) {
+	out := make(map[string]map[core.MarketplaceKey]string, len(offerIDs))
 	if len(offerIDs) == 0 {
 		return out, nil
 	}
@@ -679,22 +684,22 @@ func (r *Repo) categoriesByOffer(ctx context.Context, offerIDs []string) (map[st
 
 	rows, err := r.read.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("offer: load categories: %w", err)
+		return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var offerID, profile, category string
 		if err := rows.Scan(&offerID, &profile, &category); err != nil {
-			return nil, fmt.Errorf("offer: load categories: %w", err)
+			return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 		}
 		if out[offerID] == nil {
-			out[offerID] = make(map[string]string, 2)
+			out[offerID] = make(map[core.MarketplaceKey]string, 2)
 		}
-		out[offerID][profile] = category
+		out[offerID][core.MarketplaceKey{Profile: profile, Field: core.MarketplaceCategory}] = category
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("offer: load categories: %w", err)
+		return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 	}
 	return out, nil
 }

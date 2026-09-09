@@ -214,7 +214,9 @@ func TestEBayNeverExportsTheOwnerPrice(t *testing.T) {
 // its own must therefore beat the configured one.
 func TestEBayPrefersTheOffersOwnCategory(t *testing.T) {
 	o := testOffer("LAMP-01", 1)
-	o.Categories = map[string]string{"ebay": "11450"}
+	o.Marketplace = map[core.MarketplaceKey]string{
+		{Profile: "ebay", Field: core.MarketplaceCategory}: "11450",
+	}
 
 	opt := testOptions() // its Category is "20081"
 	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
@@ -232,7 +234,7 @@ func TestEBayPrefersTheOffersOwnCategory(t *testing.T) {
 // TestEBayFallsBackToTheConfiguredDefault keeps the ordinary case working: most
 // offers name no category and must still export.
 func TestEBayFallsBackToTheConfiguredDefault(t *testing.T) {
-	o := testOffer("LAMP-01", 1) // no Categories at all
+	o := testOffer("LAMP-01", 1) // no marketplace values at all
 	opt := testOptions()
 
 	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
@@ -245,7 +247,9 @@ func TestEBayFallsBackToTheConfiguredDefault(t *testing.T) {
 
 	// A category for a DIFFERENT profile must not be picked up: the values are
 	// not interchangeable — Shopify's is a product type, eBay's is a number.
-	o.Categories = map[string]string{"shopify": "Lighting"}
+	o.Marketplace = map[core.MarketplaceKey]string{
+		{Profile: "shopify", Field: core.MarketplaceCategory}: "Lighting",
+	}
 	recs = records(t, render(t, EBay{}, []core.Offer{o}, opt))
 	if recs[1][2] != opt.Category {
 		t.Errorf("*Category = %q after setting only a shopify category, want eBay's default %q",
