@@ -696,20 +696,30 @@ func TestSetCategoryRefusesAnUnknownProfile(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = svc.SetCategory(ctx, o.ID, "ebey", "11450")
+	err = svc.SetMarketplaceValue(ctx, o.ID, "ebey", core.MarketplaceCategory, "11450")
 	if !errors.Is(err, core.ErrInvalid) {
-		t.Fatalf("SetCategory with a typo'd profile = %v, want core.ErrInvalid", err)
+		t.Fatalf("SetMarketplaceValue with a typo'd profile = %v, want core.ErrInvalid", err)
 	}
 
-	// The real profiles are accepted, or the guard is refusing everything.
+	// A typo'd FIELD is refused for the same reason and with its own message: the
+	// vocabulary is closed because each field has to have somewhere to go.
+	err = svc.SetMarketplaceValue(ctx, o.ID, "ebay", "colour", "red")
+	if !errors.Is(err, core.ErrInvalid) {
+		t.Fatalf("SetMarketplaceValue with an unknown field = %v, want core.ErrInvalid", err)
+	}
+
+	// The real profiles and every real field are accepted, or the guards are
+	// refusing everything and the two checks above prove nothing.
 	for _, p := range core.KnownExportProfiles() {
-		if err := svc.SetCategory(ctx, o.ID, p, "11450"); err != nil {
-			t.Errorf("SetCategory(%q) = %v, want nil", p, err)
+		for _, f := range core.MarketplaceFields() {
+			if err := svc.SetMarketplaceValue(ctx, o.ID, p, f, "11450"); err != nil {
+				t.Errorf("SetMarketplaceValue(%q, %q) = %v, want nil", p, f, err)
+			}
 		}
 	}
 
 	// And an unknown offer is ErrNotFound rather than a driver foreign-key error.
-	if err := svc.SetCategory(ctx, "no-such-offer", "ebay", "11450"); !errors.Is(err, core.ErrNotFound) {
-		t.Errorf("SetCategory on a missing offer = %v, want core.ErrNotFound", err)
+	if err := svc.SetMarketplaceValue(ctx, "no-such-offer", "ebay", core.MarketplaceCategory, "11450"); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("SetMarketplaceValue on a missing offer = %v, want core.ErrNotFound", err)
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/fx"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/marketplace"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/sequence"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/settings"
@@ -106,6 +107,7 @@ func run(log *slog.Logger) error {
 	carts := cart.NewRepo(db.Read, db.Write)
 	subs := submission.NewRepo(db.Read, db.Write)
 	conf := settings.NewRepo(db.Read, db.Write)
+	markets := marketplace.NewRepo(db.Read, db.Write)
 
 	// Services own the write rules.
 	authSvc := auth.NewService(users)
@@ -154,6 +156,7 @@ func run(log *slog.Logger) error {
 		Carts:       carts,
 		Submissions: subs,
 		Settings:    conf,
+		Marketplace: markets,
 		Auth:        authSvc,
 		Offer:       offerSvc,
 		Location:    locationSvc,

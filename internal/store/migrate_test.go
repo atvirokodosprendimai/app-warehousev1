@@ -321,7 +321,12 @@ func TestTheCategoriesMigrationGoesDownAndUpAgain(t *testing.T) {
 	}
 	goose.SetLogger(goose.NopLogger())
 
-	if err := goose.Down(db.Write, "."); err != nil {
+	// ⚠ DownTo(8), NOT Down(). A bare `goose.Down` undoes THE NEWEST migration,
+	// whichever that happens to be — so this test silently stopped being about
+	// 00009 the moment 00010 was added, and its assertions failed against a
+	// migration it was never written for. Naming the version is what keeps a test
+	// about the migration it says it is about.
+	if err := goose.DownTo(db.Write, ".", 8); err != nil {
 		t.Fatalf("down: %v — the rollback this migration documents does not run", err)
 	}
 	for _, table := range []string{"categories", "category_fields", "offer_field_values"} {
@@ -341,5 +346,77 @@ func TestTheCategoriesMigrationGoesDownAndUpAgain(t *testing.T) {
 	}
 	if _, err := db.Write.Exec(`SELECT 1 FROM categories LIMIT 1`); err != nil {
 		t.Fatalf("categories is absent after migrating up again: %v", err)
+	}
+}
+
+// TestAnExistingOfferCategorySurvivesTheWidening proves migration 00010 CARRIES
+// its rows rather than dropping them (ADR-022 T2).
+//
+// ⚠ IT HAS TO START FROM THE OLD SCHEMA, and that is the whole design of the
+// test. A test that migrates straight up and then looks at the new table sees an
+// empty database agreeing with itself: the copy could be missing entirely and
+// nothing would fail. So this goes UP, steps back DOWN to 9 to restore
+// `offer_categories`, writes a row a real deployment would already hold, and then
+// migrates up again — which is the only arrangement where the INSERT…SELECT is on
+// the path being tested.
+func TestAnExistingOfferCategorySurvivesTheWidening(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "app.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	goose.SetBaseFS(migrations.FS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		t.Fatalf("dialect: %v", err)
+	}
+	goose.SetLogger(goose.NopLogger())
+
+	// Back to the schema a deployment upgrading from ADR-016 actually has.
+	if err := goose.DownTo(db.Write, ".", 9); err != nil {
+		t.Fatalf("down to 9: %v", err)
+	}
+	if _, err := db.Write.Exec(`SELECT 1 FROM offer_categories LIMIT 1`); err != nil {
+		t.Fatalf("offer_categories is absent at version 9, so this test is not starting "+
+			"from the schema it claims to: %v", err)
+	}
+
+	if _, err := db.Write.Exec(`
+		INSERT INTO offers (id, sku, title, status, created_at, updated_at)
+		VALUES ('o1', 'WH0000001', 'A thing', 'draft', '2026-09-09', '2026-09-09')`); err != nil {
+		t.Fatalf("insert offer: %v", err)
+	}
+	if _, err := db.Write.Exec(`
+		INSERT INTO offer_categories (offer_id, profile, category)
+		VALUES ('o1', 'ebay', '11450')`); err != nil {
+		t.Fatalf("insert category: %v", err)
+	}
+
+	if err := Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("re-migrate: %v", err)
+	}
+
+	var profile, field, value string
+	err = db.Read.QueryRow(`
+		SELECT profile, field, value FROM offer_marketplace_values WHERE offer_id = 'o1'`).
+		Scan(&profile, &field, &value)
+	if err != nil {
+		t.Fatalf("the per-offer category did not survive the widening: %v — every offer "+
+			"an operator had already categorised would silently fall back to the "+
+			"configured default", err)
+	}
+	if profile != "ebay" || field != "category" || value != "11450" {
+		t.Errorf("carried row = (%q, %q, %q), want (ebay, category, 11450)",
+			profile, field, value)
+	}
+
+	// And the old table is gone, or two places would answer the same question.
+	if _, err := db.Write.Exec(`SELECT 1 FROM offer_categories LIMIT 1`); err == nil {
+		t.Error("offer_categories survived the widening; two tables now hold a per-offer " +
+			"category and nothing says which one an export reads")
 	}
 }

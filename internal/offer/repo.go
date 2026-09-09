@@ -663,10 +663,9 @@ func writeErr(op, sku string, err error) error {
 // which is exactly what the export resolution wants — nothing set means fall
 // back to the configured default.
 //
-// ⚠ IT READS `offer_categories`, WHICH HOLDS ONLY CATEGORIES, so every row it
-// returns carries [core.MarketplaceCategory]. ADR-022 T2 widens the table to
-// carry the other fields; until then this is the honest shape — the map is keyed
-// for what it will hold, and today it holds one third of it.
+// It reads `offer_marketplace_values`, whose rows already carry their field, so
+// nothing here has to know which fields exist — a field added to
+// [core.MarketplaceField] reaches this map without touching this function.
 func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[string]map[core.MarketplaceKey]string, error) {
 	out := make(map[string]map[core.MarketplaceKey]string, len(offerIDs))
 	if len(offerIDs) == 0 {
@@ -679,7 +678,7 @@ func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[s
 		ph[i] = "?"
 		args[i] = id
 	}
-	q := `SELECT offer_id, profile, category FROM offer_categories WHERE offer_id IN (` +
+	q := `SELECT offer_id, profile, field, value FROM offer_marketplace_values WHERE offer_id IN (` +
 		strings.Join(ph, ", ") + `)`
 
 	rows, err := r.read.QueryContext(ctx, q, args...)
@@ -689,14 +688,17 @@ func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[s
 	defer rows.Close()
 
 	for rows.Next() {
-		var offerID, profile, category string
-		if err := rows.Scan(&offerID, &profile, &category); err != nil {
+		var offerID, profile, field, value string
+		if err := rows.Scan(&offerID, &profile, &field, &value); err != nil {
 			return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 		}
 		if out[offerID] == nil {
-			out[offerID] = make(map[core.MarketplaceKey]string, 2)
+			out[offerID] = make(map[core.MarketplaceKey]string, 3)
 		}
-		out[offerID][core.MarketplaceKey{Profile: profile, Field: core.MarketplaceCategory}] = category
+		out[offerID][core.MarketplaceKey{
+			Profile: profile,
+			Field:   core.MarketplaceField(field),
+		}] = value
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("offer: load marketplace values: %w", err)
@@ -704,36 +706,36 @@ func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[s
 	return out, nil
 }
 
-// SetCategory records the marketplace category an offer should be listed under
-// for one export profile.
+// SetMarketplaceValue records what an offer says for one profile's must-have
+// field.
 //
-// An EMPTY category deletes the row rather than storing a blank. Clearing an
+// An EMPTY value deletes the row rather than storing a blank. Clearing an
 // override and never having set one must be the same state — otherwise the
 // export resolution would have to distinguish "explicitly nothing" from "not
 // set", and both mean the same thing: use the configured default.
 //
 // It writes through the write handle, which carries _txlock=immediate; the
 // upsert is one statement, so there is no read-then-write to conflict over.
-func (r *Repo) SetCategory(ctx context.Context, offerID, profile, category string) error {
+func (r *Repo) SetMarketplaceValue(ctx context.Context, offerID, profile string, field core.MarketplaceField, value string) error {
 	profile = strings.ToLower(strings.TrimSpace(profile))
-	category = strings.TrimSpace(category)
+	value = strings.TrimSpace(value)
 
-	if category == "" {
+	if value == "" {
 		_, err := r.write.ExecContext(ctx,
-			`DELETE FROM offer_categories WHERE offer_id = ? AND profile = ?`,
-			offerID, profile)
+			`DELETE FROM offer_marketplace_values WHERE offer_id = ? AND profile = ? AND field = ?`,
+			offerID, profile, string(field))
 		if err != nil {
-			return fmt.Errorf("offer %s: clear %s category: %w", offerID, profile, err)
+			return fmt.Errorf("offer %s: clear %s %s: %w", offerID, profile, field, err)
 		}
 		return nil
 	}
 
 	_, err := r.write.ExecContext(ctx, `
-		INSERT INTO offer_categories (offer_id, profile, category) VALUES (?, ?, ?)
-		ON CONFLICT (offer_id, profile) DO UPDATE SET category = excluded.category`,
-		offerID, profile, category)
+		INSERT INTO offer_marketplace_values (offer_id, profile, field, value) VALUES (?, ?, ?, ?)
+		ON CONFLICT (offer_id, profile, field) DO UPDATE SET value = excluded.value`,
+		offerID, profile, string(field), value)
 	if err != nil {
-		return fmt.Errorf("offer %s: set %s category: %w", offerID, profile, err)
+		return fmt.Errorf("offer %s: set %s %s: %w", offerID, profile, field, err)
 	}
 	return nil
 }

@@ -508,7 +508,8 @@ func (a *App) PostOfferCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	id := param(r, "id")
 
-	if err := a.Offer.SetCategory(r.Context(), id, "ebay", in.EbayCategory); err != nil {
+	if err := a.Offer.SetMarketplaceValue(r.Context(), id, "ebay",
+		core.MarketplaceCategory, in.EbayCategory); err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
 		return
 	}

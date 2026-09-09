@@ -30,11 +30,11 @@ type OfferWriter interface {
 	AddPhoto(ctx context.Context, p Photo) error
 	DeletePhoto(ctx context.Context, photoID string) error
 	ReorderPhotos(ctx context.Context, offerID string, photoIDsInOrder []string) error
-	// SetCategory records the marketplace category this offer should be listed
-	// under for one export profile. An empty category clears the override, so
-	// "never set" and "cleared" are the same state — both mean "use the
-	// configured default".
-	SetCategory(ctx context.Context, offerID, profile, category string) error
+	// SetMarketplaceValue records what this offer says for one export profile's
+	// must-have field — its category, its condition, where it dispatches from.
+	// An empty value clears the override, so "never set" and "cleared" are the
+	// same state: both mean "use the configured default" (ADR-022).
+	SetMarketplaceValue(ctx context.Context, offerID, profile string, field MarketplaceField, value string) error
 }
 
 // OfferStore is both halves, held by the write side only.

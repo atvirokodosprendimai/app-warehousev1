@@ -995,11 +995,11 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 			"required at intake", got.Marketplace)
 	}
 
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o1", "shopify", "Lighting"); err != nil {
-		t.Fatalf("SetCategory (shopify): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "shopify", core.MarketplaceCategory, "Lighting"); err != nil {
+		t.Fatalf("SetMarketplaceValue (shopify): %v", err)
 	}
 
 	got, err = r.Offer(ctx, "o1")
@@ -1016,8 +1016,8 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 	}
 
 	// Setting it again replaces rather than duplicating.
-	if err := r.SetCategory(ctx, "o1", "ebay", "20081"); err != nil {
-		t.Fatalf("SetCategory (replace): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "20081"); err != nil {
+		t.Fatalf("SetMarketplaceValue (replace): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
 	if got := got.MarketplaceValue("ebay", core.MarketplaceCategory); got != "20081" {
@@ -1026,8 +1026,8 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 
 	// An empty value CLEARS it, so an operator can go back to the default
 	// without a second verb.
-	if err := r.SetCategory(ctx, "o1", "ebay", ""); err != nil {
-		t.Fatalf("SetCategory (clear): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, ""); err != nil {
+		t.Fatalf("SetMarketplaceValue (clear): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
 	if _, ok := got.Marketplace[core.MarketplaceKey{Profile: "ebay", Field: core.MarketplaceCategory}]; ok {
@@ -1047,11 +1047,11 @@ func TestOffersLoadEveryRowsCategoriesInOneQuery(t *testing.T) {
 			t.Fatalf("CreateOffer %s: %v", id, err)
 		}
 	}
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o3", "ebay", "20081"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o3", "ebay", core.MarketplaceCategory, "20081"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
 
 	got, err := r.Offers(ctx, core.OfferFilter{})
@@ -1093,8 +1093,8 @@ func TestDeletingAnOfferCascadesItsCategories(t *testing.T) {
 	if err := r.CreateOffer(ctx, newOffer("o1", "WH0000001", "First", baseTime)); err != nil {
 		t.Fatalf("CreateOffer: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
 	if err := r.DeleteOffer(ctx, "o1"); err != nil {
 		t.Fatalf("DeleteOffer: %v", err)

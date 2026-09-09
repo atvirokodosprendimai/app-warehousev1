@@ -8,7 +8,7 @@
 **Consumes:** `core.MarketplaceField`, `core.MarketplaceOption`, `core.Offer.Marketplace` (T1)
 **Data dependency:** hermetic
 **Proof map:** v1
-**Rests-on:** `the row-carrying migration`, `the reversible Down`, `the uniqueness constraint`
+**Rests-on:** `the row-carrying migration`, `the reversible Down`, `the uniqueness constraint`, `the validation before the write`
 
 ## Goal
 
@@ -42,15 +42,31 @@ existing rows forward, and give both a repository.
 
 ```bash
 set -o pipefail
-go test ./internal/marketplace/ -count=1 \
-  -run '^TestAnExistingOfferCategorySurvivesTheWidening$|^TestAnOptionListRefusesADuplicateValue$|^TestAnEmptyValueUnsetsRatherThanStoringABlank$' \
+go test ./internal/store/ -count=1 \
+  -run '^TestAnExistingOfferCategorySurvivesTheWidening$|^TestEveryMigrationCanBeRolledBack$' \
   2>&1 | tee /tmp/adr022-t2.out \
+  && go test ./internal/marketplace/ -count=1 \
+    -run '^TestAnOptionListRefusesADuplicateValue$|^TestOptionsComeBackInPositionOrder$|^TestAnUnusableOptionIsRefusedBeforeItIsStored$|^TestRemovingAnOptionTakesItOffTheMenuAndNothingElse$' \
+    2>&1 | tee -a /tmp/adr022-t2.out \
+  && go test ./internal/offer/ -count=1 -run '^TestOfferRoundTripsItsPerProfileCategories$' \
+    2>&1 | tee -a /tmp/adr022-t2.out \
   && ! grep -qE "no tests to run|^FAIL|^--- FAIL" /tmp/adr022-t2.out \
   && go test ./internal/store/ ./internal/offer/ ./internal/marketplace/ -count=1 2>&1 | tee -a /tmp/adr022-t2.out \
   && ! grep -qE "^FAIL|^--- FAIL" /tmp/adr022-t2.out
 ```
 
-`./internal/store/` is in the regression half deliberately: it holds
+⚠ AMENDED DURING EXECUTION: this fence named three tests and put all of them in
+`./internal/marketplace/`. Two of them do not live there, and a `-run` filter that
+selects nothing in a package is silent — the first command would have scored zero
+tests while `go test` exited 0. The migration test belongs in
+`internal/store/migrate_test.go`, which is where this repository already keeps
+migration behaviour (`TestTheCategoriesMigrationGoesDownAndUpAgain`), and the
+clearing behaviour belongs to the OFFER aggregate, so it is asserted inside the
+existing `TestOfferRoundTripsItsPerProfileCategories` rather than in a new test
+duplicating its setup. Each package is now named beside the tests it actually
+holds.
+
+`./internal/store/` is in the regression half deliberately as well: it holds
 `TestEveryMigrationCanBeRolledBack`, which executes the Down written in S3. Without it the rollback
 is asserted by nobody.
 
@@ -58,10 +74,12 @@ is asserted by nobody.
 
 | Test name | File | Verifies | Covers | Steps |
 |-----------|------|----------|--------|-------|
-| `TestAnExistingOfferCategorySurvivesTheWidening` | `internal/marketplace/repo_test.go` | A row written at schema 9 is readable as `field='category'` at schema 10 | — | S1, S2 |
-| `TestAnOptionListRefusesADuplicateValue` | `internal/marketplace/repo_test.go` | The uniqueness constraint refuses a second `20081` for the same profile and field | — | S4 |
-| `TestAnEmptyValueUnsetsRatherThanStoringABlank` | `internal/marketplace/repo_test.go` | Setting empty removes the row; reading back yields no value | — | S6 |
-| `TestOptionsComeBackInPositionOrder` | `internal/marketplace/repo_test.go` | Ordering is stable and total | — | S5 |
+| `TestAnExistingOfferCategorySurvivesTheWidening` | `internal/store/migrate_test.go` | A row written at schema 9 is readable as `field='category'` at schema 10 | — | S1, S2 |
+| `TestAnOptionListRefusesADuplicateValue` | `internal/marketplace/repo_test.go` | The uniqueness constraint refuses a second `20081` for the same profile and field, and allows it on a different field | — | S4 |
+| `TestOfferRoundTripsItsPerProfileCategories` | `internal/offer/repo_test.go` | Setting empty removes the row; reading back yields no value | — | S6 |
+| `TestOptionsComeBackInPositionOrder` | `internal/marketplace/repo_test.go` | Ordering is stable and total, and lists do not leak across profiles | — | S5 |
+| `TestAnUnusableOptionIsRefusedBeforeItIsStored` | `internal/marketplace/repo_test.go` | Validation runs on the way in, with a positive control proving the repo is not refusing everything | — | S5 |
+| `TestRemovingAnOptionTakesItOffTheMenuAndNothingElse` | `internal/marketplace/repo_test.go` | Removal is idempotent, because two people pressing one button is the ordinary case | — | S5 |
 | `TestEveryMigrationCanBeRolledBack` | `internal/store/migrate_test.go` | 00010's Down executes and leaves no application table behind | — | S3 |
 
 ## Reachability
@@ -74,6 +92,15 @@ is asserted by nobody.
 | 4 — it is used | Nothing measures this yet — T3 is the first writer of an option row |
 
 ## Mutation Log
+
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the widening copies no rows, so every per-offer category an operator had already set silently falls back to the configured default · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · covers:the row-carrying migration
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the constraint includes the primary key so it can never fire, and a double-submit puts two identical entries in one dropdown · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · covers:the uniqueness constraint
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the Down leaves marketplace_options behind, so a rollback is not a rollback and the next up would meet a table that already exists · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · covers:the reversible Down
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `internal/marketplace/repo.go` · an unusable option is stored instead of refused, so the operator picks it and the CSV carries a blank cell in a required column · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · covers:the validation before the write
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the widening copies no rows, so every per-offer category already set silently falls back to the configured default · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · covers:the row-carrying migration
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the constraint includes the primary key so it can never fire, and a double-submit puts two identical entries in one dropdown · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · covers:the uniqueness constraint
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `migrations/00010_marketplace_options.sql` · the Down leaves marketplace_options behind, so a rollback is not a rollback · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · covers:the reversible Down
+- 2026-09-09 · ba7acd2* · mutant killed · exit 1 · `internal/marketplace/repo.go` · an unusable option is stored instead of refused, so the operator picks it and the CSV carries a blank cell in a required column · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · covers:the validation before the write
 
 ## Invariants
 
@@ -98,3 +125,13 @@ answer is a decision about those rows rather than a silent migration.
 - Seeding a starter list of eBay categories (deferred: docs/adr/BACKLOG.md)
 
 ## Verification Log
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · ms:4636
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · ms:4825
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · ms:4743
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · ms:4813
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:2322b59bd6ae643e8a56be86b3ca1809cfd643d39de854ff8835f6f5e8f103c9 · ms:4829
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · ms:4825
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · ms:4757
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · ms:4918
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · ms:4916
+- 2026-09-09 · ba7acd2* · exit 0 · `set -o pipefail …` · acceptance-sha256:7f729b97a79b9ed00f3cbada4b3ffffbfa1f3ac9cfa697ae81be3c320ea754d3 · ms:4736

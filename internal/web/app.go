@@ -21,6 +21,7 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/marketplace"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/render"
@@ -54,7 +55,7 @@ type App struct {
 	Carts     core.CartReader
 	// Taxonomies is the operator's own tree of what a thing IS, and the questions
 	// each node asks (ADR-021). ⚠ Not the marketplace category, which is
-	// Offer.Categories and belongs to the Offer service.
+	// each node asks (ADR-021). ⚠ Not the marketplace category, which is
 	Taxonomies core.TaxonomyReader
 
 	// Write services.
@@ -81,6 +82,15 @@ type App struct {
 	// Settings holds the deployment values an administrator can change while the
 	// application is running.
 	Settings core.SettingsStore
+
+	// Marketplace holds the lists an operator picks a must-have value FROM —
+	// eBay's categories, its condition codes, the cities stock dispatches from
+	// (ADR-022).
+	//
+	// ⚠ IT HOLDS THE MENU, NOT THE CHOICE. What one offer chose lives on the
+	// offer and is written through the Offer service; this is only what may be
+	// chosen.
+	Marketplace *marketplace.Repo
 }
 
 // publicBase returns the origin a marketplace fetches photographs from.
