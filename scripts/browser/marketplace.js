@@ -115,6 +115,60 @@ const is = (name, actual, expected) =>
 
   await page.screenshot({ path: `${SHOTS}/marketplace-lists.png`, fullPage: true });
 
+  // ── ADR-022 T4: the offer editor picks from those lists ──────────────────
+  //
+  // ⚠ A <select> THAT RENDERS PERFECTLY AND IS BOUND TO NOTHING LOOKS IDENTICAL
+  // IN HTML. scripts/smoke.sh posts offerEbayCategory as JSON, so it proves the
+  // handler stores what it is sent; only picking an option in a real browser
+  // proves the control sends anything at all. This is the same trap as the
+  // add-boxes above, one screen along.
+  console.log('== the offer editor picks from the list ==');
+  await page.fill('input[aria-label="eBay category value"]', '20081');
+  await page.fill('input[aria-label="eBay category label"]', 'Antiques');
+  await page.click('#marketplace-options button:has-text("Add")');
+  await page.waitForTimeout(700);
+
+  await page.goto(BASE + '/offers', { waitUntil: 'domcontentloaded' });
+  await page.click('button:has-text("New offer")');
+  await page.waitForURL(/\/offers\/[0-9a-f-]{36}$/, { timeout: 15000 });
+  const offerURL = page.url();
+  ok('an offer to put a category on');
+
+  is('the must-have is a dropdown now, not a box',
+    await page.locator('#offer-marketplace select#o-mkt-category').count(), 1);
+
+  // The empty option has to say what it falls back to. "Use the default" alone
+  // means opening Settings to find out what you just agreed to.
+  const emptyLabel = await page.locator('#o-mkt-category option[value=""]').innerText();
+  if (/Use the default/.test(emptyLabel)) {
+    ok('and its empty option names the fallback');
+  } else {
+    fail('and its empty option names the fallback', `got ${JSON.stringify(emptyLabel)}`);
+  }
+
+  // ★ THE ASSERTION T4 EXISTS FOR.
+  await page.selectOption('#o-mkt-category', '20081');
+  await page.click('#offer-marketplace button:has-text("Save marketplace details")');
+  await page.waitForTimeout(800);
+
+  await page.goto(offerURL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(400);
+  is('picking a category in a browser stores it',
+    await page.locator('#o-mkt-category').inputValue(), '20081');
+
+  // Empty must stay reachable, or an offer filed by mistake could never be put
+  // back to "whatever the default is" (ADR-004's rule, surviving the dropdown).
+  await page.selectOption('#o-mkt-category', '');
+  await page.click('#offer-marketplace button:has-text("Save marketplace details")');
+  await page.waitForTimeout(800);
+  await page.goto(offerURL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(400);
+  is('and choosing nothing again clears it',
+    await page.locator('#o-mkt-category').inputValue(), '');
+
+  await page.screenshot({ path: `${SHOTS}/marketplace-offer.png`, fullPage: true });
+  await page.goto(BASE + '/settings', { waitUntil: 'domcontentloaded' });
+
   const over = await page.evaluate(() => ({
     scroll: document.documentElement.scrollWidth,
     client: document.documentElement.clientWidth,

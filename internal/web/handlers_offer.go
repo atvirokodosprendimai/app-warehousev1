@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -245,6 +246,12 @@ func (a *App) offerDetail(r *http.Request, id string) (view.OfferDetail, error) 
 		d.InCarts = holding
 	}
 
+	// The marketplace must-haves: the lists to pick from, this offer's answers,
+	// and what an unanswered one falls back to (ADR-022). Loaded HERE for the
+	// same reason as the questions below — both the page load and the SSE loop go
+	// through this function, so a save and a re-render cannot disagree.
+	d.Marketplace = a.marketplaceChoices(r.Context(), o, "ebay")
+
 	// The taxonomy tree and this offer's resolved questions. ⚠ Both are loaded
 	// HERE, in the read model both the page load and the SSE loop go through, so
 	// answering a question and having the page re-render cannot disagree about
@@ -316,13 +323,11 @@ type offerSignals struct {
 	SoldAmount   string  `json:"soldAmount"`
 	SoldCurrency string  `json:"soldCurrency"`
 	SoldDate     string  `json:"soldDate"`
-	// EbayCategory is this offer's own eBay category, overriding the default
-	// configured at Settings. Empty means "use the default" — clearing it and
-	// never having set one are deliberately the same state (ADR-016).
-	//
-	// Only eBay has one today because only eBay's resolution is wired; Shopify's
-	// and Allegro's are deferred in docs/adr/BACKLOG.md.
-	EbayCategory string `json:"offerEbayCategory"`
+	// ⚠ THE MARKETPLACE MUST-HAVES ARE NOT HERE, deliberately. They moved to
+	// [marketplaceSignals] when ADR-022 made them three controls instead of one,
+	// and leaving a copy of `offerEbayCategory` on this struct would mean two
+	// handlers reading the same signal with only one of them writing it — which
+	// reads like a save that works and silently is not.
 }
 
 // PostOffer saves the editable text of an offer.
@@ -494,30 +499,128 @@ func (a *App) PostPrices(w http.ResponseWriter, r *http.Request) {
 	_ = sse.PatchElementTempl(view.OfferStatusCard(d))
 }
 
-// PostOfferCategory records this offer's own eBay category, or clears it.
+// marketplaceSignals is what the offer editor's must-have controls send.
 //
-// It exists because eBay's categories are per ITEM: a lamp and a chair are not
-// the same number, so a single value for a whole export file would mean one
-// export per category. The default set at Settings covers everything that does
-// not name its own (ADR-016).
-func (a *App) PostOfferCategory(w http.ResponseWriter, r *http.Request) {
-	var in offerSignals
+// Written out with literal tags rather than derived, for the same reason the
+// settings editor's are: a struct tag cannot be computed, and a missing pair
+// should be a compile error rather than a control whose value silently never
+// arrives.
+//
+// ⚠ THESE NAMES MUST MATCH [view.MarketplaceChoice.Signal] EXACTLY, and nothing
+// checks that they do — which is what scripts/browser/marketplace.js is for.
+type marketplaceSignals struct {
+	Category  string `json:"offerEbayCategory"`
+	Condition string `json:"offerEbayCondition"`
+	Location  string `json:"offerEbayLocation"`
+}
+
+// forField returns the value belonging to one must-have.
+func (s marketplaceSignals) forField(f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return s.Category
+	case core.MarketplaceCondition:
+		return s.Condition
+	case core.MarketplaceLocation:
+		return s.Location
+	}
+	return ""
+}
+
+// marketplaceChoices builds the offer editor's must-have controls.
+//
+// ⚠ ALWAYS THE FULL SET, in [core.MarketplaceFields] order, even for a field
+// whose list is empty. The view seeds one signal per entry, so a field missing
+// here is a control bound to a signal the page never declared.
+func (a *App) marketplaceChoices(ctx context.Context, o core.Offer, profile string) []view.MarketplaceChoice {
+	groups := a.marketplaceOptions(ctx, profile)
+	def := a.ebayDefaults(ctx)
+
+	out := make([]view.MarketplaceChoice, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, view.MarketplaceChoice{
+			Field:   g.Field,
+			Title:   g.Title,
+			Hint:    g.Hint,
+			Signal:  marketplaceSignalName(g.Field),
+			Attr:    "offer-ebay-" + string(g.Field),
+			Options: g.Options,
+			Chosen:  o.MarketplaceValue(profile, g.Field),
+			Default: marketplaceDefault(def, g.Field),
+		})
+	}
+	return out
+}
+
+// marketplaceSignalName is the camelCase signal one must-have binds. It is
+// written beside [marketplaceSignals]'s tags on purpose: they must agree.
+func marketplaceSignalName(f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return "offerEbayCategory"
+	case core.MarketplaceCondition:
+		return "offerEbayCondition"
+	case core.MarketplaceLocation:
+		return "offerEbayLocation"
+	}
+	return ""
+}
+
+// marketplaceDefault reads one field out of the resolved settings.
+func marketplaceDefault(m core.Marketplace, f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return m.Category
+	case core.MarketplaceCondition:
+		return m.ConditionID
+	case core.MarketplaceLocation:
+		return m.Location
+	}
+	return ""
+}
+
+// PostOfferMarketplace records this offer's own marketplace must-haves, or
+// clears them.
+//
+// It exists because eBay's must-haves are per ITEM: a lamp and a chair are not
+// the same category, and a new part and a used one are not the same condition —
+// so a single value for a whole export file would mean one export per
+// combination. The defaults set at Settings cover everything that names none
+// (ADR-016, widened by ADR-022).
+func (a *App) PostOfferMarketplace(w http.ResponseWriter, r *http.Request) {
+	var in marketplaceSignals
 	if err := datastar.ReadSignals(r, &in); err != nil {
 		a.flash(w, r, "offer-flash", "error", "Could not read the form.")
 		return
 	}
 	id := param(r, "id")
 
-	if err := a.Offer.SetMarketplaceValue(r.Context(), id, "ebay",
-		core.MarketplaceCategory, in.EbayCategory); err != nil {
+	o, err := a.Offers.Offer(r.Context(), id)
+	if err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
 		return
 	}
-	a.Broadcast(id)
 
-	msg := "eBay category saved."
-	if strings.TrimSpace(in.EbayCategory) == "" {
-		msg = "eBay category cleared — this offer will use the default from Settings."
+	// ⚠ UNCHANGED FIELDS ARE SKIPPED. Three controls where there was one means
+	// three writes per save otherwise, each one a row rewritten to the value it
+	// already held — and the writer pool is a single connection.
+	changed := 0
+	for _, f := range core.MarketplaceFields() {
+		want := strings.TrimSpace(in.forField(f))
+		if want == o.MarketplaceValue("ebay", f) {
+			continue
+		}
+		if err := a.Offer.SetMarketplaceValue(r.Context(), id, "ebay", f, want); err != nil {
+			a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+			return
+		}
+		changed++
+	}
+
+	msg := "Nothing to save — these are already the values on this offer."
+	if changed > 0 {
+		a.Broadcast(id)
+		msg = "Saved. Anything left empty uses the default from Settings."
 	}
 	sse := render.NewSSE(w, r)
 	_ = sse.PatchElementTempl(view.Flash("offer-flash", "ok", msg))

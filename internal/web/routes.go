@@ -72,7 +72,7 @@ func (a *App) Routes() http.Handler {
 		r.Get("/offers/{id}/sold-dialog", a.GetSoldDialog)
 		r.Post("/offers/{id}/sold", a.PostSold)
 		r.Post("/offers/{id}/location", a.PostOfferLocation)
-		r.Post("/offers/{id}/category", a.PostOfferCategory)
+		r.Post("/offers/{id}/marketplace", a.PostOfferMarketplace)
 		// ⚠ Two routes, two different meanings of "category". `/category` above is
 		// the MARKETPLACE one (ADR-016): where to list this on eBay. `/fields` here
 		// stores the answers to whatever the operator's OWN taxonomy asks about it

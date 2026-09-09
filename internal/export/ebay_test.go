@@ -257,6 +257,74 @@ func TestEBayFallsBackToTheConfiguredDefault(t *testing.T) {
 	}
 }
 
+// TestEBayPrefersTheOffersOwnCondition is ADR-022's reason for existing, applied
+// to the must-have an operator asked for by name.
+//
+// Condition was ONE value for a whole export file until ADR-022. A warehouse
+// holding a new part and a used one therefore had to run two exports or describe
+// one of them wrongly — and describing a used part as new is the kind of wrong
+// that ends an eBay account rather than merely annoying a buyer.
+func TestEBayPrefersTheOffersOwnCondition(t *testing.T) {
+	o := testOffer("LAMP-01", 1)
+	o.Marketplace = map[core.MarketplaceKey]string{
+		{Profile: "ebay", Field: core.MarketplaceCondition}: "1000",
+	}
+
+	opt := testOptions()
+	opt.ConditionID = "3000" // the file's default says USED
+	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
+
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want header + 1 row", len(recs))
+	}
+	// Column 8 is *ConditionID.
+	if recs[1][8] != "1000" {
+		t.Errorf("*ConditionID = %q, want the offer's own %q rather than the file default %q",
+			recs[1][8], "1000", opt.ConditionID)
+	}
+
+	// And an offer that names none still exports, under the configured default.
+	// Empty has to keep meaning "use the default" or the dropdown's first option
+	// — which is deliberately empty — would refuse every offer nobody has touched.
+	plain := testOffer("LAMP-02", 1)
+	recs = records(t, render(t, EBay{}, []core.Offer{plain}, opt))
+	if recs[1][8] != "3000" {
+		t.Errorf("*ConditionID = %q for an offer naming none, want the default %q", recs[1][8], "3000")
+	}
+}
+
+// TestEBayPrefersTheOffersOwnLocation covers the third must-have.
+//
+// Unlike the category, a default location stays REQUIRED — every deployment has
+// one, and eBay quotes postage from it. The offer's own value is an override for
+// the item that ships from somewhere else, which is what a warehouse with two
+// sites needs and could not express before.
+func TestEBayPrefersTheOffersOwnLocation(t *testing.T) {
+	o := testOffer("LAMP-01", 1)
+	o.Marketplace = map[core.MarketplaceKey]string{
+		{Profile: "ebay", Field: core.MarketplaceLocation}: "Vilnius",
+	}
+
+	opt := testOptions()
+	opt.Location = "Kaunas"
+	recs := records(t, render(t, EBay{}, []core.Offer{o}, opt))
+
+	if len(recs) != 2 {
+		t.Fatalf("got %d records, want header + 1 row", len(recs))
+	}
+	// Column 11 is *Location.
+	if recs[1][11] != "Vilnius" {
+		t.Errorf("*Location = %q, want the offer's own %q rather than the default %q",
+			recs[1][11], "Vilnius", opt.Location)
+	}
+
+	plain := testOffer("LAMP-02", 1)
+	recs = records(t, render(t, EBay{}, []core.Offer{plain}, opt))
+	if recs[1][11] != "Kaunas" {
+		t.Errorf("*Location = %q for an offer naming none, want the default %q", recs[1][11], "Kaunas")
+	}
+}
+
 // TestEBayRefusalNamesWhereToSetTheCategory pins the half of ADR-016 that is
 // about the MESSAGE rather than the mechanism.
 //

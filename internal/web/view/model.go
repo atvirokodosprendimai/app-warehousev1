@@ -243,7 +243,83 @@ type OfferDetail struct {
 	// ancestor's, root first — with the answers already given. Empty when the
 	// offer has no category, which is the ordinary case.
 	Fields []core.OfferField
+	// Marketplace is one entry per must-have eBay needs about THIS item, each
+	// carrying the list to pick from and what an unpicked value falls back to
+	// (ADR-022). Always the full set, in `core.MarketplaceFields()` order, even
+	// where the list is empty — see [MarketplaceChoice.Options].
+	Marketplace []MarketplaceChoice
 }
+
+// mktAttr binds one must-have control to its signal.
+//
+// A templ.Attributes map rather than a literal attribute, because the name
+// depends on the field and a literal per member would mean writing out a
+// vocabulary that is defined in core.
+//
+// ⚠ IT LIVES IN THIS .go FILE RATHER THAN IN offer_detail.templ ON PURPOSE, and
+// so does [defaultOptionLabel]. Plain Go inside a .templ is copied verbatim into
+// the generated file, so the compiled binary does not reflect an edit to the
+// .templ until `templ generate` runs — and a mutation test against it therefore
+// reports SURVIVED for code the build never compiled. Measured 2026-09-09 on
+// exactly this function's sibling. Logic worth proving goes where the compiler
+// reads it directly.
+func mktAttr(c MarketplaceChoice) templ.Attributes {
+	return templ.Attributes{"data-bind:" + c.Attr: true}
+}
+
+// defaultOptionLabel names what choosing nothing actually means.
+//
+// ⚠ WHEN THERE IS NO DEFAULT EITHER, IT SAYS SO. "Use the default — " followed
+// by nothing reads as a rendering bug, and worse, it hides that this offer will
+// be REFUSED at export time because no value exists anywhere.
+func defaultOptionLabel(c MarketplaceChoice) string {
+	if strings.TrimSpace(c.Default) == "" {
+		return "No default set — this offer needs a value"
+	}
+	return "Use the default — " + c.Default
+}
+
+// MarketplaceChoice is one must-have as the offer editor needs it: the menu, the
+// current answer, and what silence means.
+type MarketplaceChoice struct {
+	// Field is the closed-vocabulary member this choice is for.
+	Field core.MarketplaceField
+	// Title and Hint are what the operator reads.
+	Title string
+	Hint  string
+	// Signal is the datastar signal this control binds, camelCase — the same name
+	// the handler's struct tag declares. The two are written independently and
+	// nothing checks that they agree, which is why a browser walk asserts it.
+	Signal string
+	// Attr is the kebab-case attribute that binds Signal. ⚠ HTML LOWERCASES
+	// ATTRIBUTE NAMES, so these two spellings are not interchangeable: writing
+	// Signal into the attribute binds an all-lowercase name instead, silently.
+	Attr string
+	// Options is the list an administrator entered at Settings. EMPTY IS A REAL
+	// STATE and not an error — it is what every warehouse looks like before
+	// anybody fills the lists, and the card renders a free-text box instead, so
+	// this screen is never worse than it was before ADR-022.
+	Options []core.MarketplaceOption
+	// Chosen is this offer's own value, or "" for "whatever the default is".
+	Chosen string
+	// Default is what "" resolves to at export time. It is shown ON the empty
+	// option, because a dropdown whose first entry says only "Use the default"
+	// makes an operator open Settings to find out what they just agreed to.
+	Default string
+}
+
+// IsList reports whether this must-have has values to pick between.
+//
+// ⚠ FALSE IS THE ESCAPE, NOT AN ERROR STATE. Until an administrator has filled
+// the list there is nothing to pick, and a dropdown holding only its empty
+// option would make the editor strictly WORSE than the free-text box it
+// replaced — a warehouse mid-migration could not set the value at all. The card
+// renders the box in that case.
+//
+// A method rather than `len(c.Options) > 0` written inline in the .templ, for
+// the reason given on [mktAttr]: a branch that only exists inside a .templ
+// cannot be mutation-tested, because the binary is built from generated code.
+func (c MarketplaceChoice) IsList() bool { return len(c.Options) > 0 }
 
 // FieldsByLevel groups Fields by the category that defined them, preserving the
 // root-first order the read returned.

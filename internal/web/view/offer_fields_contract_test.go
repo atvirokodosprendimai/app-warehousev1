@@ -26,6 +26,41 @@ func fieldsDetail(fields ...core.OfferField) OfferDetail {
 			{ID: "c-turbo", Code: "TURBO", Path: "CAR/ENGINE/TURBO", Name: "Turbocharger"},
 		},
 		Fields: fields,
+		// ⚠ THE FULL SET, because that is what the handler always builds and what
+		// the screen's signal seeding assumes (ADR-022 T4). A fixture that left
+		// this empty would render a Marketplace card with no controls in it, which
+		// is how this fixture first met the new card.
+		Marketplace: marketplaceChoiceFixtures(),
+	}
+}
+
+// marketplaceChoiceFixtures is one entry per must-have, deliberately mixed: the
+// category has a list to pick from and the other two have none, so one fixture
+// exercises BOTH arms of the card — the dropdown and the free-text escape a
+// warehouse falls back to before an administrator has filled the lists.
+func marketplaceChoiceFixtures() []MarketplaceChoice {
+	return []MarketplaceChoice{
+		{
+			Field: core.MarketplaceCategory, Title: "eBay category",
+			Signal: "offerEbayCategory", Attr: "offer-ebay-category",
+			Options: []core.MarketplaceOption{
+				{ID: "opt-1", Profile: "ebay", Field: core.MarketplaceCategory,
+					Value: "20081", Label: "Antiques"},
+				{ID: "opt-2", Profile: "ebay", Field: core.MarketplaceCategory,
+					Value: "11450", Label: "Clothing"},
+			},
+			Default: "11450",
+		},
+		{
+			Field: core.MarketplaceCondition, Title: "Condition",
+			Signal: "offerEbayCondition", Attr: "offer-ebay-condition",
+			Default: "3000",
+		},
+		{
+			Field: core.MarketplaceLocation, Title: "Dispatches from",
+			Signal: "offerEbayLocation", Attr: "offer-ebay-location",
+			Default: "Kaunas",
+		},
 	}
 }
 

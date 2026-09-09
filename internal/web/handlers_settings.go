@@ -59,6 +59,35 @@ func (s marketplaceOptionSignals) forField(f core.MarketplaceField) (value, labe
 	return "", ""
 }
 
+// ebayFromEnv is the start-up default, as a Marketplace.
+func (a *App) ebayFromEnv() core.Marketplace {
+	return core.Marketplace{
+		Category:    a.Cfg.Export.Category,
+		ConditionID: a.Cfg.Export.ConditionID,
+		Location:    a.Cfg.Export.Location,
+	}
+}
+
+// ebayDefaults is what an offer that chooses nothing will export under.
+//
+// ⚠ ONE FUNCTION, TWO SCREENS. The settings panel and the offer editor's
+// "Use the default — …" label must name the same value; computing that
+// precedence twice is exactly how a screen ends up promising a fallback the
+// export does not use. A failed read yields the environment's values rather than
+// nothing, because that is what the export would fall back to anyway.
+func (a *App) ebayDefaults(ctx context.Context) core.Marketplace {
+	env := a.ebayFromEnv()
+	if a.Settings == nil {
+		return env
+	}
+	stored, err := a.Settings.Settings(ctx)
+	if err != nil {
+		a.Log.Warn("settings unavailable for marketplace defaults", "err", err)
+		return env
+	}
+	return stored.Ebay.Resolve(env)
+}
+
 // marketplaceOptions builds one profile's option lists, grouped by field.
 //
 // ⚠ IT ITERATES [core.MarketplaceFields], NOT the rows. A field with no options
@@ -189,11 +218,7 @@ func (a *App) settingsScreen(r *http.Request, note string) view.SettingsView {
 	// The start-up defaults, as a Marketplace so the same Resolve rule applies
 	// here as at export time. Two places computing precedence differently is how
 	// a settings screen ends up showing a value the export does not use.
-	envEbay := core.Marketplace{
-		Category:    a.Cfg.Export.Category,
-		ConditionID: a.Cfg.Export.ConditionID,
-		Location:    a.Cfg.Export.Location,
-	}
+	envEbay := a.ebayFromEnv()
 
 	return view.SettingsView{
 		Page: a.page(r, "Settings", "settings"),

@@ -788,6 +788,49 @@ curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/remove/$OPT_ID" \
 absent "a removed option is gone from the list" "marketplace/remove/$OPT_ID" "$RUN/optdel.txt"
 check "and the list says so rather than going blank" "Nothing on this list yet" "$RUN/optdel.txt"
 
+echo "== an offer picks its must-haves from those lists (ADR-022 T4) =="
+
+# A category list to pick from. The CONDITION list is deliberately left empty:
+# one run then covers both arms of the card — the dropdown and the free-text
+# escape a warehouse relies on before an administrator has filled the lists.
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques"}' -o /dev/null
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/mkt-before.html"
+check "the offer editor offers the entered value" '<option value="20081"' "$RUN/mkt-before.html"
+check "and names what choosing nothing falls back to" "Use the default — 11450" "$RUN/mkt-before.html"
+check "an empty option list still offers a text box" \
+  'id="o-mkt-condition" class="input" type="text"' "$RUN/mkt-before.html"
+
+# ⚠ THE PATCH TARGET, and it is the reason the card renders unconditionally. An
+# SSE patch REPLACES an element already in the document, so a save can only be
+# shown without a reload if this id is already on the page.
+check "the saved category is visible without a reload" 'id="offer-marketplace"' "$RUN/mkt-before.html"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/marketplace" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerEbayCategory":"20081","offerEbayCondition":"","offerEbayLocation":""}' \
+  -o "$RUN/mkt-save.txt"
+check "saving the picked value says so" "Saved" "$RUN/mkt-save.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/mkt-after.html"
+check "the picked value comes back selected" '<option value="20081" selected' "$RUN/mkt-after.html"
+
+# ★ The point of the whole feature: what was picked has to reach the file.
+curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay3.csv"
+check "an offer takes its eBay category from the list" ",20081," "$RUN/ebay3.csv"
+
+# And clearing it must go back to the default, or "empty means the default"
+# — which every unpicked offer relies on — would be a claim nothing keeps.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/marketplace" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerEbayCategory":"","offerEbayCondition":"","offerEbayLocation":""}' \
+  -o /dev/null
+curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay4.csv"
+check "an offer that chooses nothing exports under the default" ",11450," "$RUN/ebay4.csv"
+absent "and the cleared value is really gone" ",20081," "$RUN/ebay4.csv"
+
 echo "== auth boundary =="
 curl -s "$BASE/offers" -o /dev/null -w '%{http_code}' > "$RUN/anon.code"
 check "anonymous is redirected away from offers" "303" "$RUN/anon.code"

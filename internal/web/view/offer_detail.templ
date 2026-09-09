@@ -49,7 +49,7 @@ templ OfferScreen(d OfferDetail) {
 			<div class="stack">
 				@offerLocationCard(d)
 				@OfferCartsCard(d)
-				@offerMarketplaceCard(d)
+				@OfferMarketplaceCard(d)
 				@OfferStatusCard(d)
 			</div>
 		</div>
@@ -74,10 +74,26 @@ func offerSignals(d OfferDetail) string {
 		"offerLocation: " + jsString(o.LocationID) + ", " +
 		"offerSku: " + jsString(o.SKU) + ", " +
 		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
-		"offerEbayCategory: " + jsString(o.MarketplaceValue("ebay", core.MarketplaceCategory)) + ", " +
 		"offerCategory: " + jsString(o.CategoryID) +
+		marketplaceSignalSeed(d) +
 		fieldSignalSeed(d) +
 		"}"
+}
+
+// marketplaceSignalSeed declares one signal per must-have, seeded with whatever
+// this offer has chosen.
+//
+// ⚠ IT SEEDS EVERY FIELD, whether or not that field has a list to pick from. A
+// control bound to a name the page never declared creates its signal on first
+// interaction — which reads fine, and then arrives at a handler that has already
+// read the request. Seeding all of them makes the first save identical to the
+// second. This is also why [OfferDetail.Marketplace] is always the full set.
+func marketplaceSignalSeed(d OfferDetail) string {
+	out := ""
+	for _, c := range d.Marketplace {
+		out += ", " + c.Signal + ": " + jsString(c.Chosen)
+	}
+	return out
 }
 
 // fieldSignalSeed adds one signal per custom field the offer's category asks.
@@ -763,38 +779,74 @@ templ CloseModal() {
 //
 // Only eBay appears here because only eBay's resolution is wired; Shopify's and
 // Allegro's are deferred in docs/adr/BACKLOG.md.
-templ offerMarketplaceCard(d OfferDetail) {
+// ⚠ EXPORTED SO THE SSE LOOP CAN PATCH IT. A saved value has to show without a
+// reload, and handlers_stream.go is in another package.
+templ OfferMarketplaceCard(d OfferDetail) {
 	<div class="card" id="offer-marketplace">
 		<div class="card-head"><h2>Marketplace</h2></div>
 		<div class="card-body stack">
-			<div class="field">
-				<label for="o-ebay-cat">eBay category</label>
-				<input
-					id="o-ebay-cat"
-					class="input"
-					type="text"
-					inputmode="numeric"
-					spellcheck="false"
-					placeholder="Leave empty to use the default"
-					data-bind:offer-ebay-category
-					data-on:keydown={ "evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')" }
-				/>
-				<span class="hint">
-					Only for this item. Empty means the default set at Settings.
-				</span>
-			</div>
+			for _, c := range d.Marketplace {
+				<div class="field">
+					<label for={ "o-mkt-" + string(c.Field) }>{ c.Title }</label>
+					if !c.IsList() {
+						// ⚠ THE ESCAPE, AND IT IS NOT A NICETY. Until an
+						// administrator has filled this list there is nothing to
+						// pick, and a dropdown with one empty entry would make the
+						// screen strictly WORSE than the text box it replaced — a
+						// warehouse mid-migration could not set a value at all.
+						<input
+							id={ "o-mkt-" + string(c.Field) }
+							class="input"
+							type="text"
+							spellcheck="false"
+							placeholder="Leave empty to use the default"
+							{ mktAttr(c)... }
+							data-on:keydown={ "evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/marketplace')" }
+						/>
+						<span class="hint">
+							{ c.Hint } Nothing is on this list yet — an administrator
+							can add values at Settings, and this becomes a dropdown.
+						</span>
+					} else {
+						<select id={ "o-mkt-" + string(c.Field) } class="input" { mktAttr(c)... }>
+							// ⚠ AN EXPLICIT EMPTY OPTION, FIRST. A select with no
+							// empty entry makes "unset" indistinguishable from "the
+							// first value in the list", which would silently file
+							// every untouched offer under whatever happens to sort
+							// first. It names the fallback rather than just saying
+							// "the default", because otherwise finding out what you
+							// just agreed to means opening Settings.
+							<option value="">{ defaultOptionLabel(c) }</option>
+							for _, o := range c.Options {
+								<option value={ o.Value } selected?={ o.Value == c.Chosen }>
+									{ o.Label }
+								</option>
+							}
+						</select>
+						<span class="hint">{ c.Hint }</span>
+					}
+				</div>
+			}
 			<div>
 				<button
 					class="btn"
 					type="button"
-					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/category')" }
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/marketplace')" }
 					data-indicator:_busy
 					data-attr:disabled="$_busy"
 				>
 					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
-					<span>Save category</span>
+					<span>Save marketplace details</span>
 				</button>
 			</div>
 		</div>
 	</div>
 }
+
+// ⚠ mktAttr AND defaultOptionLabel LIVE IN model.go, NOT HERE, and that is
+// deliberate rather than tidiness. Plain Go written inside a .templ is copied
+// verbatim into the generated file, so the compiled binary never reflects an
+// edit to this file until `templ generate` runs — which means a mutation test
+// against it reports SURVIVED for code the build never saw. Measured
+// 2026-09-09: exactly that verdict, on an assertion that does hold. Logic worth
+// proving belongs in a .go file the compiler reads directly.

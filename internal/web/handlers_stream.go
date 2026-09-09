@@ -86,6 +86,11 @@ func (a *App) GetStream(w http.ResponseWriter, r *http.Request) {
 			_ = sse.PatchElementTempl(view.OfferPhotosCard(d))
 			_ = sse.PatchElementTempl(view.MarginLine(d.Row))
 			_ = sse.PatchElementTempl(view.OfferCartsCard(d))
+			// ⚠ The card is rendered unconditionally with a stable id, which is
+			// what makes this patch land at all: an SSE patch REPLACES an element
+			// already in the document, so a card that appeared only once it had
+			// content could never be patched into existence.
+			_ = sse.PatchElementTempl(view.OfferMarketplaceCard(d))
 			// ⚠ THE QUESTIONS CARD TRAVELS WITH ITS SIGNALS. Filing an offer under a
 			// category makes a set of controls appear that were not on the page when
 			// it loaded, so nothing has seeded their signals — and an input bound to
