@@ -330,7 +330,7 @@ quickly does not always know where one lot ends.
 
 ### Allegro's and Shopify's own category settings and resolution
 
-**Deferred by:** ADR-016 (marketplace configuration is data), ADR-019 (an undescribed draft is a normal state)
+**Deferred by:** ADR-016 (marketplace configuration is data), ADR-019 (an undescribed draft is a normal state), ADR-022 (a marketplace must-have is picked from a list)
 
 ADR-016 builds the mechanism — per-profile defaults in `settings`, per-offer
 overrides in `offer_categories` — and wires only eBay through it, because eBay is
@@ -400,7 +400,7 @@ places because only part of it applies at a time.
 
 ### Renaming `Offer.Categories` to end the word collision
 
-**Deferred by:** ADR-021 (a category is a tree that carries fields)
+**Deferred by:** ADR-021 (a category is a tree that carries fields) — **taken up by ADR-022**, whose T1 does exactly this rename, from `Offer.Categories` to `Offer.Marketplace`. Close this entry when that task lands.
 
 ADR-016's `Offer.Categories` is where to list an item on each marketplace;
 ADR-021's `Offer.CategoryID` is what the item IS. Two different things wearing
@@ -410,6 +410,60 @@ so it is its own change rather than a rider on this one.
 
 **What would make this real:** the first bug where somebody reads one and means
 the other.
+
+### eBay's required item specifics, which differ per category
+
+**Deferred by:** ADR-022 (a marketplace must-have is picked from a list)
+
+ADR-022 gives each export profile a flat list of must-have values — category,
+condition, dispatch location. eBay also demands *item specifics* that change with
+the category: a mobile phone needs Brand, Model and Storage, and a chair needs
+none of them. Those are per-category required fields, which is a second tree
+shaped like ADR-021's and keyed by eBay's taxonomy rather than by ours.
+
+⚠ M was shown this as an option on 2026-09-09 and chose the flat list instead, so
+this is a deliberate boundary rather than an oversight. The reason it is hard is
+the overlap: ADR-021's tree already asks category questions about the item, and a
+second system asking category questions about the *listing* is two vocabularies
+that will be confused for each other — the same collision `Offer.Categories`
+already caused once.
+
+**What would make this real:** eBay rejecting a listing for a missing specific,
+which is the first moment the flat list is provably not enough.
+
+### A starter list of marketplace options
+
+**Deferred by:** ADR-022 T2 (the lists and the per-offer values are stored)
+
+ADR-022's option lists start empty, so a fresh installation shows an empty
+dropdown until an administrator types the first category. ADR-021's starter
+templates already solve the same shape for the category tree — press "Car parts"
+and the questions arrive — and the natural extension is for that press to also
+seed the eBay categories a parts warehouse actually uses.
+
+⚠ It is NOT free: a template's output is the operator's data the moment it lands
+(ADR-021), so seeded options would be theirs to edit and re-applying would be
+refused, exactly as the tree is. The values would also be a guess about one
+marketplace's taxonomy that nobody here has verified against eBay.
+
+**What would make this real:** a second installation, where typing the same list
+again is the thing somebody notices.
+
+### Importing an option list from a CSV
+
+**Deferred by:** ADR-022 T3 (an administrator enters the lists)
+
+Entering marketplace options one at a time is fine for the dozen categories one
+warehouse uses and tedious for a hundred. eBay publishes its taxonomy as a file,
+so pasting or uploading one is the obvious next step.
+
+⚠ This is the first place this application would READ a CSV rather than write
+one, which is a new direction with its own failure modes — an encoding, a header
+nobody agreed, and a partial import that leaves a half-filled list. Writing a CSV
+is a pure function over offers; reading one is a parser over untrusted input.
+
+**What would make this real:** somebody wanting more options than they are
+willing to type, and saying how many.
 
 ## Operations
 
