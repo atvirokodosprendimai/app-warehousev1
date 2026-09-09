@@ -28,7 +28,7 @@ and the unchanged text box, which is the order in which each half is worth havin
 |----|-------|--------|--------|------------|
 | T1 | Give a marketplace must-have a closed vocabulary and one read path | done | — | `go test ./internal/core/ -run '^TestMarketplaceFieldVocabularyIsClosed$\|…' && go build ./... && go test ./internal/core/ ./internal/export/ ./internal/offer/` |
 | T2 | Store the option lists, and widen the per-offer table to hold three kinds of value | done | — | `go test ./internal/marketplace/ -run '^TestAnExistingOfferCategorySurvivesTheWidening$\|…' && go test ./internal/store/ ./internal/offer/ ./internal/marketplace/` |
-| T3 | Let an administrator enter the list each dropdown will offer | pending | — | `bash scripts/smoke.sh` + named assertions |
+| T3 | Let an administrator enter the list each dropdown will offer | done | — | `bash scripts/smoke.sh` + `bash scripts/browser.sh marketplace` + named assertions |
 | T4 | Pick each must-have from a dropdown on the offer editor | pending | — | `bash scripts/smoke.sh` + `bash scripts/browser.sh` + named assertions |
 
 Status: `pending` | `partial` | `blocked` | `done`.

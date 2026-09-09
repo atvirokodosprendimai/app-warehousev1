@@ -750,6 +750,44 @@ absent "and no longer from the start-up default" "$BASE/p/" "$RUN/shopify2.csv"
 curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
   -d "{\"setPublicBase\":\"$BASE\"}" -o /dev/null
 
+echo "== the lists a must-have is picked from (ADR-022) =="
+
+# ⚠ THE ONLY PLACE ANY OF THIS IS PROVED. internal/web has no Go tests, so a
+# handler that compiles, a route that is missing, and a guard that is absent all
+# look identical from `go test ./...`.
+curl -s -b "$STAFF" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"99999","optLabelCategory":"Sneaky"}' \
+  -o /dev/null -w '%{http_code}' > "$RUN/staffopt.code"
+check "a non-administrator cannot reach the marketplace options" "403" "$RUN/staffopt.code"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques"}' -o "$RUN/optadd.txt"
+check "an administrator can add a marketplace option" "Antiques" "$RUN/optadd.txt"
+
+# The location list is untouched by the line above, so the same response is the
+# proof that an EMPTY field still renders somewhere to type the first value.
+check "a field with no options still renders its section" "Dispatches from" "$RUN/optadd.txt"
+
+# Adding the same number twice is ordinary — nobody can see the whole list on a
+# phone — so the refusal has to be a sentence, not "Something went wrong".
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques again"}' -o "$RUN/optdup.txt"
+check "a duplicate option is refused in words" "already on the list" "$RUN/optdup.txt"
+
+OPT_ID=$(grep -o "marketplace/remove/[0-9a-f-]\{36\}" "$RUN/optadd.txt" | head -1 | cut -d/ -f3)
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/remove/$OPT_ID" \
+  -H 'Content-Type: application/json' -d '{}' -o "$RUN/optdel.txt"
+# ⚠ ASSERTED ON THE ROW'S OWN REMOVE URL, NOT ON ITS LABEL. The first version of
+# this looked for "Antiques" and failed against correct code: the card's help
+# text says "nobody has to remember that 20081 means Antiques", so both the label
+# AND the value appear on the page whether or not the row does. An id that exists
+# only while the row does is the only substring that means what this claims.
+absent "a removed option is gone from the list" "marketplace/remove/$OPT_ID" "$RUN/optdel.txt"
+check "and the list says so rather than going blank" "Nothing on this list yet" "$RUN/optdel.txt"
+
 echo "== auth boundary =="
 curl -s "$BASE/offers" -o /dev/null -w '%{http_code}' > "$RUN/anon.code"
 check "anonymous is redirected away from offers" "303" "$RUN/anon.code"

@@ -123,6 +123,12 @@ func (a *App) Routes() http.Handler {
 		r.Get("/inbox", a.GetInbox)
 		r.Get("/settings", a.GetSettings)
 		r.Post("/settings", a.PostSettings)
+		// ⚠ ADMIN FOR THE SAME REASON AS THE TAXONOMY BELOW. What is on a list
+		// decides what every offer in the warehouse is allowed to say about
+		// itself to a marketplace, which is the standing of a setting rather
+		// than of cataloguing one item (ADR-022).
+		r.Post("/settings/marketplace/add/{field}", a.PostMarketplaceOption)
+		r.Post("/settings/marketplace/remove/{id}", a.PostRemoveMarketplaceOption)
 		// ⚠ ADMIN, deliberately. A cataloguer FILES an offer under a category;
 		// changing what categories EXIST changes what every offer in the warehouse
 		// can say about itself, which is the same standing as changing a setting.

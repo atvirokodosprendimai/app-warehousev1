@@ -356,6 +356,11 @@ func (a *App) userMessage(err error) string {
 		errors.Is(err, export.ErrIncomplete),
 		errors.Is(err, export.ErrOptions),
 		errors.Is(err, export.ErrUnknownProfile),
+		// The one refusal a list editor can produce. Adding the same value twice
+		// is an ordinary thing to do — the operator cannot see the whole list on
+		// a small screen — so it has to arrive as a sentence rather than as
+		// "Something went wrong" plus an ERROR line in the log (ADR-022).
+		errors.Is(err, marketplace.ErrValueTaken),
 		// ⚠ THE TAXONOMY'S REFUSALS WERE MISSING FROM THIS LIST FROM THE DAY
 		// ADR-021 SHIPPED. Every one of them is a sentence an operator can act
 		// on — this code is already used, that node still has children, that
