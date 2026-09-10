@@ -64,7 +64,6 @@ func (a *App) Routes() http.Handler {
 		// The live search asks for just the table. Status stays in the page URL
 		// and the text and price terms ride as signals.
 		r.Get("/offers/rows", a.GetOfferRows)
-		r.Get("/offers/new", a.GetIntake)
 		r.Post("/offers", a.PostOffers)
 		r.Get("/offers/{id}", a.GetOffer)
 		r.Post("/offers/{id}", a.PostOffer)
@@ -73,7 +72,13 @@ func (a *App) Routes() http.Handler {
 		r.Get("/offers/{id}/sold-dialog", a.GetSoldDialog)
 		r.Post("/offers/{id}/sold", a.PostSold)
 		r.Post("/offers/{id}/location", a.PostOfferLocation)
-		r.Post("/offers/{id}/category", a.PostOfferCategory)
+		r.Post("/offers/{id}/marketplace", a.PostOfferMarketplace)
+		// ⚠ Two routes, two different meanings of "category". `/category` above is
+		// the MARKETPLACE one (ADR-016): where to list this on eBay. `/fields` here
+		// stores the answers to whatever the operator's OWN taxonomy asks about it
+		// (ADR-021). The offer's taxonomy node itself is saved by `POST /offers/{id}`
+		// with the rest of the Details card.
+		r.Post("/offers/{id}/fields", a.PostOfferFields)
 		r.Post("/offers/{id}/photos", a.PostPhotos)
 		// One SSE endpoint for the whole application. The query says what this
 		// page needs beyond what every page needs; the server decides the rest.
@@ -118,6 +123,25 @@ func (a *App) Routes() http.Handler {
 		r.Get("/inbox", a.GetInbox)
 		r.Get("/settings", a.GetSettings)
 		r.Post("/settings", a.PostSettings)
+		// ⚠ ADMIN FOR THE SAME REASON AS THE TAXONOMY BELOW. What is on a list
+		// decides what every offer in the warehouse is allowed to say about
+		// itself to a marketplace, which is the standing of a setting rather
+		// than of cataloguing one item (ADR-022).
+		r.Post("/settings/marketplace/add/{field}", a.PostMarketplaceOption)
+		r.Post("/settings/marketplace/remove/{id}", a.PostRemoveMarketplaceOption)
+		// ⚠ ADMIN, deliberately. A cataloguer FILES an offer under a category;
+		// changing what categories EXIST changes what every offer in the warehouse
+		// can say about itself, which is the same standing as changing a setting.
+		r.Get("/categories", a.GetTaxonomy)
+		r.Post("/categories", a.PostCategories)
+		// One press builds a whole starter tree, so it is a POST on its own path
+		// rather than a variant of the create above: what it does to the taxonomy
+		// is not what typing one category does.
+		r.Post("/categories/template/{code}", a.PostCategoryTemplate)
+		r.Post("/categories/{id}", a.PostCategory)
+		r.Post("/categories/{id}/delete", a.PostCategoryDelete)
+		r.Post("/categories/{id}/fields", a.PostCategoryFields)
+		r.Post("/fields/{fieldID}/delete", a.PostFieldDelete)
 		r.Post("/submit/{id}/review", a.PostStartReview)
 		r.Post("/submit/{id}/decline", a.PostDecline)
 		r.Post("/submit/{id}/accept", a.PostAccept)

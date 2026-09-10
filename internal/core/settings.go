@@ -30,7 +30,7 @@ const (
 // internal/export carries a test asserting its registry matches this exactly.
 // Add a profile in both, or that test goes red.
 func KnownExportProfiles() []string {
-	return []string{"ebay", "shopify"}
+	return []string{"ebay", "recar", "shopify"}
 }
 
 // ValidExportProfile reports whether name is a profile this application knows.

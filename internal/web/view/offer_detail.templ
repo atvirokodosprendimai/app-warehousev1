@@ -24,23 +24,33 @@ templ OfferScreen(d OfferDetail) {
 		  what you meet first: .cols is one column below 861px, so the page becomes
 		  these two stacks read end to end.
 
-		  Photographs therefore sit directly under Details — describing a thing and
-		  photographing it is one task — and Pricing follows them instead of
-		  separating them. ADR-004 makes the price a later, researched step, so the
-		  previous order put the one card the domain says to defer between an
-		  operator and the camera, four cards down a phone screen.
+		  M set this order directly (ADR-020): "1step click offer, 2nd upload
+		  photos 3rd - all other info", then "status: listing, draf, pending etc.
+		  should be last block".
+
+		  So PHOTOGRAPHS COME FIRST. Pressing New offer creates the draft and lands
+		  here, and the operator is still holding the object — the camera is the
+		  only thing they need in that moment. Details follows, because describing
+		  and photographing are one task. Pricing follows those, since ADR-004
+		  makes the price a later, researched step.
+
+		  STATUS IS LAST, and it is the only card here that is not data entry:
+		  every other card records what the thing IS, while this one decides what
+		  the business does with it. It used to head the second column, which on a
+		  phone put "Listed / Draft / Pending" between the photographs and the price.
 		-->
 		<div class="cols">
 			<div class="stack">
-				@offerDetailsCard(d)
 				@OfferPhotosCard(d)
+				@offerDetailsCard(d)
+				@OfferFieldsCard(d)
 				@offerPricingCard(d)
 			</div>
 			<div class="stack">
-				@OfferStatusCard(d)
 				@offerLocationCard(d)
 				@OfferCartsCard(d)
-				@offerMarketplaceCard(d)
+				@OfferMarketplaceCard(d)
+				@OfferStatusCard(d)
 			</div>
 		</div>
 	</div>
@@ -62,16 +72,185 @@ func offerSignals(d OfferDetail) string {
 		"ownerAmount: " + jsString(decimalOrEmpty(o.Owner)) + ", " +
 		"ownerCurrency: " + jsString(currencyOr(o.Owner, core.BaseCurrency)) + ", " +
 		"offerLocation: " + jsString(o.LocationID) + ", " +
-		"offerEbayCategory: " + jsString(o.Categories["ebay"]) +
+		"offerSku: " + jsString(o.SKU) + ", " +
+		"offerQuantity: " + jsString(itoa(o.Quantity)) + ", " +
+		"offerCategory: " + jsString(o.CategoryID) +
+		marketplaceSignalSeed(d) +
+		fieldSignalSeed(d) +
 		"}"
+}
+
+// marketplaceSignalSeed declares one signal per must-have, seeded with whatever
+// this offer has chosen.
+//
+// ⚠ IT SEEDS EVERY FIELD, whether or not that field has a list to pick from. A
+// control bound to a name the page never declared creates its signal on first
+// interaction — which reads fine, and then arrives at a handler that has already
+// read the request. Seeding all of them makes the first save identical to the
+// second. This is also why [OfferDetail.Marketplace] is always the full set.
+func marketplaceSignalSeed(d OfferDetail) string {
+	out := ""
+	for _, c := range d.Marketplace {
+		out += ", " + c.Signal + ": " + jsString(c.Chosen)
+	}
+	return out
+}
+
+// fieldSignalSeed adds one signal per custom field the offer's category asks.
+//
+// ⚠ A BOOL IS SEEDED AS A JS BOOLEAN, NOT A STRING. A checkbox bound to the
+// string "" is checked, because "" is a value datastar happily assigns and the
+// DOM coerces; seeding false is what makes an unanswered yes/no render as
+// unanswered. Every other kind is a string, which is what every other signal on
+// this screen is.
+func fieldSignalSeed(d OfferDetail) string {
+	out := ""
+	for _, f := range d.Fields {
+		out += ", " + FieldSignal(f.ID) + ": "
+		if f.Kind == core.FieldBool {
+			if f.Bool() {
+				out += "true"
+			} else {
+				out += "false"
+			}
+			continue
+		}
+		out += jsString(f.Value)
+	}
+	return out
+}
+
+// FieldSignalValues is the same seed as fieldSignalSeed, keyed by signal name so
+// it can be sent over SSE rather than written into the page.
+//
+// It exists because the questions card can APPEAR after the page has loaded: an
+// offer filed under a category mid-session gets controls whose signals were
+// never seeded, and an input bound to a signal that does not exist renders blank
+// however right its markup is. The stream sends these if-missing, which seeds a
+// card that has just arrived without overwriting what somebody is typing into
+// one that was already there.
+//
+// ⚠ IT MUST AGREE WITH fieldSignalSeed ON THE BOOL RULE — a yes/no is a real
+// boolean by both routes, never a string — and TestTheTwoSignalSeedsAgree fails
+// if the two ever drift apart.
+func FieldSignalValues(d OfferDetail) map[string]any {
+	out := make(map[string]any, len(d.Fields))
+	for _, f := range d.Fields {
+		if f.Kind == core.FieldBool {
+			out[FieldSignal(f.ID)] = f.Bool()
+			continue
+		}
+		out[FieldSignal(f.ID)] = f.Value
+	}
+	return out
+}
+
+// OfferFieldsCard asks whatever this offer's category asks.
+//
+// ⚠ IT KNOWS NO FIELD NAMES. Everything here comes from the resolved list the
+// handler loaded, which is the point of ADR-021: the operator defines the
+// questions and this card renders them. A template that named a field would be
+// a schema per trade, shipped by us, which is the thing the record exists to
+// avoid.
+//
+// The card sits after Photographs and before Status on purpose. ADR-020 put the
+// camera first and the publish decision last, and this is neither — it is
+// description, so it belongs beside Details.
+//
+// ⚠ THE WRAPPER IS ALWAYS RENDERED; THE CARD INSIDE IT IS NOT. Filing an offer
+// under a category is what brings these questions into existence, so the card
+// has to be able to APPEAR on a page that was loaded without one — and an SSE
+// patch can only replace an element that is already in the document. An offer
+// with no category therefore renders an empty <div id="offer-fields">: nothing
+// to look at, and a target for the stream to write into.
+//
+// M found this by filing an offer and being asked nothing. Every Go test passed,
+// smoke passed and the browser walk passed, because the walk reloaded the page
+// immediately after saving — which is the one step an operator does not take.
+templ OfferFieldsCard(d OfferDetail) {
+	<div id="offer-fields">
+		if len(d.Fields) > 0 {
+			<div class="card">
+				<div class="card-head">
+					<h2>Details for this category</h2>
+				</div>
+				<div class="card-body stack">
+					for _, g := range d.FieldsByLevel() {
+						<div class="field-group">
+							<!--
+							  The level a question came from, shown because an operator who
+							  did not define it here should be able to see WHY they are being
+							  asked and where to go to change it.
+							-->
+							<h3 class="field-group-head">{ g.Leaf() }</h3>
+							for _, f := range g.Fields {
+								@offerField(f)
+							}
+						</div>
+					}
+					<div>
+						<button
+							class="btn btn-primary"
+							type="button"
+							data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/fields')" }
+							data-indicator:_busy
+							data-attr:disabled="$_busy"
+						>
+							<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+							<span>Save these details</span>
+						</button>
+					</div>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// offerField renders one question's control.
+//
+// ⚠ THE DEFAULT BRANCH IS LOAD-BEARING, NOT TIDINESS. A kind this binary does
+// not recognise renders as a text input rather than failing the page: a row
+// written by a newer version and read by an older one should degrade to
+// something an operator can still read and type into. ADR-021 records this as a
+// Risk and this is where it is answered. Writing an unknown kind is refused
+// separately, by core.ParseFieldKind, which is what keeps the case rare.
+templ offerField(f core.OfferField) {
+	<div class="field">
+		<label for={ "cf-" + f.ID }>
+			{ f.Label }
+			if f.Required {
+				<span class="hint-inline">— usually needed</span>
+			}
+		</label>
+		switch f.Kind {
+			case core.FieldLongText:
+				<textarea id={ "cf-" + f.ID } class="textarea" { FieldBind(f)... }></textarea>
+			case core.FieldNumber:
+				<div class="row-inline">
+					<input id={ "cf-" + f.ID } class="input" type="text" inputmode="numeric" { FieldBind(f)... }/>
+					if f.Unit != "" {
+						<span class="unit">{ f.Unit }</span>
+					}
+				</div>
+			case core.FieldChoice:
+				<select id={ "cf-" + f.ID } class="select" { FieldBind(f)... }>
+					<option value="">— not set —</option>
+					for _, opt := range f.OptionList() {
+						<option value={ opt }>{ opt }</option>
+					}
+				</select>
+			case core.FieldBool:
+				<input id={ "cf-" + f.ID } type="checkbox" { FieldBind(f)... }/>
+			default:
+				<input id={ "cf-" + f.ID } class="input" type="text" { FieldBind(f)... }/>
+		}
+	</div>
 }
 
 templ offerDetailsCard(d OfferDetail) {
 	<div class="card">
 		<div class="card-head">
 			<h2>Details</h2>
-			<span class="spacer"></span>
-			<span class="code faint">{ d.Row.Offer.SKU }</span>
 		</div>
 		<div class="card-body stack">
 			<div class="field">
@@ -86,6 +265,82 @@ templ offerDetailsCard(d OfferDetail) {
 			<div class="field">
 				<label for="o-cond">Condition</label>
 				<input id="o-cond" class="input" type="text" placeholder="used — good" data-bind:offer-condition/>
+			</div>
+			<!--
+			  WHAT THE THING IS (ADR-021) — the operator's own taxonomy, not a
+			  marketplace's. ⚠ The eBay category is a DIFFERENT field on a
+			  DIFFERENT card: that one says where to list this, and it comes from
+			  eBay's taxonomy. This one says what it is, and it decides which
+			  questions the card below asks.
+
+			  Optional, and it stays optional: ADR-004 and ADR-019 both exist
+			  because demanding a value at the shelf is what makes somebody type a
+			  placeholder.
+			-->
+			<div class="field">
+				<label for="o-category">Category</label>
+				<!--
+				  No `selected` attribute, matching the location picker above: the
+				  value comes from the seeded signal through data-bind, and a
+				  `selected` attribute beside it would be a second source of truth
+				  that disagrees the moment the signal changes.
+				-->
+				<!--
+				  IT APPLIES ON CHANGE, unlike every other control in this card.
+				  Choosing a category is not describing the thing — it decides which
+				  questions the page asks next, and those arrive from the server over
+				  the stream. Waiting for Save details would mean choosing a category
+				  and being shown nothing, which is exactly what M reported.
+				-->
+				<select
+					id="o-category"
+					class="select"
+					data-bind:offer-category
+					data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "')" }
+				>
+					<option value="">— not filed —</option>
+					for _, c := range d.Categories {
+						<option value={ c.ID }>{ c.Path } · { c.Name }</option>
+					}
+				</select>
+				<span class="hint">
+					What kind of thing this is. Filing it here is what decides which
+					extra details you are asked for; the marketplace category is set
+					separately, under Marketplace.
+				</span>
+			</div>
+			<!--
+			  How many of the thing we hold. The column has existed since the first
+			  migration and both exporters have always written it, but nothing in the
+			  interface ever SET it — so every offer carried the database default of
+			  1, and a shelf of five went to a marketplace as one.
+
+			  Text with an inputmode rather than type="number", matching the prices:
+			  a number input sends a JSON number, and every signal this screen reads
+			  is a string.
+			-->
+			<div class="field">
+				<label for="o-qty">Qty</label>
+				<input id="o-qty" class="input" type="text" inputmode="numeric" data-bind:offer-quantity/>
+				<span class="hint">
+					How many of this we hold. It is sent to every marketplace as the
+					stock figure, so 0 reads as out of stock rather than as unknown.
+				</span>
+			</div>
+			<!--
+			  The reference lives here since ADR-020, because deleting the intake
+			  screen took away the only place it could be typed. It is allocated by
+			  the database (ADR-010) and shown rather than asked for, but it stays
+			  EDITABLE: somebody re-cataloguing existing stock has references already
+			  written on the boxes, and a typo made at intake used to be permanent.
+			-->
+			<div class="field">
+				<label for="o-sku">Reference</label>
+				<input id="o-sku" class="input code" type="text" data-bind:offer-sku/>
+				<span class="hint">
+					Generated for you, and used as the Shopify handle and the eBay custom
+					label. Once the offer is published it should not change.
+				</span>
 			</div>
 			<div>
 				<button
@@ -307,38 +562,83 @@ templ OfferPhotosCard(d OfferDetail) {
 				  action.
 				-->
 				<form enctype="multipart/form-data" data-on:submit="evt.preventDefault()">
-					<label class="drop">
-						<!--
-						  ADR-015. The idle half and the busy half of the same 104px
-						  square. Until this, choosing a file changed nothing on screen —
-						  and this is the longest request the application makes, so on a
-						  phone a slow upload was indistinguishable from a dead control.
+					<!--
+					  TWO controls, not one, because on a phone "add a photograph" is two
+					  different acts. Reported by M on 2026-09-07: the upload "needs to
+					  choose if on mobile, want to make few photos or choose from gallery".
 
-						  `_uploading` is all lowercase ON PURPOSE. The indicator puts its
-						  signal name in the ATTRIBUTE NAME, and HTML lowercases attribute
-						  names, so a camelCase name would have datastar create one signal
-						  while every line here reads another — which is a defect that has
-						  already taken a sibling project's page down. It is
-						  underscore-prefixed so it stays in the browser instead of riding
-						  to the backend on every later action, and it is deliberately NOT
-						  `_busy`: signals are global, so sharing that name would spin
-						  every other spinner on this page during an upload.
+					  ⚠ WHY ONE INPUT COULD NOT DO BOTH. A single input's behaviour is
+					  decided by `accept` and `capture`, and the operating system — not
+					  this markup — decides what sheet to show. `capture` opens the camera
+					  and REMOVES the gallery as an option; omitting it leaves the choice
+					  to the OS, and an `accept` naming specific MIME types (which this
+					  upload has always used, and still does for the gallery) is exactly
+					  what makes iOS drop "Take Photo" from that sheet. So the choice M
+					  wants cannot be expressed on one input at all. Two inputs make it
+					  explicit and stop depending on OS heuristics.
+					-->
+					<div class="drop-row">
+						<!--
+						  Camera. `image/*` rather than the explicit list because a capture
+						  returns whatever the camera produces and the SERVER is the real
+						  gate anyway — internal/web/upload.go sniffs the magic bytes and
+						  accepts only jpeg/png/webp/gif, so a browser-side accept is a
+						  convenience, never the check.
+
+						  No `multiple`: a capture is one photograph, and every platform
+						  ignores `multiple` alongside `capture`. Taking "a few" is tapping
+						  this a few times, which is also how a camera app behaves.
 						-->
-						<span data-show="!$_uploading" aria-hidden="true">＋</span>
-						<span data-show="!$_uploading">Add</span>
-						<span data-show="$_uploading" style="display:none" class="spinner" aria-hidden="true"></span>
-						<span data-show="$_uploading" style="display:none" aria-live="polite">Uploading…</span>
-						<input
-							class="sr-only"
-							type="file"
-							name="photos"
-							accept="image/jpeg,image/png,image/webp,image/gif"
-							multiple
-							data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
-							data-indicator:_uploading
-							data-attr:disabled="$_uploading"
-						/>
-					</label>
+						<label class="drop drop-camera" data-show="!$_uploading">
+							<span aria-hidden="true">📷</span>
+							<span>Take photo</span>
+							<input
+								class="sr-only"
+								type="file"
+								name="photos"
+								accept="image/*"
+								capture="environment"
+								data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+								data-indicator:_uploading
+								data-attr:disabled="$_uploading"
+							/>
+						</label>
+						<!--
+						  Gallery, and the only control on a desktop. Keeps the explicit
+						  MIME list it has always had: narrowing the picker to what the
+						  server accepts is worth more here than it is for a capture,
+						  because this is where somebody can reach a file that is not a
+						  photograph at all.
+						-->
+						<label class="drop drop-gallery" data-show="!$_uploading">
+							<span aria-hidden="true">＋</span>
+							<span>Choose photos</span>
+							<input
+								class="sr-only"
+								type="file"
+								name="photos"
+								accept="image/jpeg,image/png,image/webp,image/gif"
+								multiple
+								data-on:change={ "@post('/offers/" + d.Row.Offer.ID + "/photos', {contentType: 'form'})" }
+								data-indicator:_uploading
+								data-attr:disabled="$_uploading"
+							/>
+						</label>
+						<!--
+						  ADR-015's busy half, now shared. It REPLACES both controls rather
+						  than sitting beside them: two spinners for one upload would read
+						  as two uploads. `_uploading` is all lowercase ON PURPOSE — the
+						  signal name lives in the ATTRIBUTE NAME and HTML lowercases those,
+						  so a camelCase name would have datastar create one signal while
+						  every line here reads another. It is underscore-prefixed to stay
+						  in the browser, and deliberately NOT `_busy`: signals are global,
+						  so sharing that name would spin every other control on this page.
+						-->
+						<div class="drop drop-busy" data-show="$_uploading" style="display:none">
+							<span class="spinner" aria-hidden="true"></span>
+							<span aria-live="polite">Uploading…</span>
+						</div>
+					</div>
 				</form>
 			</div>
 			if len(d.Row.Offer.Photos) == 0 {
@@ -479,38 +779,74 @@ templ CloseModal() {
 //
 // Only eBay appears here because only eBay's resolution is wired; Shopify's and
 // Allegro's are deferred in docs/adr/BACKLOG.md.
-templ offerMarketplaceCard(d OfferDetail) {
+// ⚠ EXPORTED SO THE SSE LOOP CAN PATCH IT. A saved value has to show without a
+// reload, and handlers_stream.go is in another package.
+templ OfferMarketplaceCard(d OfferDetail) {
 	<div class="card" id="offer-marketplace">
 		<div class="card-head"><h2>Marketplace</h2></div>
 		<div class="card-body stack">
-			<div class="field">
-				<label for="o-ebay-cat">eBay category</label>
-				<input
-					id="o-ebay-cat"
-					class="input"
-					type="text"
-					inputmode="numeric"
-					spellcheck="false"
-					placeholder="Leave empty to use the default"
-					data-bind:offer-ebay-category
-					data-on:keydown={ "evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/category')" }
-				/>
-				<span class="hint">
-					Only for this item. Empty means the default set at Settings.
-				</span>
-			</div>
+			for _, c := range d.Marketplace {
+				<div class="field">
+					<label for={ "o-mkt-" + string(c.Field) }>{ c.Title }</label>
+					if !c.IsList() {
+						// ⚠ THE ESCAPE, AND IT IS NOT A NICETY. Until an
+						// administrator has filled this list there is nothing to
+						// pick, and a dropdown with one empty entry would make the
+						// screen strictly WORSE than the text box it replaced — a
+						// warehouse mid-migration could not set a value at all.
+						<input
+							id={ "o-mkt-" + string(c.Field) }
+							class="input"
+							type="text"
+							spellcheck="false"
+							placeholder="Leave empty to use the default"
+							{ mktAttr(c)... }
+							data-on:keydown={ "evt.key === 'Enter' && @post('/offers/" + d.Row.Offer.ID + "/marketplace')" }
+						/>
+						<span class="hint">
+							{ c.Hint } Nothing is on this list yet — an administrator
+							can add values at Settings, and this becomes a dropdown.
+						</span>
+					} else {
+						<select id={ "o-mkt-" + string(c.Field) } class="input" { mktAttr(c)... }>
+							// ⚠ AN EXPLICIT EMPTY OPTION, FIRST. A select with no
+							// empty entry makes "unset" indistinguishable from "the
+							// first value in the list", which would silently file
+							// every untouched offer under whatever happens to sort
+							// first. It names the fallback rather than just saying
+							// "the default", because otherwise finding out what you
+							// just agreed to means opening Settings.
+							<option value="">{ defaultOptionLabel(c) }</option>
+							for _, o := range c.Options {
+								<option value={ o.Value } selected?={ o.Value == c.Chosen }>
+									{ o.Label }
+								</option>
+							}
+						</select>
+						<span class="hint">{ c.Hint }</span>
+					}
+				</div>
+			}
 			<div>
 				<button
 					class="btn"
 					type="button"
-					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/category')" }
+					data-on:click={ "@post('/offers/" + d.Row.Offer.ID + "/marketplace')" }
 					data-indicator:_busy
 					data-attr:disabled="$_busy"
 				>
 					<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
-					<span>Save category</span>
+					<span>Save marketplace details</span>
 				</button>
 			</div>
 		</div>
 	</div>
 }
+
+// ⚠ mktAttr AND defaultOptionLabel LIVE IN model.go, NOT HERE, and that is
+// deliberate rather than tidiness. Plain Go written inside a .templ is copied
+// verbatim into the generated file, so the compiled binary never reflects an
+// edit to this file until `templ generate` runs — which means a mutation test
+// against it reports SURVIVED for code the build never saw. Measured
+// 2026-09-09: exactly that verdict, on an assertion that does hold. Logic worth
+// proving belongs in a .go file the compiler reads directly.

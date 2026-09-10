@@ -395,6 +395,103 @@ button, input, select, textarea { font: inherit; color: inherit; }
   body:has(.nav-scrim.open) { overflow: hidden; }
 
   .content, .topbar { padding-left: 16px; padding-right: 16px; }
+
+  /* ---------- the top bar carries two actions now ----------
+
+     Measured in Chromium at 390x844: with "New offer" rendered by the shell on
+     EVERY page, the warehouse page shows "Add a place" and "New offer" beside a
+     title and a 44px menu button, and that overflowed — 390px of room, more than
+     390px of controls.
+
+     Wrapping is the answer rather than shrinking: a narrower button means a
+     smaller touch target, and a truncated label means guessing what a control
+     does. So the actions drop onto a second row WHEN THEY DO NOT FIT and stay on
+     the first when they do — a page with one action is unchanged. The title is
+     allowed to shrink and break, since it is the only element here that can lose
+     width without losing meaning. */
+  .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .topbar h1 { min-width: 0; overflow-wrap: anywhere; }
+  .topbar-actions { flex-wrap: wrap; }
+
+  /* ---------- the offers listing stops being a table on a phone ----------
+
+     Measured in Chromium at 390x844: the listing table is 802px wide — eight
+     columns for an administrator — so `documentElement.scrollWidth` came back
+     738 against a 390px client width and the LOCATION column sat off the right
+     edge entirely. `.table-wrap`'s `overflow-x: auto` scrolls the table, but
+     the PAGE still overflowed, and the same measurement with Chromium's mobile
+     emulation switched OFF returned 737 — so this was the layout, not an
+     artefact of the harness.
+
+     Below 860px each row therefore becomes a stacked card. The markup does not
+     change shape: the cells carry their own wording in `data-label`, which the
+     header row supplies on a wider screen. ⚠ The explicit `role` attributes in
+     offers.templ are what make this safe — setting `display` to anything other
+     than `table*` strips a table's implicit ARIA semantics. */
+  .table-wrap { overflow-x: visible; }
+  table, tbody, tr, td { display: block; width: auto; }
+  thead { display: none; }
+
+  /* Each row becomes a card in its own right. On the page background a
+     borderless row reads as loose text rather than as one item among several,
+     and the rest of this interface is built from cards, so a listing that is
+     not looks like an unstyled fragment. */
+  tbody tr {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 4px;
+    align-items: start;
+    padding: 14px;
+    margin-bottom: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  tbody tr:last-child { margin-bottom: 0; }
+  tbody td { padding: 0; border-bottom: 0; min-width: 0; }
+
+  /* The photograph rides beside the name it belongs to; everything else is a
+     full-width label/value line, which is what makes a row scannable without
+     column headings above it. */
+  .cell-photo { grid-column: 1; grid-row: 1 / span 2; }
+  .cell-item { grid-column: 2; grid-row: 1; }
+  .cell-status { grid-column: 2; grid-row: 2; }
+  .cell-where,
+  .cell-price,
+  .cell-qty,
+  .cell-owner,
+  .cell-margin {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 2px;
+  }
+  td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  /* A deep shelf path is the one value long enough to force the row wide
+     again, so it wraps inside its own column rather than pushing the page. */
+  .cell-val { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+
+  /* A full-width control, because a 63px "Add" is not a touch target. It also
+     takes a visible border here: `.btn-ghost` is transparent until hover, and a
+     phone has no hover, so the button read as a line of centred text. */
+  .cell-add { grid-column: 1 / -1; margin-top: 12px; }
+  .cell-add .btn {
+    width: 100%;
+    min-height: 44px;
+    border-color: var(--border);
+    color: var(--text);
+  }
 }
 
 /* ---------- stat tiles ---------- */
@@ -606,6 +703,11 @@ tbody tr:hover { background: var(--surface-2); }
   .cols { grid-template-columns: 1fr 1fr; }
 }
 
+/* An untitled offer is a normal state (ADR-019), and it must not look like a
+   value that failed to render. Muted and italic reads as "not yet"; an empty
+   cell reads as a bug and gets reported as one. */
+.row-title.untitled { color: var(--text-faint); font-style: italic; }
+
 .money-row { display: grid; grid-template-columns: 1fr 96px; gap: 8px; }
 
 /* ---------- messages ---------- */
@@ -797,6 +899,21 @@ tbody tr:hover { background: var(--surface-2); }
 }
 .drop:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+/* Two ways to add a photograph, side by side (M, 2026-09-07). */
+.drop-row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ⚠ The camera control is offered ONLY to a touch pointer, and this rule must
+   stay after `.drop` — same specificity, so order is what decides it.
+
+   `capture` on a desktop browser is honoured inconsistently: some open a webcam,
+   most fall back to the ordinary file dialog, which would put two controls that
+   do the same thing side by side. A coarse pointer is the honest proxy for
+   "there is a camera here worth opening". */
+.drop-camera { display: none; }
+@media (pointer: coarse) {
+  .drop-camera { display: flex; }
+}
+
 /* ---------- misc ---------- */
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -822,3 +939,84 @@ tbody tr:hover { background: var(--surface-2); }
 .muted { color: var(--text-muted); }
 .faint { color: var(--text-faint); }
 .right { margin-left: auto; }
+
+/* ---------- taxonomy (ADR-021) ---------- */
+
+/* A list of nodes read as a tree. list-style is removed deliberately: the
+   default disc bullets read as prose, and the indentation carried by the path
+   text is what actually shows the shape. */
+.tree { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.tree-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+}
+.tree-row:hover { background: var(--surface-2); }
+.tree-link { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+/* The selected node, so a long tree still says where you are. */
+.tree-row.is-current { background: var(--accent-soft); }
+.tree-row.is-current .code { color: var(--accent); }
+
+/* A question's provenance and its export state, read at a glance rather than by
+   opening each one. */
+.tag {
+  display: inline-flex; align-items: center;
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px; font-weight: 600;
+  white-space: nowrap;
+}
+
+/* One ancestor's worth of questions on the offer editor, and its heading. The
+   heading is small on purpose: it labels a group inside a card, and an h3 at
+   card-title size would compete with the card's own name. */
+.field-group { display: flex; flex-direction: column; gap: 14px; }
+.field-group-head {
+  font-size: 11.5px; font-weight: 650;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* The questions card is patched in over SSE the moment an offer is filed under a
+   category, so its wrapper has to be in the document even while there is nothing
+   to ask. `display: contents` is what keeps that free: the wrapper generates no
+   box, so the card inside takes part in .stack's own gap and an empty wrapper
+   contributes no gap of its own, rather than leaving a 14px hole between Details
+   and Pricing on every offer that has no category. */
+#offer-fields { display: contents; }
+
+/* Controls that belong on one line and may wrap on a phone rather than shrink —
+   the same choice the top bar makes, and for the same reason: a 44px target and
+   a full label are worth more than one unbroken row. */
+.row-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row-inline .input { flex: 1 1 8ch; min-width: 0; }
+
+/* A number field's unit, beside the value and never inside it. */
+.unit { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+
+.btn-small { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
+@media (pointer: coarse) {
+  /* A destructive control keeps the full touch target even when it is small on
+     a mouse: this is the button that deletes a question and its answers. */
+  .btn-small { min-height: 44px; padding: 0 14px; }
+}
+
+.hint-inline { color: var(--text-faint); font-weight: 400; font-size: 12.5px; }
+
+/* A yes/no question's checkbox. ⚠ .field is a COLUMN flex container, so a bare
+   checkbox is stretched by align-items: stretch and drifts away from the label
+   it belongs to — which is what it did until somebody looked at the rendered
+   page. align-self pins it back to the start, and the explicit size gives it a
+   target worth tapping. */
+.field > input[type="checkbox"] {
+  align-self: start;
+  width: 18px; height: 18px;
+  accent-color: var(--accent);
+}
+@media (pointer: coarse) {
+  .field > input[type="checkbox"] { width: 22px; height: 22px; }
+}

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -11,65 +10,44 @@ import (
 	"time"
 
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
+	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 	"github.com/google/uuid"
-
-	// modernc.org/sqlite is the CGO-free driver; it registers itself as "sqlite".
-	_ "modernc.org/sqlite"
 )
 
-// usersDDL is the users table exactly as migrations/00001_init.sql declares it.
-//
-// It is copied rather than obtained by running the migrations, because this
-// package must not depend on internal/store to be testable: a repository test
-// that pulled in the whole application's schema would start failing for reasons
-// that have nothing to do with the code under test.
-const usersDDL = `
-CREATE TABLE users (
-    id            TEXT PRIMARY KEY,
-    email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    display_name  TEXT NOT NULL DEFAULT '',
-    is_admin      INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0, 1)),
-    created_at    TEXT NOT NULL,
-    disabled_at   TEXT
-) STRICT;`
-
-// testRepo returns a Repo over a fresh database, wired the way production is:
-// the read handle carries query_only(1) and therefore CANNOT write.
+// testRepo returns a Repo over a fresh database with the REAL migrations run
+// over it, wired the way production is: the read handle carries query_only(1)
+// and therefore CANNOT write.
 //
 // Every test in this package consequently proves the read/write routing as a
 // side effect — a method that reached for the read handle to mutate something
 // fails here rather than in production.
+//
+// ⚠ IT USED TO CARRY A COPY OF `CREATE TABLE users`, justified by "this package
+// must not depend on internal/store to be testable" and by the worry that
+// running the whole schema would make these tests "start failing for reasons
+// that have nothing to do with the code under test". Neither survives contact
+// with ADR-013: `internal/offer` and `internal/submission` carried the same
+// reasoning until their copies drifted and left the suite green against a schema
+// production does not have. A copy cannot detect its own drift — it defines the
+// table the test then uses, so both sides move together, agree with each other,
+// and disagree with the database people actually run.
+//
+// The dependency is test-only, on a package that sits below this one and imports
+// nothing from it.
 func testRepo(t *testing.T) *Repo {
 	t.Helper()
 
-	path := filepath.Join(t.TempDir(), "t.db")
-
-	write, err := sql.Open("sqlite",
-		"file:"+path+"?_pragma=foreign_keys(1)&_txlock=immediate")
+	db, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
-		t.Fatalf("open write handle: %v", err)
+		t.Fatalf("open: %v", err)
 	}
-	t.Cleanup(func() { write.Close() })
-	// One connection, as internal/store caps the production writer: SQLite admits
-	// a single writer anyway, and queueing in database/sql gives better
-	// diagnostics than a SQLITE_BUSY from the driver.
-	write.SetMaxOpenConns(1)
-
-	if _, err := write.Exec(usersDDL); err != nil {
-		t.Fatalf("create users table: %v", err)
+	if err := store.Migrate(db.Write, migrations.FS); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 
-	// Opened after the schema exists: a query_only connection cannot create the
-	// database file itself.
-	read, err := sql.Open("sqlite",
-		"file:"+path+"?_pragma=foreign_keys(1)&_pragma=query_only(1)")
-	if err != nil {
-		t.Fatalf("open read handle: %v", err)
-	}
-	t.Cleanup(func() { read.Close() })
-
-	return NewRepo(read, write)
+	return NewRepo(db.Read, db.Write)
 }
 
 // testUser builds a plausible account. The timestamp is truncated to the second

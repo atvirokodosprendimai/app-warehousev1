@@ -155,27 +155,34 @@ func TestServiceWritesReachTheStore(t *testing.T) {
 // TestExportSetHoldsEachUnexportableOfferWithItsOwnReason checks the split and
 // every reason core.HoldReason can give.
 //
-// It runs against [stubStore] rather than the database because one of the three
-// cases cannot be stored: the offers table's CHECK forbids a listed offer with
-// no price, which is exactly the row "no shop price yet" describes. Each held
-// offer here fails for one reason only, so the assertion names which.
+// It runs against [stubStore] rather than the database because two of the four
+// held cases cannot be STORED: the offers table's CHECK forbids a listed offer
+// with no price, and since ADR-019 a trigger forbids a listed offer with no
+// title. Those are exactly the rows "no shop price yet" and "no title yet"
+// describe, and a gate you cannot reach through a supported write path is still
+// worth asserting — it is the one that catches a row which arrived some other
+// way. Each held offer here fails for one reason only, so the assertion names
+// which.
 func TestExportSetHoldsEachUnexportableOfferWithItsOwnReason(t *testing.T) {
 	photo := func(offerID string) []core.Photo {
-		return []core.Photo{{ID: "p-" + offerID, OfferID: offerID, ContentType: "image/jpeg"}}
+		return []core.Photo{{ID: "p-" + offerID, ParentID: offerID, ContentType: "image/jpeg"}}
 	}
 	priced := core.Money{Minor: 1200, Currency: "EUR"}
 
 	store := stubStore{contents: core.CartContents{
 		Cart: core.Cart{ID: "cart-1", Name: "batch"},
 		Offers: []core.Offer{
-			// Held for its status alone: priced and photographed.
-			{ID: "off-draft", Status: core.StatusDraft, Shop: priced, Photos: photo("off-draft")},
+			// Held for its status alone: named, priced and photographed.
+			{ID: "off-draft", Title: "Brass lamp", Status: core.StatusDraft, Shop: priced, Photos: photo("off-draft")},
 			// Exportable and photographed, but never priced.
-			{ID: "off-unpriced", Status: core.StatusListed, Photos: photo("off-unpriced")},
+			{ID: "off-unpriced", Title: "Oak chair", Status: core.StatusListed, Photos: photo("off-unpriced")},
 			// Ready except that a marketplace would show no image.
-			{ID: "off-nophoto", Status: core.StatusListed, Shop: priced},
+			{ID: "off-nophoto", Title: "Enamel sign", Status: core.StatusListed, Shop: priced},
+			// Photographed and priced, and nobody has named it yet (ADR-019) — a
+			// marketplace would receive a listing headed by an empty string.
+			{ID: "off-untitled", Status: core.StatusListed, Shop: priced, Photos: photo("off-untitled")},
 			// The one that goes.
-			{ID: "off-good", Status: core.StatusListed, Shop: priced, Photos: photo("off-good")},
+			{ID: "off-good", Title: "Vintage desk lamp", Status: core.StatusListed, Shop: priced, Photos: photo("off-good")},
 		},
 	}}
 
@@ -187,7 +194,7 @@ func TestExportSetHoldsEachUnexportableOfferWithItsOwnReason(t *testing.T) {
 	if ids := offerIDs(send); !equalStrings(ids, []string{"off-good"}) {
 		t.Fatalf("send = %v, want [off-good]", ids)
 	}
-	wantHeld := []string{"off-draft", "off-unpriced", "off-nophoto"}
+	wantHeld := []string{"off-draft", "off-unpriced", "off-nophoto", "off-untitled"}
 	if ids := offerIDs(held); !equalStrings(ids, wantHeld) {
 		t.Fatalf("held = %v, want %v", ids, wantHeld)
 	}
@@ -196,6 +203,7 @@ func TestExportSetHoldsEachUnexportableOfferWithItsOwnReason(t *testing.T) {
 		"off-draft":    "status is Draft",
 		"off-unpriced": "no shop price yet",
 		"off-nophoto":  "no photographs",
+		"off-untitled": "no title yet",
 	}
 	for _, o := range held {
 		if got := core.HoldReason(o); got != wantReasons[o.ID] {

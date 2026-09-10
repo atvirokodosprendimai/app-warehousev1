@@ -42,7 +42,8 @@ const timeLayout = time.RFC3339
 // reused by a query that joins locations.
 const offerColumns = `o.id, o.sku, o.title, o.description, o.condition, o.status,
 	o.quantity, o.shop_minor, o.shop_currency, o.owner_minor, o.owner_currency,
-	o.sold_minor, o.sold_currency, o.sold_at, o.location_id, o.created_at, o.updated_at`
+	o.sold_minor, o.sold_currency, o.sold_at, o.location_id, o.category_id,
+	o.created_at, o.updated_at`
 
 // photoColumns is the select list for a photo row.
 const photoColumns = `id, offer_id, position, filename, content_type, byte_size, sha256, created_at`
@@ -102,11 +103,11 @@ func (r *Repo) oneOffer(ctx context.Context, where string, arg any) (core.Offer,
 	}
 	o.Photos = photos[o.ID]
 
-	cats, err := r.categoriesByOffer(ctx, []string{o.ID})
+	cats, err := r.marketplaceByOffer(ctx, []string{o.ID})
 	if err != nil {
 		return core.Offer{}, err
 	}
-	o.Categories = cats[o.ID]
+	o.Marketplace = cats[o.ID]
 	return o, nil
 }
 
@@ -148,13 +149,13 @@ func (r *Repo) Offers(ctx context.Context, f core.OfferFilter) ([]core.Offer, er
 		return nil, err
 	}
 	// And one category query for the whole page, for the same reason.
-	catsByOffer, err := r.categoriesByOffer(ctx, ids)
+	catsByOffer, err := r.marketplaceByOffer(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
 	for i := range out {
 		out[i].Photos = byOffer[out[i].ID]
-		out[i].Categories = catsByOffer[out[i].ID]
+		out[i].Marketplace = catsByOffer[out[i].ID]
 	}
 	return out, nil
 }
@@ -238,6 +239,14 @@ func listQuery(f core.OfferFilter) (string, []any) {
 		// The pricing queue, matching core.Offer.NeedsPricing: photographed and
 		// titled, not yet researched.
 		where = append(where, "o.status = 'draft' AND o.shop_minor = 0")
+	}
+
+	if f.NeedsDescribing {
+		// The describing queue, matching core.Offer.NeedsDescribing: photographed,
+		// not yet named. trim() so a title of nothing but spaces counts as absent
+		// here exactly as it does in the domain — otherwise the queue and the
+		// predicate would disagree about the same row.
+		where = append(where, "o.status = 'draft' AND trim(o.title) = ''")
 	}
 
 	q := "SELECT " + offerColumns + " FROM offers o" + join
@@ -350,12 +359,12 @@ func (r *Repo) UpdateOffer(ctx context.Context, o core.Offer) error {
 	const q = `UPDATE offers SET sku = ?, title = ?, description = ?, condition = ?,
 		status = ?, quantity = ?, shop_minor = ?, shop_currency = ?, owner_minor = ?,
 		owner_currency = ?, sold_minor = ?, sold_currency = ?, sold_at = ?,
-		location_id = ?, updated_at = ? WHERE id = ?`
+		location_id = ?, category_id = ?, updated_at = ? WHERE id = ?`
 	res, err := r.write.ExecContext(ctx, q,
 		o.SKU, o.Title, o.Description, o.Condition, string(o.Status), o.Quantity,
 		o.Shop.Minor, o.Shop.Currency, o.Owner.Minor, o.Owner.Currency,
 		o.Sold.Minor, o.Sold.Currency, nullTime(o.SoldAt), nullString(o.LocationID),
-		formatTime(o.UpdatedAt), o.ID)
+		nullString(o.CategoryID), formatTime(o.UpdatedAt), o.ID)
 	if err != nil {
 		return writeErr("update offer", o.SKU, err)
 	}
@@ -380,7 +389,7 @@ func (r *Repo) DeleteOffer(ctx context.Context, id string) error {
 func (r *Repo) AddPhoto(ctx context.Context, p core.Photo) error {
 	const q = `INSERT INTO offer_photos (` + photoColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.write.ExecContext(ctx, q,
-		p.ID, p.OfferID, p.Position, p.Filename, p.ContentType, p.ByteSize, p.SHA256,
+		p.ID, p.ParentID, p.Position, p.Filename, p.ContentType, p.ByteSize, p.SHA256,
 		formatTime(p.CreatedAt))
 	if err != nil {
 		return fmt.Errorf("offer: add photo: %w", err)
@@ -510,14 +519,14 @@ func (r *Repo) photosByOffer(ctx context.Context, offerIDs []string) (map[string
 			p       core.Photo
 			created string
 		)
-		if err := rows.Scan(&p.ID, &p.OfferID, &p.Position, &p.Filename, &p.ContentType,
+		if err := rows.Scan(&p.ID, &p.ParentID, &p.Position, &p.Filename, &p.ContentType,
 			&p.ByteSize, &p.SHA256, &created); err != nil {
 			return nil, fmt.Errorf("offer: load photos: %w", err)
 		}
 		if p.CreatedAt, err = parseTime(created); err != nil {
 			return nil, err
 		}
-		out[p.OfferID] = append(out[p.OfferID], p)
+		out[p.ParentID] = append(out[p.ParentID], p)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("offer: load photos: %w", err)
@@ -539,17 +548,24 @@ func scanOffer(sc rowScanner) (core.Offer, error) {
 		status     string
 		soldAt     sql.NullString
 		locationID sql.NullString
+		categoryID sql.NullString
 		created    string
 		updated    string
 	)
 	err := sc.Scan(&o.ID, &o.SKU, &o.Title, &o.Description, &o.Condition, &status,
 		&o.Quantity, &o.Shop.Minor, &o.Shop.Currency, &o.Owner.Minor, &o.Owner.Currency,
-		&o.Sold.Minor, &o.Sold.Currency, &soldAt, &locationID, &created, &updated)
+		&o.Sold.Minor, &o.Sold.Currency, &soldAt, &locationID, &categoryID, &created, &updated)
 	if err != nil {
 		return core.Offer{}, err
 	}
 	o.Status = core.Status(status)
 	o.LocationID = locationID.String
+	// ⚠ CategoryID is what the thing IS (ADR-021); o.Categories, loaded by
+	// categoriesByOffer, is where to LIST it per marketplace (ADR-016). Both are
+	// read here because each is one column or one row. The FIELDS an offer's
+	// category asks are NOT, because resolving them is an ancestor walk, and
+	// paying for one per row on a listing that renders none would be waste.
+	o.CategoryID = categoryID.String
 	if o.CreatedAt, err = parseTime(created); err != nil {
 		return core.Offer{}, err
 	}
@@ -642,12 +658,16 @@ func writeErr(op, sku string, err error) error {
 // developer tests with and becomes several hundred round trips once the
 // warehouse is real.
 //
-// An offer with no categories is simply absent from the map. Reading a missing
-// key yields a nil map, and reading a missing key from THAT yields "", which is
-// exactly what the export resolution wants — no category means fall back to the
-// configured default.
-func (r *Repo) categoriesByOffer(ctx context.Context, offerIDs []string) (map[string]map[string]string, error) {
-	out := make(map[string]map[string]string, len(offerIDs))
+// An offer with no marketplace values is simply absent from the map. Reading a
+// missing key yields a nil map, and reading a missing key from THAT yields "",
+// which is exactly what the export resolution wants — nothing set means fall
+// back to the configured default.
+//
+// It reads `offer_marketplace_values`, whose rows already carry their field, so
+// nothing here has to know which fields exist — a field added to
+// [core.MarketplaceField] reaches this map without touching this function.
+func (r *Repo) marketplaceByOffer(ctx context.Context, offerIDs []string) (map[string]map[core.MarketplaceKey]string, error) {
+	out := make(map[string]map[core.MarketplaceKey]string, len(offerIDs))
 	if len(offerIDs) == 0 {
 		return out, nil
 	}
@@ -658,61 +678,64 @@ func (r *Repo) categoriesByOffer(ctx context.Context, offerIDs []string) (map[st
 		ph[i] = "?"
 		args[i] = id
 	}
-	q := `SELECT offer_id, profile, category FROM offer_categories WHERE offer_id IN (` +
+	q := `SELECT offer_id, profile, field, value FROM offer_marketplace_values WHERE offer_id IN (` +
 		strings.Join(ph, ", ") + `)`
 
 	rows, err := r.read.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("offer: load categories: %w", err)
+		return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var offerID, profile, category string
-		if err := rows.Scan(&offerID, &profile, &category); err != nil {
-			return nil, fmt.Errorf("offer: load categories: %w", err)
+		var offerID, profile, field, value string
+		if err := rows.Scan(&offerID, &profile, &field, &value); err != nil {
+			return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 		}
 		if out[offerID] == nil {
-			out[offerID] = make(map[string]string, 2)
+			out[offerID] = make(map[core.MarketplaceKey]string, 3)
 		}
-		out[offerID][profile] = category
+		out[offerID][core.MarketplaceKey{
+			Profile: profile,
+			Field:   core.MarketplaceField(field),
+		}] = value
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("offer: load categories: %w", err)
+		return nil, fmt.Errorf("offer: load marketplace values: %w", err)
 	}
 	return out, nil
 }
 
-// SetCategory records the marketplace category an offer should be listed under
-// for one export profile.
+// SetMarketplaceValue records what an offer says for one profile's must-have
+// field.
 //
-// An EMPTY category deletes the row rather than storing a blank. Clearing an
+// An EMPTY value deletes the row rather than storing a blank. Clearing an
 // override and never having set one must be the same state — otherwise the
 // export resolution would have to distinguish "explicitly nothing" from "not
 // set", and both mean the same thing: use the configured default.
 //
 // It writes through the write handle, which carries _txlock=immediate; the
 // upsert is one statement, so there is no read-then-write to conflict over.
-func (r *Repo) SetCategory(ctx context.Context, offerID, profile, category string) error {
+func (r *Repo) SetMarketplaceValue(ctx context.Context, offerID, profile string, field core.MarketplaceField, value string) error {
 	profile = strings.ToLower(strings.TrimSpace(profile))
-	category = strings.TrimSpace(category)
+	value = strings.TrimSpace(value)
 
-	if category == "" {
+	if value == "" {
 		_, err := r.write.ExecContext(ctx,
-			`DELETE FROM offer_categories WHERE offer_id = ? AND profile = ?`,
-			offerID, profile)
+			`DELETE FROM offer_marketplace_values WHERE offer_id = ? AND profile = ? AND field = ?`,
+			offerID, profile, string(field))
 		if err != nil {
-			return fmt.Errorf("offer %s: clear %s category: %w", offerID, profile, err)
+			return fmt.Errorf("offer %s: clear %s %s: %w", offerID, profile, field, err)
 		}
 		return nil
 	}
 
 	_, err := r.write.ExecContext(ctx, `
-		INSERT INTO offer_categories (offer_id, profile, category) VALUES (?, ?, ?)
-		ON CONFLICT (offer_id, profile) DO UPDATE SET category = excluded.category`,
-		offerID, profile, category)
+		INSERT INTO offer_marketplace_values (offer_id, profile, field, value) VALUES (?, ?, ?, ?)
+		ON CONFLICT (offer_id, profile, field) DO UPDATE SET value = excluded.value`,
+		offerID, profile, string(field), value)
 	if err != nil {
-		return fmt.Errorf("offer %s: set %s category: %w", offerID, profile, err)
+		return fmt.Errorf("offer %s: set %s %s: %w", offerID, profile, field, err)
 	}
 	return nil
 }

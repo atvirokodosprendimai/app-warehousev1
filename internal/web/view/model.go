@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/a-h/templ"
+
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 )
 
@@ -36,6 +38,11 @@ type Page struct {
 	Counts map[core.Status]int
 	// NeedsPricing is how many drafts are still waiting on the research step.
 	NeedsPricing int
+	// NeedsDescribing is how many photograph groups are still waiting on the
+	// cataloguing step — one person photographed them, nobody has named them yet
+	// (ADR-019). It is the hand-off signal between the two, so it is carried on
+	// every page rather than only on the queue.
+	NeedsDescribing int
 	// InboxOpen is how many staff submissions are still waiting on a decision.
 	// It drives the live banner, so it is carried on every page rather than only
 	// on the inbox — the whole point of the banner is to reach an administrator
@@ -139,6 +146,20 @@ func (r OfferRow) MarginText() string {
 	return m.String()
 }
 
+// PhotoCountText renders how many photographs a row carries.
+//
+// It exists for the describing queue, where the row has no title yet: the count
+// and the reference are then the ONLY things distinguishing one waiting item
+// from another, and the count is also what says whether the group is complete
+// enough to describe.
+func (r OfferRow) PhotoCountText() string {
+	n := len(r.Offer.Photos)
+	if n == 1 {
+		return "1 photograph"
+	}
+	return itoa(n) + " photographs"
+}
+
 // BadgeClass returns the CSS class for the offer's status badge.
 func (r OfferRow) BadgeClass() string { return "badge badge-" + string(r.Offer.Status) }
 
@@ -174,6 +195,9 @@ func (l OfferList) RowsPath() string {
 	}
 	if l.Filter.NeedsPricing {
 		q = append(q, "needs_pricing=1")
+	}
+	if l.Filter.NeedsDescribing {
+		q = append(q, "needs_describing=1")
 	}
 	if l.Filter.LocationPathPrefix != "" {
 		q = append(q, "at="+url.QueryEscape(l.Filter.LocationPathPrefix))
@@ -211,6 +235,194 @@ type OfferDetail struct {
 	// stops the same item being put into two batches destined for two different
 	// marketplaces without anyone noticing.
 	InCarts []core.Cart
+	// Categories is the flat, path-ordered taxonomy tree for the "what is this"
+	// picker (ADR-021). ⚠ Not the marketplace category, which is per profile and
+	// lives on the Marketplace card.
+	Categories []core.Category
+	// Fields are the questions this offer's category asks — its own and every
+	// ancestor's, root first — with the answers already given. Empty when the
+	// offer has no category, which is the ordinary case.
+	Fields []core.OfferField
+	// Marketplace is one entry per must-have eBay needs about THIS item, each
+	// carrying the list to pick from and what an unpicked value falls back to
+	// (ADR-022). Always the full set, in `core.MarketplaceFields()` order, even
+	// where the list is empty — see [MarketplaceChoice.Options].
+	Marketplace []MarketplaceChoice
+}
+
+// mktAttr binds one must-have control to its signal.
+//
+// A templ.Attributes map rather than a literal attribute, because the name
+// depends on the field and a literal per member would mean writing out a
+// vocabulary that is defined in core.
+//
+// ⚠ IT LIVES IN THIS .go FILE RATHER THAN IN offer_detail.templ ON PURPOSE, and
+// so does [defaultOptionLabel]. Plain Go inside a .templ is copied verbatim into
+// the generated file, so the compiled binary does not reflect an edit to the
+// .templ until `templ generate` runs — and a mutation test against it therefore
+// reports SURVIVED for code the build never compiled. Measured 2026-09-09 on
+// exactly this function's sibling. Logic worth proving goes where the compiler
+// reads it directly.
+func mktAttr(c MarketplaceChoice) templ.Attributes {
+	return templ.Attributes{"data-bind:" + c.Attr: true}
+}
+
+// defaultOptionLabel names what choosing nothing actually means.
+//
+// ⚠ WHEN THERE IS NO DEFAULT EITHER, IT SAYS SO. "Use the default — " followed
+// by nothing reads as a rendering bug, and worse, it hides that this offer will
+// be REFUSED at export time because no value exists anywhere.
+func defaultOptionLabel(c MarketplaceChoice) string {
+	if strings.TrimSpace(c.Default) == "" {
+		return "No default set — this offer needs a value"
+	}
+	return "Use the default — " + c.Default
+}
+
+// MarketplaceChoice is one must-have as the offer editor needs it: the menu, the
+// current answer, and what silence means.
+type MarketplaceChoice struct {
+	// Field is the closed-vocabulary member this choice is for.
+	Field core.MarketplaceField
+	// Title and Hint are what the operator reads.
+	Title string
+	Hint  string
+	// Signal is the datastar signal this control binds, camelCase — the same name
+	// the handler's struct tag declares. The two are written independently and
+	// nothing checks that they agree, which is why a browser walk asserts it.
+	Signal string
+	// Attr is the kebab-case attribute that binds Signal. ⚠ HTML LOWERCASES
+	// ATTRIBUTE NAMES, so these two spellings are not interchangeable: writing
+	// Signal into the attribute binds an all-lowercase name instead, silently.
+	Attr string
+	// Options is the list an administrator entered at Settings. EMPTY IS A REAL
+	// STATE and not an error — it is what every warehouse looks like before
+	// anybody fills the lists, and the card renders a free-text box instead, so
+	// this screen is never worse than it was before ADR-022.
+	Options []core.MarketplaceOption
+	// Chosen is this offer's own value, or "" for "whatever the default is".
+	Chosen string
+	// Default is what "" resolves to at export time. It is shown ON the empty
+	// option, because a dropdown whose first entry says only "Use the default"
+	// makes an operator open Settings to find out what they just agreed to.
+	Default string
+}
+
+// IsList reports whether this must-have has values to pick between.
+//
+// ⚠ FALSE IS THE ESCAPE, NOT AN ERROR STATE. Until an administrator has filled
+// the list there is nothing to pick, and a dropdown holding only its empty
+// option would make the editor strictly WORSE than the free-text box it
+// replaced — a warehouse mid-migration could not set the value at all. The card
+// renders the box in that case.
+//
+// A method rather than `len(c.Options) > 0` written inline in the .templ, for
+// the reason given on [mktAttr]: a branch that only exists inside a .templ
+// cannot be mutation-tested, because the binary is built from generated code.
+func (c MarketplaceChoice) IsList() bool { return len(c.Options) > 0 }
+
+// FieldsByLevel groups Fields by the category that defined them, preserving the
+// root-first order the read returned.
+//
+// The grouping is done here rather than in the template because templ has no
+// good way to express "start a new group when this row's path differs from the
+// last", and because the ORDER is the contract: a group that sorted itself would
+// quietly discard the inheritance order the whole record is about.
+func (d OfferDetail) FieldsByLevel() []FieldGroup {
+	out := []FieldGroup{}
+	for _, f := range d.Fields {
+		if n := len(out); n > 0 && out[n-1].Path == f.CategoryPath {
+			out[n-1].Fields = append(out[n-1].Fields, f)
+			continue
+		}
+		out = append(out, FieldGroup{Path: f.CategoryPath, Fields: []core.OfferField{f}})
+	}
+	return out
+}
+
+// FieldGroup is one category's worth of questions, labelled with the level they
+// came from so an operator can see WHY they are being asked.
+type FieldGroup struct {
+	// Path is the materialised path of the category that defined these fields.
+	Path string
+	// Fields are its questions, in the operator's order.
+	Fields []core.OfferField
+}
+
+// Leaf returns the last segment of the group's path, which is the level's own
+// code — "ENGINE" out of "CAR/ENGINE".
+func (g FieldGroup) Leaf() string {
+	if i := strings.LastIndex(g.Path, "/"); i >= 0 {
+		return g.Path[i+1:]
+	}
+	return g.Path
+}
+
+// Taxonomy is the read model for the screen an operator shapes their own tree
+// on (ADR-021).
+//
+// ⚠ It is NOT the warehouse tree. `/warehouse` addresses where a thing IS;
+// this addresses what a thing is. They are the same shape on purpose — an
+// operator who has moved a shelf should not have to learn a second idiom to move
+// a category — and they are different data.
+type Taxonomy struct {
+	Page Page
+	// Tree is every node ordered by path, which is tree order.
+	Tree []core.Category
+	// Selected is the node being edited. Zero when nothing is selected, which is
+	// the screen's first state.
+	Selected core.Category
+	// HasSelection distinguishes "nothing selected" from "a node whose id is
+	// empty", which cannot happen but would render identically if it could.
+	HasSelection bool
+	// Own are the questions defined ON the selected node — the editable ones.
+	Own []core.CategoryField
+	// Inherited are the questions it gets from its ancestors. Shown so the
+	// operator can see the whole set an offer will be asked, and NOT editable
+	// here: editing one from a descendant would change it for every other
+	// subtree under that ancestor without saying so.
+	Inherited []core.CategoryField
+	// ValueCounts is how many stored answers each of Own's fields has, so a
+	// delete can say what it will take with it before it does.
+	ValueCounts map[string]int
+	// Children is how many nodes sit directly under Selected. A node with any
+	// cannot be deleted.
+	Children int
+	// Editing is the field currently loaded into the field form, if any. An
+	// empty ID means the form is adding rather than editing.
+	Editing core.CategoryField
+	// Kinds is the list a field's kind may be chosen from.
+	Kinds []core.FieldKind
+	// Templates are the starter trees on offer. They are read-only descriptions
+	// here: what a press of one produces is ordinary categories and questions,
+	// indistinguishable afterwards from ones somebody typed.
+	Templates []core.CategoryTemplate
+}
+
+// Deletable reports whether the selected node can be removed.
+func (t Taxonomy) Deletable() bool { return t.HasSelection && t.Children == 0 }
+
+// Indent returns how deep a node sits, for rendering the tree as a list.
+func (t Taxonomy) Indent(c core.Category) int { return c.Depth() }
+
+// FieldSignal is the datastar signal name for one custom field's control.
+//
+// A field's id is a UUID and a signal name has to be a plain identifier, so the
+// hyphens come out and an "f" goes on the front. ⚠ The result must be entirely
+// LOWERCASE: HTML lowercases attribute names, so data-bind:fAB would bind the
+// signal "fab" and silently miss the one this seeds — the same trap the price
+// fields carry a comment about.
+func FieldSignal(fieldID string) string {
+	return "f" + strings.ToLower(strings.ReplaceAll(fieldID, "-", ""))
+}
+
+// FieldBind returns the datastar binding for one custom field's control.
+//
+// It is a spread rather than a literal attribute because the name is computed
+// per field and templ attribute names are static. The value is bool true so
+// templ renders the bare attribute, which is the form data-bind takes.
+func FieldBind(f core.OfferField) templ.Attributes {
+	return templ.Attributes{"data-bind:" + FieldSignal(f.ID): true}
 }
 
 // InCart reports whether this offer is already in a given batch.

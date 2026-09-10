@@ -106,15 +106,52 @@ func TestCreateKeepsAnOperatorSuppliedSKU(t *testing.T) {
 	}
 }
 
-func TestCreateRefusesAnEmptyTitleAndWritesNothing(t *testing.T) {
+// TestCreateAcceptsAnUnnamedPhotographGroup is ADR-019, and it REPLACES
+// TestCreateRefusesAnEmptyTitleAndWritesNothing, which asserted the opposite.
+//
+// The retired rule was that Create refused an empty title. ADR-019 moved that
+// requirement to the publication boundary so one person can photograph stock and
+// a second person name it afterwards — which makes an unnamed draft the FIRST
+// state of every item arriving that way, rather than an error.
+//
+// ⚠ The retired test carried a SECOND property in its name — "and writes
+// nothing" — that had nothing to do with the title: a create that fails must
+// leave no row. Create can no longer fail validation at all (every field it sets
+// is valid by construction), so that property is re-asserted below against a
+// taken SKU, which is the failure that remains reachable. Deleting it with the
+// title rule would have quietly dropped a check nobody was replacing.
+func TestCreateAcceptsAnUnnamedPhotographGroup(t *testing.T) {
 	s, r, _ := newService(t)
+	ctx := context.Background()
 
-	_, err := s.Create(context.Background(), "   ", "")
-	if !errors.Is(err, core.ErrInvalid) {
-		t.Fatalf("Create with no title = %v, want core.ErrInvalid", err)
+	got, err := s.Create(ctx, "   ", "")
+	if err != nil {
+		t.Fatalf("Create with no title = %v, want an unnamed draft (ADR-019)", err)
 	}
-	if n := countRows(t, r, "offers"); n != 0 {
-		t.Errorf("offers = %d, want 0", n)
+	if got.Title != "" {
+		t.Errorf("Title = %q, want empty — a title of spaces is not a title, and the "+
+			"describing queue trims before it compares", got.Title)
+	}
+	if !got.NeedsDescribing() {
+		t.Error("an unnamed draft must land in the describing queue, or the person who " +
+			"names things has no way to find the work")
+	}
+	// ADR-010: the reference is what gets written on the box, so it has to exist
+	// before anybody names the item. Allocating it here rather than at describe
+	// time is what lets the photographer label the box as they go.
+	if got.SKU == "" {
+		t.Error("no reference was allocated, so there is nothing to write on the box")
+	}
+	if n := countRows(t, r, "offers"); n != 1 {
+		t.Errorf("offers = %d, want 1", n)
+	}
+
+	if _, err := s.Create(ctx, "Two", got.SKU); !errors.Is(err, ErrSKUTaken) {
+		t.Fatalf("Create with a taken SKU = %v, want ErrSKUTaken", err)
+	}
+	if n := countRows(t, r, "offers"); n != 1 {
+		t.Errorf("offers = %d after a refused create, want 1: a create that fails must "+
+			"write nothing", n)
 	}
 }
 
@@ -140,10 +177,16 @@ func TestUpdateValidatesBeforeWritingAndStampsUpdatedAt(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
+	// ⚠ The invalid field here USED to be the title, until ADR-019 made an
+	// untitled draft legal. It is the SKU now, which is still refused — the
+	// subject of this test is that Update validates BEFORE writing, so it needs
+	// any invalid input, not that particular one. The title is changed at the same
+	// time so the reload below can prove the rejected update reached nothing.
 	bad := o
-	bad.Title = ""
+	bad.SKU = ""
+	bad.Title = "Changed"
 	if err := s.Update(ctx, bad); !errors.Is(err, core.ErrInvalid) {
-		t.Fatalf("Update with no title = %v, want core.ErrInvalid", err)
+		t.Fatalf("Update with no SKU = %v, want core.ErrInvalid", err)
 	}
 	unchanged, err := r.Offer(ctx, o.ID)
 	if err != nil {
@@ -653,20 +696,30 @@ func TestSetCategoryRefusesAnUnknownProfile(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = svc.SetCategory(ctx, o.ID, "ebey", "11450")
+	err = svc.SetMarketplaceValue(ctx, o.ID, "ebey", core.MarketplaceCategory, "11450")
 	if !errors.Is(err, core.ErrInvalid) {
-		t.Fatalf("SetCategory with a typo'd profile = %v, want core.ErrInvalid", err)
+		t.Fatalf("SetMarketplaceValue with a typo'd profile = %v, want core.ErrInvalid", err)
 	}
 
-	// The real profiles are accepted, or the guard is refusing everything.
+	// A typo'd FIELD is refused for the same reason and with its own message: the
+	// vocabulary is closed because each field has to have somewhere to go.
+	err = svc.SetMarketplaceValue(ctx, o.ID, "ebay", "colour", "red")
+	if !errors.Is(err, core.ErrInvalid) {
+		t.Fatalf("SetMarketplaceValue with an unknown field = %v, want core.ErrInvalid", err)
+	}
+
+	// The real profiles and every real field are accepted, or the guards are
+	// refusing everything and the two checks above prove nothing.
 	for _, p := range core.KnownExportProfiles() {
-		if err := svc.SetCategory(ctx, o.ID, p, "11450"); err != nil {
-			t.Errorf("SetCategory(%q) = %v, want nil", p, err)
+		for _, f := range core.MarketplaceFields() {
+			if err := svc.SetMarketplaceValue(ctx, o.ID, p, f, "11450"); err != nil {
+				t.Errorf("SetMarketplaceValue(%q, %q) = %v, want nil", p, f, err)
+			}
 		}
 	}
 
 	// And an unknown offer is ErrNotFound rather than a driver foreign-key error.
-	if err := svc.SetCategory(ctx, "no-such-offer", "ebay", "11450"); !errors.Is(err, core.ErrNotFound) {
-		t.Errorf("SetCategory on a missing offer = %v, want core.ErrNotFound", err)
+	if err := svc.SetMarketplaceValue(ctx, "no-such-offer", "ebay", core.MarketplaceCategory, "11450"); !errors.Is(err, core.ErrNotFound) {
+		t.Errorf("SetMarketplaceValue on a missing offer = %v, want core.ErrNotFound", err)
 	}
 }

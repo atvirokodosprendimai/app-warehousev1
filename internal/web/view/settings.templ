@@ -1,8 +1,12 @@
 package view
 
 import (
+	"strings"
 	"time"
 
+	// ⚠ NO explicit "github.com/a-h/templ" import, though templ.Attributes is
+	// used below. The generator adds that import to every generated file, and a
+	// second one here is "templ redeclared in this block".
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 )
 
@@ -33,6 +37,25 @@ type SettingsView struct {
 	// EbayEffective is what an export will actually use — the resolution of the
 	// two above, computed with the SAME rule the exporter uses.
 	EbayEffective core.Marketplace
+	// Options are the curated lists an operator picks a must-have value from on
+	// the offer editor, grouped by field (ADR-022).
+	//
+	// ⚠ A FIELD WITH NO OPTIONS STILL GETS A GROUP. A section that vanished when
+	// empty would be one an administrator could never add the first value to,
+	// which is the state every fresh installation starts in.
+	Options []MarketplaceOptionGroup
+}
+
+// MarketplaceOptionGroup is one field's list, ready to render.
+type MarketplaceOptionGroup struct {
+	// Field is the closed-vocabulary member this group is for.
+	Field core.MarketplaceField
+	// Title and Hint are what the operator reads; the field's own name is an
+	// internal key and is never shown.
+	Title string
+	Hint  string
+	// Options are the entries already on this list, in display order.
+	Options []core.MarketplaceOption
 }
 
 // Source describes where the effective value came from, in one phrase.
@@ -48,6 +71,7 @@ templ SettingsScreen(s SettingsView) {
 	<div class="stack" data-signals={ settingsSignals(s) }>
 		<div id="settings-msg"></div>
 		@SettingsPanel(s)
+		@MarketplaceOptionsCard(s)
 	</div>
 }
 
@@ -81,7 +105,51 @@ func settingsSignals(s SettingsView) string {
 		"setEbayCategory: " + jsString(s.EbayEffective.Category) + ", " +
 		"setEbayCondition: " + jsString(s.EbayEffective.ConditionID) + ", " +
 		"setEbayLocation: " + jsString(s.EbayEffective.Location) +
+		marketplaceOptionSignals(s) +
 		"}"
+}
+
+// optAttr returns the datastar binding for one add-box.
+//
+// ⚠ HTML LOWERCASES ATTRIBUTE NAMES, so the attribute is kebab-case
+// (`data-bind:opt-value-category`) and datastar binds the camelCase signal
+// `optValueCategory`. Writing the attribute camelCase binds `optvaluecategory` —
+// a DIFFERENT signal — and nothing anywhere reports the mismatch.
+//
+// It is a templ.Attributes map rather than a literal attribute because the name
+// depends on the field, and literals would mean writing one block per member of
+// a vocabulary that is defined somewhere else.
+func optAttr(kind string, f core.MarketplaceField) templ.Attributes {
+	return templ.Attributes{"data-bind:opt-" + kind + "-" + string(f): true}
+}
+
+// optSignalName is the camelCase name optAttr's binding resolves to. The two are
+// written beside each other on purpose: they must agree, and nothing checks it.
+func optSignalName(kind string, f core.MarketplaceField) string {
+	return "opt" + upperFirst(kind) + upperFirst(string(f))
+}
+
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// marketplaceOptionSignals seeds every add-box empty.
+//
+// ⚠ SEEDED, NOT LEFT ABSENT. Signals are declared once at page level; a box bound
+// to a name the page never declared is a box whose first keystroke creates the
+// signal, which reads fine and then arrives at a handler that has already read
+// the request. Seeding them all keeps the first post identical to the second.
+func marketplaceOptionSignals(s SettingsView) string {
+	out := ""
+	for _, g := range s.Options {
+		for _, kind := range []string{"value", "label"} {
+			out += ", " + optSignalName(kind, g.Field) + ": ''"
+		}
+	}
+	return out
 }
 
 // SettingsPanel is a fragment so a save re-renders it with the NORMALISED value,
@@ -240,6 +308,83 @@ templ SettingsPanel(s SettingsView) {
 					</span>
 				}
 			</div>
+		</div>
+	</div>
+}
+
+// MarketplaceOptionsCard is the list editor (ADR-022 T3).
+//
+// ⚠ IT RENDERS UNCONDITIONALLY AND CARRIES A STABLE id. An SSE patch REPLACES an
+// element already in the document, so a card that only appeared once it had
+// content could never be patched into existence — the defect that made the offer
+// editor's questions card unreachable on 2026-09-07.
+//
+// There is no <form>: ADR-008 permits exactly one, the photo upload.
+templ MarketplaceOptionsCard(s SettingsView) {
+	<div class="card" id="marketplace-options" style="max-width:640px">
+		<div class="card-head"><h2>Lists to pick from</h2></div>
+		<div class="card-body stack">
+			<p class="muted">
+				What an operator may choose on an offer. Enter each value once here
+				and it becomes a dropdown on every offer page, so nobody has to
+				remember that 20081 means Antiques.
+			</p>
+			for _, g := range s.Options {
+				<div class="stack">
+					<h3>{ g.Title }</h3>
+					<span class="hint">{ g.Hint }</span>
+					if len(g.Options) == 0 {
+						<p class="faint">
+							Nothing on this list yet, so the offer editor keeps its
+							free-text box for this field.
+						</p>
+					} else {
+						<ul class="list">
+							for _, o := range g.Options {
+								<li class="row">
+									<span>{ o.Label }</span>
+									<code class="code">{ o.Value }</code>
+									<button
+										class="btn btn-quiet"
+										type="button"
+										aria-label={ "Remove " + o.Label }
+										data-on:click={ "@post('/settings/marketplace/remove/" + o.ID + "')" }
+										data-indicator:_busy
+										data-attr:disabled="$_busy"
+									>Remove</button>
+								</li>
+							}
+						</ul>
+					}
+					<div class="row">
+						<input
+							class="input"
+							type="text"
+							spellcheck="false"
+							placeholder="Value sent to the marketplace"
+							aria-label={ g.Title + " value" }
+							{ optAttr("value", g.Field)... }
+						/>
+						<input
+							class="input"
+							type="text"
+							placeholder="What you will see"
+							aria-label={ g.Title + " label" }
+							{ optAttr("label", g.Field)... }
+						/>
+						<button
+							class="btn"
+							type="button"
+							data-on:click={ "@post('/settings/marketplace/add/" + string(g.Field) + "')" }
+							data-indicator:_busy
+							data-attr:disabled="$_busy"
+						>
+							<span data-show="$_busy" style="display:none" class="spinner" aria-hidden="true"></span>
+							<span>Add</span>
+						</button>
+					</div>
+				</div>
+			}
 		</div>
 	</div>
 }

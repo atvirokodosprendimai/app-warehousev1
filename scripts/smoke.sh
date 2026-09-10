@@ -197,14 +197,36 @@ curl -fsS -b "$COOKIES" "$BASE/warehouse" -o "$RUN/wh3.html"
 check "the child's address followed the rename" "KAUNAS-GARAGE/S3" "$RUN/wh3.html"
 absent "and the old address is gone" "KAUNAS/S3" "$RUN/wh3.html"
 
-echo "== intake: title only, no price =="
+echo "== intake: one click, no body at all, then name it (ADR-020) =="
+# ⚠ THE ABSENCE OF A REQUEST BODY IS THE ASSERTION, not an economy. The button
+# lives in the top bar on every page, so the create endpoint must not depend on
+# signals that only one screen declared. If it ever needs a body again, the
+# button silently stops working everywhere except wherever that body comes from.
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
   -H 'Content-Type: application/json' \
-  -d '{"newTitle":"Vintage brass desk lamp","newSku":"","newLocation":""}' \
   -o "$RUN/offer.txt"
-check "offer created from a title alone" "/offers/" "$RUN/offer.txt"
+check "one click creates an offer with no input at all" "/offers/" "$RUN/offer.txt"
 OFFER_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/offer.txt" | head -1 | cut -d/ -f3)
 echo "  offer id: $OFFER_ID"
+
+# The intake SCREEN is gone, not merely unlinked. An address that still answers
+# would be a second way to create an offer, reachable by anyone who bookmarked
+# it, and nothing else in this script would notice.
+NEWCODE=$(curl -s -b "$COOKIES" -o /dev/null -w '%{http_code}' "$BASE/offers/new")
+if [ "$NEWCODE" = "404" ]; then
+  echo "  ok   the intake screen is gone (/offers/new returns 404)"
+else
+  echo "  FAIL /offers/new still answers $NEWCODE — the deleted screen is still reachable"
+  fail=$((fail + 1))
+fi
+
+# Step 3 of M's flow: "all other info", starting with the name. This is an
+# ordinary save through the editor's own endpoint, not a special intake path.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Vintage brass desk lamp","offerDescription":"","offerCondition":""}' \
+  -o "$RUN/named.txt"
+check "naming it afterwards is an ordinary save" "Saved" "$RUN/named.txt"
 
 curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer.html"
 check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
@@ -212,6 +234,141 @@ check "offer page renders" "Vintage brass desk lamp" "$RUN/offer.html"
 # so it is a short ordinal rather than a dated hex string.
 check "the first reference is WH0000001" "WH0000001" "$RUN/offer.html"
 absent "no dated hex reference survives" "WH-2026" "$RUN/offer.html"
+
+echo "== a starter template builds a whole trade in one press =="
+# ⚠ PC, NOT CAR. The section below builds a CAR tree by hand, and a template
+# refuses to touch a root that already exists — so applying the car template here
+# would prove nothing about the success path. The refusal is asserted at the end
+# of this block, where CAR *is* taken.
+
+# ⚠ THE EMPTY SCREEN FIRST, AND THIS ASSERTION EARNED ITS PLACE. taxonomyScreen
+# has three exits — no selection, a stale bookmark, and the full read — and the
+# first build filled the template list in beside the LAST one, so the buttons
+# rendered on every screen except the one a new installation opens on. No Go test
+# could see it: internal/web has none, and the view tests build the read model by
+# hand. A browser walk caught it; this is the half that lives in the repository.
+curl -fsS -b "$COOKIES" "$BASE/categories" -o "$RUN/tpl-empty.html"
+check "an empty taxonomy offers the templates" "/categories/template/PC" "$RUN/tpl-empty.html"
+check "and the other one" "/categories/template/CAR" "$RUN/tpl-empty.html"
+check "saying how much each builds" "7 categories, 23 questions" "$RUN/tpl-empty.html"
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/template/PC" \
+  -o "$RUN/tpl-pc.html"
+check "a template can be applied in one press" "PC parts added" "$RUN/tpl-pc.html"
+check "and it says how many categories it built" "7 categories" "$RUN/tpl-pc.html"
+check "and how many questions it wrote" "23 questions" "$RUN/tpl-pc.html"
+
+curl -fsS -b "$COOKIES" "$BASE/categories" -o "$RUN/tpl-tree.html"
+check "the template's root is in the tree" ">PC<" "$RUN/tpl-tree.html"
+check "with its subcategories beneath it" ">PC/GPU<" "$RUN/tpl-tree.html"
+check "all six of them" ">PC/PSU<" "$RUN/tpl-tree.html"
+
+# The questions landed on the right levels: the root's are inherited by a child
+# that never defined them, which is the whole reason this template has children.
+PC_GPU_ID=$(grep -o 'at=[0-9a-f-]\{36\}"[^>]*>*<span class="code">PC/GPU' "$RUN/tpl-tree.html" \
+  | head -1 | grep -o '[0-9a-f-]\{36\}')
+curl -fsS -b "$COOKIES" "$BASE/categories?at=$PC_GPU_ID" -o "$RUN/tpl-gpu.html"
+check "a template's child asks its own question" "VRAM" "$RUN/tpl-gpu.html"
+check "and inherits the root's" "Manufacturer part number" "$RUN/tpl-gpu.html"
+check "labelled as inherited, not as its own" "Inherited" "$RUN/tpl-gpu.html"
+
+# ⚠ THE SECOND PRESS. A root's path holds exactly one node, so applying the same
+# template again cannot mean anything but a refusal — and the operator has to be
+# told which code is in the way rather than handed a UNIQUE constraint message.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/template/PC" \
+  -o "$RUN/tpl-again.html"
+check "applying a template twice is refused in words" "There is already a PC category" "$RUN/tpl-again.html"
+absent "and the refusal does not leak the database's own message" "UNIQUE constraint" "$RUN/tpl-again.html"
+
+echo "== the operator's own taxonomy, and the questions it asks (ADR-021) =="
+# ⚠ THIS IS NOT THE MARKETPLACE CATEGORY. offer_categories (ADR-016) says where
+# to LIST a thing on eBay; this tree says what the thing IS. The two are
+# exercised separately on purpose, and the export section below asserts both.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d '{"newCode":"CAR","newName":"Car parts","newParent":""}' \
+  -o "$RUN/cat-root.txt"
+check "a root category can be created" "/categories?at=" "$RUN/cat-root.txt"
+
+# ⚠ THE HAND-TYPED PATH'S REFUSAL, WHICH WAS "Something went wrong" UNTIL NOW.
+# `App.userMessage` mapped the sentinels of auth, offer, location and export and
+# NOT those of taxonomy, so re-using a category code — the most ordinary mistake
+# on this screen — rendered as a generic fault AND was logged at ERROR as an
+# unexpected one. The template path above had its own answer; this is the half
+# that ADR-021 T2 shipped broken.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d '{"newCode":"CAR","newName":"Car parts again","newParent":""}' \
+  -o "$RUN/cat-dup.txt"
+check "a duplicate category code is refused in words" "already in use" "$RUN/cat-dup.txt"
+absent "and not as an unexplained fault" "Something went wrong" "$RUN/cat-dup.txt"
+CAR_ID=$(grep -o "at=[0-9a-f-]\{36\}" "$RUN/cat-root.txt" | head -1 | cut -d= -f2)
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories" \
+  -H 'Content-Type: application/json' \
+  -d "{\"newCode\":\"ENGINE\",\"newName\":\"Engine\",\"newParent\":\"$CAR_ID\"}" \
+  -o "$RUN/cat-child.txt"
+check "a child category can be created" "/categories?at=" "$RUN/cat-child.txt"
+ENGINE_ID=$(grep -o "at=[0-9a-f-]\{36\}" "$RUN/cat-child.txt" | head -1 | cut -d= -f2)
+
+# A question on the ROOT. Marked for export, so the CSV section below can prove
+# that a ticked field reaches a marketplace and an unticked one does not.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/$CAR_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d '{"fieldID":"","fieldCode":"vin","fieldLabel":"VIN","fieldKind":"text","fieldUnit":"","fieldOptions":"","fieldPosition":"0","fieldRequired":false,"fieldExport":true}' \
+  -o "$RUN/field-vin.txt"
+check "a question can be attached to a category" "/categories?at=$CAR_ID" "$RUN/field-vin.txt"
+
+# And one on the CHILD, deliberately NOT exported.
+curl -fsS -b "$COOKIES" -X POST "$BASE/categories/$ENGINE_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d '{"fieldID":"","fieldCode":"engine_code","fieldLabel":"Engine code","fieldKind":"text","fieldUnit":"","fieldOptions":"","fieldPosition":"0","fieldRequired":false,"fieldExport":false}' \
+  -o "$RUN/field-code.txt"
+check "a question can be attached to a deeper category" "/categories?at=$ENGINE_ID" "$RUN/field-code.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/categories?at=$ENGINE_ID" -o "$RUN/cat-engine.html"
+check "the child screen shows its own question" "Engine code" "$RUN/cat-engine.html"
+# ★ THE WHOLE RECORD IN ONE ASSERTION: a question defined on the PARENT appears
+# on the child, without having been copied there.
+check "and the question INHERITED from its parent" "VIN" "$RUN/cat-engine.html"
+check "labelled with the level it came from" "Inherited" "$RUN/cat-engine.html"
+
+
+# ⚠ THE PATCH TARGET, BEFORE THERE IS ANYTHING TO ASK. The questions card arrives
+# over SSE the moment an offer is filed, and a patch can only replace an element
+# that is already in the document — so an offer with no category has to render an
+# empty wrapper. Without it, choosing a category showed the operator nothing until
+# they reloaded the page by hand, which is how M found it.
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-unfiled.html"
+check "an unfiled offer carries the questions card's patch target" 'id="offer-fields"' "$RUN/offer-unfiled.html"
+absent "and asks nothing while it has no category" "Details for this category" "$RUN/offer-unfiled.html"
+# File the offer under the deeper node, through the ordinary Details save.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d "{\"offerTitle\":\"Vintage brass desk lamp\",\"offerDescription\":\"\",\"offerCondition\":\"\",\"offerCategory\":\"$ENGINE_ID\"}" \
+  -o "$RUN/filed.txt"
+check "an offer can be filed under a category" "Saved" "$RUN/filed.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-fields.html"
+check "the editor asks the category's own question" "Engine code" "$RUN/offer-fields.html"
+check "and every question inherited from above it" "VIN" "$RUN/offer-fields.html"
+
+# The signal name is the field id with its hyphens removed. google/uuid emits
+# lowercase, which matters: HTML lowercases attribute names, so an uppercase id
+# would bind a signal the seed never wrote.
+VIN_FIELD=$(grep -o 'id="cf-[0-9a-f-]\{36\}"' "$RUN/offer-fields.html" | head -1 | cut -d'"' -f2 | cut -c4-)
+CODE_FIELD=$(grep -o 'id="cf-[0-9a-f-]\{36\}"' "$RUN/offer-fields.html" | tail -1 | cut -d'"' -f2 | cut -c4-)
+VIN_SIG="f${VIN_FIELD//-/}"
+CODE_SIG="f${CODE_FIELD//-/}"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/fields" \
+  -H 'Content-Type: application/json' \
+  -d "{\"$VIN_SIG\":\"WVWZZZ1JZXW000001\",\"$CODE_SIG\":\"BKD-1968\"}" \
+  -o "$RUN/answers.txt"
+check "answers to those questions can be saved" "Saved" "$RUN/answers.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/offer-answered.html"
+check "and they come back on the next load" "WVWZZZ1JZXW000001" "$RUN/offer-answered.html"
+check "including the one from the deeper level" "BKD-1968" "$RUN/offer-answered.html"
 
 echo "== a reference is findable the way it is typed =="
 for q in WH0000001 wh0000001 WH1 1; do
@@ -225,6 +382,64 @@ check "the editor uses the SAME one stream endpoint" "/stream?offer=$OFFER_ID" "
 
 curl -fsS -b "$COOKIES" "$BASE/offers?needs_pricing=1" -o "$RUN/pricing.html"
 check "unpriced draft is in the pricing queue" "Vintage brass desk lamp" "$RUN/pricing.html"
+
+# ★ ADR-019: THE TWO-PERSON INTAKE, WALKED END TO END.
+#
+# One person photographs a thing without naming it; a second person finds it in a
+# queue and names it. This is the only assertion that proves the hand-off exists
+# as an ADDRESS rather than as markup — the view tests prove the menu entry is
+# rendered, and only an HTTP request proves the route behind it answers.
+echo "== ADR-019: one person photographs, another describes =="
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
+  -H 'Content-Type: application/json' \
+  -o "$RUN/unnamed.txt"
+check "an offer can be created with NO title at all" "/offers/" "$RUN/unnamed.txt"
+UNNAMED_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed.txt" | head -1 | cut -d/ -f3)
+echo "  unnamed offer id: $UNNAMED_ID"
+
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing.html"
+check "the unnamed group is in the describing queue" "Untitled"    "$RUN/describing.html"
+# The reference is what is written on the box, so it has to be allocated at
+# photograph time -- otherwise the photographer has nothing to label with.
+check "and it carries a reference to label the box"  "WH000000"    "$RUN/describing.html"
+check "the menu entry M asked for is on the page"    "Needs describing" "$RUN/describing.html"
+absent "the named offer is NOT in the describing queue" "Vintage brass desk lamp" "$RUN/describing.html"
+
+# The second person's side: the offer editor is the describing screen (ADR-019
+# rejects a second one), so naming it is an ordinary save.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Enamel advertising sign","offerDescription":"chipped at one corner","offerCondition":"used"}' \
+  -o "$RUN/described.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing2.html"
+absent "once named, it LEAVES the describing queue" "Enamel advertising sign" "$RUN/describing2.html"
+curl -fsS -b "$COOKIES" "$BASE/offers/$UNNAMED_ID" -o "$RUN/described.html"
+check "and the name stuck" "Enamel advertising sign" "$RUN/described.html"
+
+# ⚠ The publication guard, over HTTP. A title is not required to CREATE and IS
+# required to LIST -- refused by the domain and, separately, by a database
+# trigger. Without this the relaxation would be indistinguishable from having
+# removed the rule.
+#
+# ⚠ THE OFFER MUST BE PRICED FIRST, and that is the whole subtlety: an offer with
+# neither a price nor a title is refused for the PRICE, because that guard is
+# checked first. Asserting on that refusal would have proved the shop-price rule
+# from ADR-004 over again and said nothing about the title. Priced-but-unnamed is
+# the only state that isolates this rule.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers" \
+  -H 'Content-Type: application/json' \
+  -o "$RUN/unnamed2.txt"
+UNNAMED2_ID=$(grep -o "/offers/[0-9a-f-]\{36\}" "$RUN/unnamed2.txt" | head -1 | cut -d/ -f3)
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED2_ID/prices" \
+  -H 'Content-Type: application/json' \
+  -d '{"shopAmount":"45.00","shopCurrency":"EUR","ownerAmount":"","ownerCurrency":"EUR"}' \
+  -o "$RUN/unnamed2-priced.txt"
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$UNNAMED2_ID/status/listed" \
+  -H 'Content-Type: application/json' -d '{}' -o "$RUN/publish-unnamed.txt"
+check "a priced but UNNAMED offer cannot be listed" "title" "$RUN/publish-unnamed.txt"
+curl -fsS -b "$COOKIES" "$BASE/offers?needs_describing=1" -o "$RUN/describing3.html"
+check "and it is still sitting in the describing queue" "Untitled" "$RUN/describing3.html"
 
 echo "== the upload control the BROWSER will actually use =="
 # ⚠ The curl upload below builds its own multipart body and therefore proves only
@@ -262,6 +477,37 @@ curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/prices" \
   -o "$RUN/prices.txt"
 check "margin computed" "Margin 15.00 EUR" "$RUN/prices.txt"
 check "comma decimal accepted" "45.00 EUR" "$RUN/prices.txt"
+
+# ⚠ HOW MANY OF THE THING WE HOLD, ALL THE WAY TO THE MARKETPLACE.
+#
+# `quantity` has been in the schema since the first migration and BOTH exporters
+# have always written it — eBay's `*Quantity`, Shopify's `Variant Inventory Qty`
+# — but nothing in the interface ever SET it, so every offer shipped the database
+# default of 1 and a shelf of forty-two went out as one. The whole chain was
+# green the entire time, because the only broken link was the one no test drove.
+#
+# The title rides along because saving details rewrites them: a payload carrying
+# only the quantity would blank the name, which is the same class of silent write
+# the handler's empty-means-unchanged rule exists to prevent.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerTitle":"Vintage brass desk lamp","offerDescription":"","offerCondition":"","offerQuantity":"42"}' \
+  -o "$RUN/qty.txt"
+check "a quantity can be set at all" "Saved" "$RUN/qty.txt"
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/qty.html"
+check "and it comes back on the editor" "42" "$RUN/qty.html"
+
+# ⚠ THE SAVE ABOVE CARRIED NO offerCategory, AND IT USED TO UN-FILE THE OFFER.
+# The picker can legitimately be cleared — its first option is "not filed" — so
+# the handler cannot read empty as "unchanged" the way it does for the reference
+# and the quantity. It reads ABSENT as unchanged instead, which is a different
+# question and needs a pointer to answer.
+#
+# Caught here rather than in Go: internal/web has no unit tests, and the failure
+# is silent — the offer saves, says "Saved", and quietly stops being a
+# turbocharger. Everything downstream then looks like an export bug.
+check "a partial save does NOT un-file the offer" "Engine code" "$RUN/qty.html"
+check "and its answers survive it" "WVWZZZ1JZXW000001" "$RUN/qty.html"
 
 curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/status/listed" \
   -H 'Content-Type: application/json' -d '{}' -o "$RUN/status.txt"
@@ -331,20 +577,60 @@ check "a cart can also be created and named up front" "eBay September" "$RUN/car
 echo "== export =="
 curl -fsS -b "$COOKIES" "$BASE/export" -o "$RUN/export.html"
 check "export page says how many are ready" "1 ready" "$RUN/export.html"
+# The screen builds itself from export.Names(), so a profile appearing here is
+# the whole of its interface wiring — there is no markup naming it.
+check "the export screen offers the recar profile" "recar" "$RUN/export.html"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv" -o "$RUN/shopify.csv"
 check "shopify header" "Variant Price" "$RUN/shopify.csv"
 check "shopify carries the shop price" "45.00" "$RUN/shopify.csv"
+check "shopify carries the QUANTITY we hold, not the default 1" ",42," "$RUN/shopify.csv"
 check "shopify carries an absolute photo URL" "$BASE/p/" "$RUN/shopify.csv"
 absent "the OWNER price never reaches the shopify export" "30.00" "$RUN/shopify.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay.csv"
 check "ebay header" "PicURL" "$RUN/ebay.csv"
 check "ebay carries the shop price" "45.00" "$RUN/ebay.csv"
+check "ebay carries the QUANTITY we hold, not the default 1" ",42," "$RUN/ebay.csv"
 absent "the OWNER price never reaches the ebay export" "30.00" "$RUN/ebay.csv"
+
+curl -fsS -b "$COOKIES" "$BASE/export/recar.csv" -o "$RUN/recar.csv"
+# ⚠ THE HEADER IS POLISH WITH DIACRITICS AND THAT IS THE ASSERTION. It is
+# recar's own importer key, and it travels from a Go string through the CSV
+# writer, the handler and HTTP before anybody reads it — any of which could
+# mangle the encoding and produce a file that imports with empty columns.
+check "recar header keeps its diacritics end to end" "Numer katalogowy części" "$RUN/recar.csv"
+check "recar carries the shop price" "45.00" "$RUN/recar.csv"
+check "recar carries an absolute photo URL" "$BASE/p/" "$RUN/recar.csv"
+check "recar defaults an unstated condition to used" "Używany" "$RUN/recar.csv"
+absent "the OWNER price never reaches the recar export" "30.00" "$RUN/recar.csv"
+# ⚠ Recar has NO custom-field tail, unlike the other two: its template is a fixed
+# form. VIN is ticked for export and reaches eBay and Shopify above; it must not
+# invent a column here. This pins the difference where a reader can see it.
+absent "an exported custom field does not invent a recar column" "VIN" "$RUN/recar.csv"
 
 curl -fsS -b "$COOKIES" "$BASE/export/shopify.csv?cart=$CART_ID" -o "$RUN/cart.csv"
 check "a batch exports on its own" "Vintage brass desk lamp" "$RUN/cart.csv"
+
+# ⚠ THE ONLY PLACE THE HANDLER'S LOAD IS PROVED. internal/export is pure and a
+# unit test supplies its own Offer.Fields, so forgetting to resolve them in the
+# handler produces a well-formed file with every custom column EMPTY and leaves
+# the whole Go suite green. Only a real request through the real handler catches
+# it, which is why this assertion is the reachability proof rather than a
+# formality.
+#
+# The taxonomy section above ticked "Send this to marketplaces" on VIN and left
+# it OFF on Engine code, then answered both — so this pair is the whole of M's
+# request: "in export i need to choose which taxonomies from category to export
+# to csv somehow".
+check "an EXPORTED custom field becomes an eBay item specific" "C:VIN" "$RUN/ebay.csv"
+check "and carries the answer the operator typed" "WVWZZZ1JZXW000001" "$RUN/ebay.csv"
+absent "an UNTICKED field is not an eBay column" "C:Engine code" "$RUN/ebay.csv"
+absent "and its value never leaves the building" "BKD-1968" "$RUN/ebay.csv"
+
+check "shopify takes the same field as a plain column" "VIN" "$RUN/shopify.csv"
+check "with the same answer" "WVWZZZ1JZXW000001" "$RUN/shopify.csv"
+absent "and leaves the unticked one out too" "BKD-1968" "$RUN/shopify.csv"
 
 echo "== submissions inbox =="
 STAFF="$RUN/staff.txt"
@@ -430,6 +716,18 @@ check "and warns a marketplace cannot fetch from it" "only resolves on this mach
 curl -s -b "$STAFF" "$BASE/settings" -o /dev/null -w '%{http_code}' > "$RUN/staffset.code"
 check "staff cannot open settings" "403" "$RUN/staffset.code"
 
+# ⚠ THE ONLY PLACE THIS IS PROVED. internal/web carries no Go tests, so a route's
+# standing is not visible from any unit test — only a real request with a real
+# staff session shows it. Shaping the vocabulary is admin because changing what
+# categories EXIST changes what every offer in the warehouse can say about
+# itself; filing an offer under one is ordinary work and stays open to everybody.
+curl -s -b "$STAFF" "$BASE/categories" -o /dev/null -w '%{http_code}' > "$RUN/staffcat.code"
+check "staff cannot shape the taxonomy" "403" "$RUN/staffcat.code"
+curl -s -b "$STAFF" -X POST "$BASE/categories" -H 'Content-Type: application/json' \
+  -d '{"newCode":"SNEAK","newName":"Sneaky","newParent":""}' \
+  -o /dev/null -w '%{http_code}' > "$RUN/staffcatpost.code"
+check "nor create one by posting straight at the endpoint" "403" "$RUN/staffcatpost.code"
+
 # A trailing slash is sent on purpose: the value must come back normalised, and
 # the box must show what was STORED rather than what was typed.
 curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
@@ -451,6 +749,87 @@ absent "and no longer from the start-up default" "$BASE/p/" "$RUN/shopify2.csv"
 # Put it back, so anything added after this still sees a fetchable address.
 curl -fsS -b "$COOKIES" -X POST "$BASE/settings" -H 'Content-Type: application/json' \
   -d "{\"setPublicBase\":\"$BASE\"}" -o /dev/null
+
+echo "== the lists a must-have is picked from (ADR-022) =="
+
+# ⚠ THE ONLY PLACE ANY OF THIS IS PROVED. internal/web has no Go tests, so a
+# handler that compiles, a route that is missing, and a guard that is absent all
+# look identical from `go test ./...`.
+curl -s -b "$STAFF" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"99999","optLabelCategory":"Sneaky"}' \
+  -o /dev/null -w '%{http_code}' > "$RUN/staffopt.code"
+check "a non-administrator cannot reach the marketplace options" "403" "$RUN/staffopt.code"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques"}' -o "$RUN/optadd.txt"
+check "an administrator can add a marketplace option" "Antiques" "$RUN/optadd.txt"
+
+# The location list is untouched by the line above, so the same response is the
+# proof that an EMPTY field still renders somewhere to type the first value.
+check "a field with no options still renders its section" "Dispatches from" "$RUN/optadd.txt"
+
+# Adding the same number twice is ordinary — nobody can see the whole list on a
+# phone — so the refusal has to be a sentence, not "Something went wrong".
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques again"}' -o "$RUN/optdup.txt"
+check "a duplicate option is refused in words" "already on the list" "$RUN/optdup.txt"
+
+OPT_ID=$(grep -o "marketplace/remove/[0-9a-f-]\{36\}" "$RUN/optadd.txt" | head -1 | cut -d/ -f3)
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/remove/$OPT_ID" \
+  -H 'Content-Type: application/json' -d '{}' -o "$RUN/optdel.txt"
+# ⚠ ASSERTED ON THE ROW'S OWN REMOVE URL, NOT ON ITS LABEL. The first version of
+# this looked for "Antiques" and failed against correct code: the card's help
+# text says "nobody has to remember that 20081 means Antiques", so both the label
+# AND the value appear on the page whether or not the row does. An id that exists
+# only while the row does is the only substring that means what this claims.
+absent "a removed option is gone from the list" "marketplace/remove/$OPT_ID" "$RUN/optdel.txt"
+check "and the list says so rather than going blank" "Nothing on this list yet" "$RUN/optdel.txt"
+
+echo "== an offer picks its must-haves from those lists (ADR-022 T4) =="
+
+# A category list to pick from. The CONDITION list is deliberately left empty:
+# one run then covers both arms of the card — the dropdown and the free-text
+# escape a warehouse relies on before an administrator has filled the lists.
+curl -fsS -b "$COOKIES" -X POST "$BASE/settings/marketplace/add/category" \
+  -H 'Content-Type: application/json' \
+  -d '{"optValueCategory":"20081","optLabelCategory":"Antiques"}' -o /dev/null
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/mkt-before.html"
+check "the offer editor offers the entered value" '<option value="20081"' "$RUN/mkt-before.html"
+check "and names what choosing nothing falls back to" "Use the default — 11450" "$RUN/mkt-before.html"
+check "an empty option list still offers a text box" \
+  'id="o-mkt-condition" class="input" type="text"' "$RUN/mkt-before.html"
+
+# ⚠ THE PATCH TARGET, and it is the reason the card renders unconditionally. An
+# SSE patch REPLACES an element already in the document, so a save can only be
+# shown without a reload if this id is already on the page.
+check "the saved category is visible without a reload" 'id="offer-marketplace"' "$RUN/mkt-before.html"
+
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/marketplace" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerEbayCategory":"20081","offerEbayCondition":"","offerEbayLocation":""}' \
+  -o "$RUN/mkt-save.txt"
+check "saving the picked value says so" "Saved" "$RUN/mkt-save.txt"
+
+curl -fsS -b "$COOKIES" "$BASE/offers/$OFFER_ID" -o "$RUN/mkt-after.html"
+check "the picked value comes back selected" '<option value="20081" selected' "$RUN/mkt-after.html"
+
+# ★ The point of the whole feature: what was picked has to reach the file.
+curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay3.csv"
+check "an offer takes its eBay category from the list" ",20081," "$RUN/ebay3.csv"
+
+# And clearing it must go back to the default, or "empty means the default"
+# — which every unpicked offer relies on — would be a claim nothing keeps.
+curl -fsS -b "$COOKIES" -X POST "$BASE/offers/$OFFER_ID/marketplace" \
+  -H 'Content-Type: application/json' \
+  -d '{"offerEbayCategory":"","offerEbayCondition":"","offerEbayLocation":""}' \
+  -o /dev/null
+curl -fsS -b "$COOKIES" "$BASE/export/ebay.csv" -o "$RUN/ebay4.csv"
+check "an offer that chooses nothing exports under the default" ",11450," "$RUN/ebay4.csv"
+absent "and the cleared value is really gone" ",20081," "$RUN/ebay4.csv"
 
 echo "== auth boundary =="
 curl -s "$BASE/offers" -o /dev/null -w '%{http_code}' > "$RUN/anon.code"

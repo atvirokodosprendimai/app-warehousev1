@@ -15,71 +15,62 @@ that a deferral resurfaces instead of quietly becoming permanent.
 These are not the same kind of thing as the rest of this file. Each one is a gap
 in how this repository knows whether it works.
 
-### Every check runs on every push
+### The screens nobody looks at
 
-**Deferred by:** ADR-013 (run every test against the real migrations)
+**Deferred by:** ADR-008 (no forms except the photo upload)
 
-The repository has **no CI workflow**. `gofmt -l`, `go vet ./...`,
-`go test ./...` and `scripts/smoke.sh` all exist, all pass, and all run only when
-a person on a laptop chooses to run them.
+The browser walks assert behaviour, and behaviour is not the whole of a screen.
+ADR-021 shipped two of them with eleven class names that had no stylesheet rules:
+every Go test, the smoke walk AND the browser walk passed, because none of them
+looks at a class name. The screens WORKED and were unstyled, and it was found by
+opening the screenshot the walk had been writing all along.
 
-GitHub's default-setup CodeQL *does* run on this repository and reports success.
-That is worse than silence: it puts a green tick against a commit whose actual
-checks nobody ran, and a green tick is read as "checked".
+CI now keeps those screenshots as an artifact, which makes looking possible. It
+does not make anybody look.
 
-**What would make this real:** it already is. This is the largest open gap in the
-repository, and the only reason it is deferred rather than done is that nobody
-has asked for it.
+**What would make this real:** a check that compares a screenshot against a
+reference, or an eye on the artifact after a change to `app.css`. The first is a
+new class of test with its own failure modes (a font renders one pixel
+differently and the build goes red); the second is a habit, not a check. Neither
+is built, and the entry exists so the gap is not mistaken for closed by the walks
+that now run.
 
-### Nobody has opened the application in a browser
+---
 
-**Deferred by:** ADR-008 (no forms except the photo upload), ADR-009 (one stream per page), ADR-015 (an upload says it is uploading)
+### Closed, and kept here so nobody rediscovers them
 
-Six defects were found by a person using the application after the server-side
-suite was green, and every one was invisible to that suite **by construction**:
-an upload that never fired, photographs that could not be opened on a phone, a
-saved batch with no link to it, places that could not be edited. A server-side
-suite cannot see reachability or a client-side contract.
+**Nobody has opened the application in a browser** — closed 2026-09-07.
+`scripts/browser/` holds two Playwright walks, run by `scripts/browser.sh` and by
+the `browser` job on every push. Eight defects had been found by a person after
+the server-side suite was green, every one invisible to it by construction: an
+upload that never fired, photographs that could not be opened on a phone, a saved
+batch with no link to it, places that could not be edited, a New offer button
+missing from every page but two, and a questions card that never appeared when a
+category was chosen. ⚠ The two walks had ALREADY each caught a real defect while
+living in a scratch directory that is deleted with the session that wrote it — a
+check that does not survive its author is a demonstration, not a check.
 
-The markup contract test added afterwards
-(`internal/web/view/upload_contract_test.go`) closes the specific hole it was
-written for and nothing wider. Nothing checks that datastar hydrates at all, that
-a patch is applied, that the layout survives a phone-sized viewport, or that
-focus and contrast are usable.
+**Every check runs on every push** — closed 2026-09-07 by
+`.github/workflows/checks.yml`. The repository had no CI at all while GitHub's
+default-setup CodeQL reported green, which put a tick against commits whose
+actual checks nobody had run. ⚠ `gofmt -l` exits 0 while listing files, so that
+step reads its output rather than its status.
 
-**What would make this real:** walking intake → price → photo → cart → export on
-a phone-sized viewport, and fixing what only a person can see. Then a
-browser-driven test for the paths that matter.
+**Down migrations are never exercised** — closed 2026-09-07 by
+`internal/store/migrate_test.go::TestEveryMigrationCanBeRolledBack`. Every
+migration had a `-- +goose Down` section and not one had ever executed. ⚠ The
+rollback is not the assertion: goose reports success for a Down that drops
+nothing, so the test re-applies the whole set afterwards and asserts no
+application table survived the way down.
 
-### Down migrations are never exercised
-
-**Deferred by:** ADR-013 (run every test against the real migrations)
-
-Every migration has a `-- +goose Down` section and none of them has ever been
-run. `TestMigrateIsIdempotent` runs the set forward twice; nothing runs it
-backward. A down migration that does not work is discovered during the incident
-it was written for.
-
-### Four packages still build their own test schema
-
-**Deferred by:** ADR-013 (run every test against the real migrations)
-
-`internal/fx` (1 copied `CREATE TABLE`), `internal/location` (2),
-`internal/cart` (5) and `internal/auth` (1) never run the migrations — they
-build a schema of their own, each with a comment explaining why the copy is
-acceptable. That is the same comment `internal/offer` and `internal/submission`
-carried before their copies drifted and left the suite green against a schema
-production does not have.
-
-⚠ ADR-013 claimed "No package holds a copy of any schema statement" from
-2026-09-06 until 2026-09-07, when this was found while reading `internal/fx` for
-an unrelated reason. The claim was false when written; the record now says so.
-Its `Enforced-by` test lives in `internal/offer`, so it proves that one package
-runs the migrations and is structurally blind to these four — a record can be
-mutation-verified and still overstate its reach.
-
-**What would make this real:** nine statements, four helpers. Each conversion may
-surface drift that has already happened, which is the point of doing it.
+**Four packages still build their own test schema** — closed 2026-09-07.
+`internal/fx`, `internal/auth`, `internal/location` and `internal/cart` run the
+real migrations, and `internal/store/schema_guard_test.go` walks the whole tree
+so ADR-013's claim can no longer outrun the one package its Enforced-by test
+happened to live in. ⚠ The predicted drift had ALREADY happened:
+`internal/location`'s copy of `offers` declared eight columns where the real
+table has more than twenty, and every test using it agreed with the copy
+perfectly.
 
 ---
 
@@ -202,14 +193,18 @@ asking them.
 The decision is communicated by the phone call that produced it. There is no mail
 or SMS transport in this application.
 
-### `core.Photo.OfferID` holds a submission id for submission photos
+### ~~`core.Photo.OfferID` holds a submission id for submission photos~~
 
-**Deferred by:** ADR-011 (a submission is not an offer)
+**Deferred by:** ADR-011 (a submission is not an offer) — **closed 2026-09-07.**
 
-`core.Photo` has no `SubmissionID` field, so a submission's photograph carries the
-submission id in `OfferID`. It works, it is tested, and **the field name is a
-lie**. Renaming it to something aggregate-neutral touches both packages and the
-templates. Recorded so the next reader meets it here rather than in the debugger.
+`core.Photo` has no `SubmissionID` field, so a submission's photograph carried the
+submission id in a field called `OfferID`. It worked, it was tested, and the field
+name was a lie — in the one record whose whole subject is that a submission is not
+an offer. It is `ParentID` now.
+
+⚠ Kept here because the shape recurs: `core.Submission.OfferID` is a different
+field of the same name that is TRUE, and the compiler is what told the two apart
+during the rename. A grep could not have.
 
 ## Search
 
@@ -229,6 +224,45 @@ and is not applied to `submissions`.
 
 ## Interface
 
+### Showing and editing how many of a thing we hold
+
+**Deferred by:** ADR-020 (intake is one click, and the camera is first)
+
+`core.Offer.Quantity` has existed since the first migration. It is constrained by
+the schema (`INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0)`), refused when
+negative by `Offer.Validate`, rewritten by `Repo.UpdateOffer`, read back by the
+cart, and written by BOTH exporters — eBay's `*Quantity` and Shopify's `Variant
+Inventory Qty`.
+
+⚠ **`internal/web` never sets it.** Every offer therefore carries the database
+default of 1, and a warehouse holding five of something tells a marketplace it
+holds one. That is a wrong number leaving the building, not merely a missing
+input, which is why it is recorded here rather than left implicit.
+
+ADR-020 deferred it because it is not a flow decision: exposing a field that
+already exists end to end is presentation, and carries no record for the same
+reason the mobile drawer and the responsive listing carry none.
+
+**What would make this real:** it is real now — this entry exists to say the
+deferral was ADR-020's scope boundary, not a judgement that the number does not
+matter.
+
+### Deleting an abandoned draft in one gesture
+
+**Deferred by:** ADR-020 (intake is one click, and the camera is first)
+
+ADR-020 makes "New offer" write to the database on the click, so a press followed
+by second thoughts leaves an untitled draft behind. ADR-019's "Needs describing"
+queue is where those become visible, and an offer can already be deleted — but
+only by opening it first.
+
+A confirmation step before creating was considered and refused: it is exactly the
+step ADR-020 exists to delete. Making the DISPOSAL cheap is the right answer if
+the litter becomes a nuisance, and it belongs on the queue, beside the row.
+
+**What would make this real:** somebody actually accumulating abandoned drafts
+and saying so.
+
 ### Every busy indicator gets its own signal
 
 **Deferred by:** ADR-015 (an upload says it is uploading)
@@ -247,9 +281,56 @@ rather than a mystery.
 **What would make this real:** somebody being confused by it, or a page where two
 slow actions can genuinely be in flight at once.
 
+### Assigning a photograph group to a cataloguer, or locking one while it is described
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+ADR-019 makes "photographed but not yet named" a queue two people share. It gives
+that queue no ownership at all: anybody can open any group, and two cataloguers
+who both open `WH0000042` will both describe it, with the second save winning
+silently.
+
+That is tolerable at the size this is built for — a handful of people who can see
+each other. It stops being tolerable the moment the queue is worked by people in
+different places, which is exactly the arrangement ADR-005's offsite warehouses
+already permit.
+
+**What would make this real:** two people actually colliding, or the queue being
+worked by somebody the photographer cannot shout to.
+
+### Bulk-describing several photograph groups in one screen
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+Describing is done one offer at a time, through the offer editor. A cataloguer
+working a shelf of forty items pays a page load per item to type two fields.
+
+⚠ This is the same shape as "Bulk pricing of a whole batch in one screen"
+(deferred by ADR-004), and for the same reason — the queues are the same
+mechanism one field apart. If either is ever built, build the other with it
+rather than inventing a second bulk-edit surface.
+
+**What would make this real:** somebody describing a large intake and saying so.
+
+### Splitting or merging a photograph group
+
+**Deferred by:** ADR-019 (an undescribed draft is a normal state)
+
+A photograph group is a draft offer, so "one thing" is decided when the shutter
+is pressed. There is no way to move a picture from one offer to another, so a
+photographer who shoots two objects into one group, or one object across two,
+leaves the cataloguer with no fix but to delete and re-photograph.
+
+`Service.RemovePhoto` and `AddPhoto` exist, so the pieces are there; what is
+missing is a move that keeps the photo id, and the id is both the public URL and
+the blob's name on disk (ADR-007), so a move must not mint a new one.
+
+**What would make this real:** it happening. It will — a person photographing
+quickly does not always know where one lot ends.
+
 ### Allegro's and Shopify's own category settings and resolution
 
-**Deferred by:** ADR-016 (marketplace configuration is data)
+**Deferred by:** ADR-016 (marketplace configuration is data), ADR-019 (an undescribed draft is a normal state), ADR-022 (a marketplace must-have is picked from a list)
 
 ADR-016 builds the mechanism — per-profile defaults in `settings`, per-offer
 overrides in `offer_categories` — and wires only eBay through it, because eBay is
@@ -278,6 +359,112 @@ API call this application does not make.
 **What would make this real:** somebody mis-filing enough items that hunting
 numbers by hand stops being tolerable.
 
+### A shared marketplace field as a real column on an offer
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+Brand, GTIN/EAN, MPN and weight are asked for by every marketplace, not by one
+kind of thing. Modelling them as custom fields means every operator re-creates
+them on every tree they build, and an exporter can never rely on them being
+there. The alternative is real columns on `offers`. ADR-021 does not decide it,
+because the custom-field mechanism has to exist before the question is even
+answerable.
+
+**What would make this real:** the first export that needs a GTIN, or an
+operator who has typed "Brand" into three separate categories.
+
+### Filtering or searching the offers listing by a custom field's value
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+ADR-021 makes `number` a distinct field kind precisely so a mileage can one day
+be range-filtered, and then filters nothing. The listing searches title,
+description and reference through the index the database maintains (ADR-012),
+and a custom value lives in `offer_field_values`, where that index cannot see
+it.
+
+**What would make this real:** enough stock under one category that "which
+turbochargers are under 100k km" stops being a question you answer by reading.
+
+### A field whose options depend on another field's answer
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields)
+
+The recar.lt reference screenshots show a quality list whose entries change with
+the A/B/C condition grade — a conditional taxonomy. ADR-021's fields are
+independent of one another by design, because a dependency between two fields is
+a rule that has to be authored somewhere, and nothing here is that somewhere.
+
+**What would make this real:** an operator maintaining one option list in three
+places because only part of it applies at a time.
+
+### Renaming `Offer.Categories` to end the word collision
+
+**Deferred by:** ADR-021 (a category is a tree that carries fields) — **taken up by ADR-022**, whose T1 does exactly this rename, from `Offer.Categories` to `Offer.Marketplace`. Close this entry when that task lands.
+
+ADR-016's `Offer.Categories` is where to list an item on each marketplace;
+ADR-021's `Offer.CategoryID` is what the item IS. Two different things wearing
+one word, mitigated today only by doc comments that point at each other. The
+rename is mechanical and reaches the exporter, the handlers and the templates,
+so it is its own change rather than a rider on this one.
+
+**What would make this real:** the first bug where somebody reads one and means
+the other.
+
+### eBay's required item specifics, which differ per category
+
+**Deferred by:** ADR-022 (a marketplace must-have is picked from a list)
+
+ADR-022 gives each export profile a flat list of must-have values — category,
+condition, dispatch location. eBay also demands *item specifics* that change with
+the category: a mobile phone needs Brand, Model and Storage, and a chair needs
+none of them. Those are per-category required fields, which is a second tree
+shaped like ADR-021's and keyed by eBay's taxonomy rather than by ours.
+
+⚠ M was shown this as an option on 2026-09-09 and chose the flat list instead, so
+this is a deliberate boundary rather than an oversight. The reason it is hard is
+the overlap: ADR-021's tree already asks category questions about the item, and a
+second system asking category questions about the *listing* is two vocabularies
+that will be confused for each other — the same collision `Offer.Categories`
+already caused once.
+
+**What would make this real:** eBay rejecting a listing for a missing specific,
+which is the first moment the flat list is provably not enough.
+
+### A starter list of marketplace options
+
+**Deferred by:** ADR-022 T2 (the lists and the per-offer values are stored)
+
+ADR-022's option lists start empty, so a fresh installation shows an empty
+dropdown until an administrator types the first category. ADR-021's starter
+templates already solve the same shape for the category tree — press "Car parts"
+and the questions arrive — and the natural extension is for that press to also
+seed the eBay categories a parts warehouse actually uses.
+
+⚠ It is NOT free: a template's output is the operator's data the moment it lands
+(ADR-021), so seeded options would be theirs to edit and re-applying would be
+refused, exactly as the tree is. The values would also be a guess about one
+marketplace's taxonomy that nobody here has verified against eBay.
+
+**What would make this real:** a second installation, where typing the same list
+again is the thing somebody notices.
+
+### Importing an option list from a CSV
+
+**Deferred by:** ADR-022 T3 (an administrator enters the lists)
+
+Entering marketplace options one at a time is fine for the dozen categories one
+warehouse uses and tedious for a hundred. eBay publishes its taxonomy as a file,
+so pasting or uploading one is the obvious next step.
+
+⚠ This is the first place this application would READ a CSV rather than write
+one, which is a new direction with its own failure modes — an encoding, a header
+nobody agreed, and a partial import that leaves a half-filled list. Writing a CSV
+is a pure function over offers; reading one is a parser over untrusted input.
+
+**What would make this real:** somebody wanting more options than they are
+willing to type, and saying how many.
+
 ## Operations
 
 ### Barcode or QR generation for a reference
@@ -294,3 +481,33 @@ requirement. A scannable label is the natural next step and is not built.
 The `settings` table stores a value and an `updated_at`, and not who changed it
 or what it was before. With one setting and a handful of administrators that is
 tolerable.
+
+### Starter templates in the operator's own language
+
+**Deferred by:** ADR-021 T5 (a trade arrives in one press)
+
+The two shipped templates are labelled in English, which M chose on 2026-09-07
+over Lithuanian: a field label becomes a CSV column header, and those go to eBay,
+Allegro and Shopify. The people filing the parts speak Lithuanian, so the labels
+an operator reads and the headers a marketplace reads may want to be different
+strings — which the field carries no room for today.
+
+**What would make this real:** a second operator who does not read English.
+
+### ~~The taxonomy's refusals reach the operator~~
+
+**Deferred by:** ADR-021 T5 (a trade arrives in one press) — **closed 2026-09-07.**
+
+`App.userMessage` mapped the sentinels of `auth`, `offer`, `location` and `export`
+and none of `taxonomy`, so a duplicate category code rendered as "Something went
+wrong. The details are in the server log." and was logged as an unexpected error.
+T5 answered its own duplicate-root case inside the handler; the hand-typed path
+that T2 shipped fell through to the generic one.
+
+All six taxonomy sentinels are on the list now — `ErrCodeTaken`, `ErrPathTaken`,
+`ErrFieldCodeTaken`, `ErrHasChildren`, `ErrCategoryInUse` and `ErrCycle`.
+
+⚠ Kept here because the entry itself was wrong in a way worth remembering: it
+said "four identifiers" and there were six. A count written beside the thing it
+counts is a second copy of the truth, and this one had already stopped agreeing
+before anybody acted on it.

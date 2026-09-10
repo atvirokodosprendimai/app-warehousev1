@@ -44,8 +44,17 @@ required at creation, so there is nothing to measure it against.
 
 ## Decision
 
-`Offer.Validate()` requires a title and a SKU and does **not** require a price. A
-price becomes mandatory exactly when the offer enters a status that is exported:
+⚠ **THE FIRST SENTENCE BELOW WAS CORRECTED ON 2026-09-07 BY ADR-019.** It read
+"`Offer.Validate()` requires a title and a SKU and does **not** require a price"
+from 2026-09-06 until then. The TITLE half stopped being true: ADR-019 moved the
+title to the same exportable boundary as the price, so that one person can
+photograph stock and a second person name and describe it afterwards. The SKU half
+stands, and the decision recorded here is **extended, not reversed** — ADR-019 is
+this record's own argument applied one field over.
+
+`Offer.Validate()` requires a SKU and does **not** require a price — nor, since
+ADR-019, a title. A price becomes mandatory exactly when the offer enters a
+status that is exported:
 
     if o.Status.Exportable() && o.Shop.IsZero() { … refuse … }
 

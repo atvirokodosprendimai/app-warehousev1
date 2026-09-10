@@ -21,7 +21,9 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/core"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/marketplace"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/render"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web/view"
 )
@@ -51,11 +53,16 @@ type App struct {
 	Locations core.LocationReader
 	Rates     core.RateReader
 	Carts     core.CartReader
+	// Taxonomies is the operator's own tree of what a thing IS, and the questions
+	// each node asks (ADR-021). ⚠ Not the marketplace category, which is
+	// each node asks (ADR-021). ⚠ Not the marketplace category, which is
+	Taxonomies core.TaxonomyReader
 
 	// Write services.
 	Auth     *auth.Service
 	Offer    *offer.Service
 	Location *location.Service
+	Taxonomy *taxonomy.Service
 	Cart     CartService
 
 	// Blobs serves photo bytes.
@@ -75,6 +82,15 @@ type App struct {
 	// Settings holds the deployment values an administrator can change while the
 	// application is running.
 	Settings core.SettingsStore
+
+	// Marketplace holds the lists an operator picks a must-have value FROM —
+	// eBay's categories, its condition codes, the cities stock dispatches from
+	// (ADR-022).
+	//
+	// ⚠ IT HOLDS THE MENU, NOT THE CHOICE. What one offer chose lives on the
+	// offer and is written through the Offer service; this is only what may be
+	// chosen.
+	Marketplace *marketplace.Repo
 }
 
 // publicBase returns the origin a marketplace fetches photographs from.
@@ -174,6 +190,14 @@ func (a *App) page(r *http.Request, title, nav string) view.Page {
 	pending, err := a.Offers.Offers(r.Context(), core.OfferFilter{NeedsPricing: true, Limit: 1000})
 	if err == nil {
 		p.NeedsPricing = len(pending)
+	}
+
+	// The describing queue's count, loaded exactly as the pricing one above and
+	// with the same warn-and-continue handling: a sidebar badge is not worth
+	// failing a page over.
+	unnamed, err := a.Offers.Offers(r.Context(), core.OfferFilter{NeedsDescribing: true, Limit: 1000})
+	if err == nil {
+		p.NeedsDescribing = len(unnamed)
 	}
 
 	// Every page opens exactly one SSE connection, and this is it. A screen that
@@ -331,7 +355,26 @@ func (a *App) userMessage(err error) string {
 		errors.Is(err, location.ErrCycle),
 		errors.Is(err, export.ErrIncomplete),
 		errors.Is(err, export.ErrOptions),
-		errors.Is(err, export.ErrUnknownProfile):
+		errors.Is(err, export.ErrUnknownProfile),
+		// The one refusal a list editor can produce. Adding the same value twice
+		// is an ordinary thing to do — the operator cannot see the whole list on
+		// a small screen — so it has to arrive as a sentence rather than as
+		// "Something went wrong" plus an ERROR line in the log (ADR-022).
+		errors.Is(err, marketplace.ErrValueTaken),
+		// ⚠ THE TAXONOMY'S REFUSALS WERE MISSING FROM THIS LIST FROM THE DAY
+		// ADR-021 SHIPPED. Every one of them is a sentence an operator can act
+		// on — this code is already used, that node still has children, that
+		// move would put a category inside itself — and without them all six
+		// arrived as "Something went wrong. The details are in the server log."
+		// Worse than unhelpful: each was also logged at ERROR as unexpected, so
+		// the ordinary act of typing a code somebody already used looked like a
+		// fault in the application.
+		errors.Is(err, taxonomy.ErrCodeTaken),
+		errors.Is(err, taxonomy.ErrPathTaken),
+		errors.Is(err, taxonomy.ErrFieldCodeTaken),
+		errors.Is(err, taxonomy.ErrHasChildren),
+		errors.Is(err, taxonomy.ErrCategoryInUse),
+		errors.Is(err, taxonomy.ErrCycle):
 		return err.Error()
 	}
 	a.Log.Error("unexpected error", "err", err)

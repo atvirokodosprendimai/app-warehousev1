@@ -138,4 +138,4 @@ no configuration that turns it off, which is the point.
 
 ## Follow-ups
 
-- [ ] A registration-level check that every exporter has an owner-price test would close the one gap named in Risks. Not built; the profile set is two and both are covered.
+- [x] A registration-level check that every exporter has an owner-price test would close the one gap named in Risks. **Built 2026-09-07**: `internal/export/export_test.go::TestNoRegisteredProfileEverExportsTheOwnerPrice` loops the `registry` itself rather than the two profiles somebody remembered, so a third exporter is covered by existing. It asserts the shop price IS present first — a leak check over an empty file passes for the wrong reason.

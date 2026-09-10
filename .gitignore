@@ -1,3 +1,10 @@
+# The browser walks' installed dependencies and their output. The walks THEMSELVES
+# are committed, under scripts/browser/ — that is the whole point of them living
+# in the repository. What is ignored is the ~150MB of browser binaries npm pulls
+# down and the screenshots each run writes.
+scripts/browser/node_modules/
+scripts/browser/shots/
+
 # If you prefer the allow list template instead of the deny list, see community template:
 # https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
 #

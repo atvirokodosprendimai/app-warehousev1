@@ -134,9 +134,9 @@ func (s *Service) AddPhoto(ctx context.Context, submissionID, filename, contentT
 	sum := sha256.Sum256(data)
 	p := core.Photo{
 		ID: uuid.NewString(),
-		// The parent submission travels in OfferID; see
+		// The parent submission travels in ParentID; see
 		// [Repo.AddSubmissionPhoto].
-		OfferID:     sub.ID,
+		ParentID:    sub.ID,
 		Position:    nextPosition(sub.Photos),
 		Filename:    filename,
 		ContentType: contentType,

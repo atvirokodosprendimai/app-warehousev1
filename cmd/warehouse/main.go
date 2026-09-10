@@ -22,11 +22,13 @@ import (
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/export"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/fx"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/location"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/marketplace"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/offer"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/sequence"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/settings"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/store"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/submission"
+	"github.com/atvirokodosprendimai/app-warehousev1/internal/taxonomy"
 	"github.com/atvirokodosprendimai/app-warehousev1/internal/web"
 	"github.com/atvirokodosprendimai/app-warehousev1/migrations"
 )
@@ -100,10 +102,12 @@ func run(log *slog.Logger) error {
 	users := auth.NewRepo(db.Read, db.Write)
 	offers := offer.NewRepo(db.Read, db.Write)
 	locations := location.NewRepo(db.Read, db.Write)
+	taxonomies := taxonomy.NewRepo(db.Read, db.Write)
 	rates := fx.NewRepo(db.Read, db.Write)
 	carts := cart.NewRepo(db.Read, db.Write)
 	subs := submission.NewRepo(db.Read, db.Write)
 	conf := settings.NewRepo(db.Read, db.Write)
+	markets := marketplace.NewRepo(db.Read, db.Write)
 
 	// Services own the write rules.
 	authSvc := auth.NewService(users)
@@ -113,6 +117,7 @@ func run(log *slog.Logger) error {
 	seq := sequence.NewRepo(db.Write)
 	offerSvc := offer.NewService(offers, blobs, seq)
 	locationSvc := location.NewService(locations)
+	taxonomySvc := taxonomy.NewService(taxonomies)
 	cartSvc := cart.NewService(carts)
 	fxSvc := fx.NewService(rates, fx.NewClient(nil, ""))
 	// The offer REPOSITORY is handed to the submission service, not the offer
@@ -146,13 +151,16 @@ func run(log *slog.Logger) error {
 		Users:       users,
 		Offers:      offers,
 		Locations:   locations,
+		Taxonomies:  taxonomies,
 		Rates:       rates,
 		Carts:       carts,
 		Submissions: subs,
 		Settings:    conf,
+		Marketplace: markets,
 		Auth:        authSvc,
 		Offer:       offerSvc,
 		Location:    locationSvc,
+		Taxonomy:    taxonomySvc,
 		Cart:        cartSvc,
 		Submission:  submissionSvc,
 		Blobs:       blobs,

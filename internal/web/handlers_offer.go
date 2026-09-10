@@ -1,8 +1,11 @@
 package web
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,7 +57,9 @@ func (a *App) GetDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_ = view.PageShell(d.Page, view.NewOfferAction(), view.DashboardScreen(d)).Render(ctx, w)
+	// The New offer button is rendered by the shell itself, on every page, so
+	// passing it here would render it twice.
+	_ = view.PageShell(d.Page, nil, view.DashboardScreen(d)).Render(ctx, w)
 }
 
 // stockTotals sums what listed stock is priced at and what is owed on it.
@@ -123,6 +128,8 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 	nav := "offers"
 	title := "Offers"
 	switch {
+	case f.NeedsDescribing:
+		nav, title = "describing", "Needs describing"
 	case f.NeedsPricing:
 		nav, title = "pricing", "Awaiting pricing"
 	case len(f.Status) == 1:
@@ -143,7 +150,7 @@ func (a *App) GetOffers(w http.ResponseWriter, r *http.Request) {
 		l.Carts = carts
 		l.ActiveCart = a.activeCart(r, carts)
 	}
-	_ = view.PageShell(l.Page, view.NewOfferAction(), view.OffersScreen(l)).Render(r.Context(), w)
+	_ = view.PageShell(l.Page, nil, view.OffersScreen(l)).Render(r.Context(), w)
 }
 
 // offerFilterFrom reads a listing filter out of the query string.
@@ -157,6 +164,7 @@ func offerFilterFrom(r *http.Request) core.OfferFilter {
 		Query:              strings.TrimSpace(q.Get("q")),
 		LocationPathPrefix: strings.TrimSpace(q.Get("at")),
 		NeedsPricing:       q.Get("needs_pricing") == "1",
+		NeedsDescribing:    q.Get("needs_describing") == "1",
 		Limit:              200,
 	}
 	for _, s := range q["status"] {
@@ -167,50 +175,23 @@ func offerFilterFrom(r *http.Request) core.OfferFilter {
 	return f
 }
 
-// GetIntake renders the new-offer screen.
-func (a *App) GetIntake(w http.ResponseWriter, r *http.Request) {
-	locs, err := a.Locations.AllLocations(r.Context())
-	if err != nil {
-		a.Log.Warn("locations unavailable for intake", "err", err)
-	}
-	p := a.page(r, "New offer", "offers")
-	_ = view.PageShell(p, nil, view.IntakeScreen(locs)).Render(r.Context(), w)
-}
-
-// intakeSignals is what the new-offer screen sends.
-type intakeSignals struct {
-	Title    string `json:"newTitle"`
-	SKU      string `json:"newSku"`
-	Location string `json:"newLocation"`
-}
-
-// PostOffers creates an offer from a title alone.
+// PostOffers creates an empty draft and sends the operator to its photographs.
 //
-// No price is asked for and none is required. The flow is photograph, title,
-// shelve — and price later, once the operator has found out what the thing can
-// actually fetch.
+// ⚠ IT READS NOTHING, deliberately (ADR-020). There is no body to parse and no
+// signals to declare, which is what lets the button live in the top bar on every
+// page rather than only on a screen that seeded the right signals.
+//
+// Every question the deleted intake screen asked was already optional: the title
+// since ADR-019, the reference because ADR-010 has the database allocate one, and
+// the location because the editor carries its own card for it. Asking them bought
+// nothing and cost the operator a form while they were holding the object.
 func (a *App) PostOffers(w http.ResponseWriter, r *http.Request) {
-	var in intakeSignals
-	if err := datastar.ReadSignals(r, &in); err != nil {
-		a.flash(w, r, "intake-msg", "error", "Could not read the form.")
-		return
-	}
-
-	o, err := a.Offer.Create(r.Context(), in.Title, in.SKU)
+	o, err := a.Offer.Create(r.Context(), "", "")
 	if err != nil {
-		a.flash(w, r, "intake-msg", "error", a.userMessage(err))
+		// The button is global, so the message has to land somewhere that exists on
+		// every page — #app-flash in the layout, not the intake screen's old slot.
+		a.flash(w, r, "app-flash", "error", a.userMessage(err))
 		return
-	}
-
-	if in.Location != "" {
-		o.LocationID = in.Location
-		if err := a.Offer.Update(r.Context(), o); err != nil {
-			// The offer exists; only the shelving failed. Say so precisely rather
-			// than implying nothing was created, which would invite a duplicate.
-			a.flash(w, r, "intake-msg", "error",
-				"Created, but could not shelve it: "+a.userMessage(err))
-			return
-		}
 	}
 
 	sse := render.NewSSE(w, r)
@@ -264,6 +245,35 @@ func (a *App) offerDetail(r *http.Request, id string) (view.OfferDetail, error) 
 	if holding, err := a.Carts.CartsHolding(r.Context(), id); err == nil {
 		d.InCarts = holding
 	}
+
+	// The marketplace must-haves: the lists to pick from, this offer's answers,
+	// and what an unanswered one falls back to (ADR-022). Loaded HERE for the
+	// same reason as the questions below — both the page load and the SSE loop go
+	// through this function, so a save and a re-render cannot disagree.
+	d.Marketplace = a.marketplaceChoices(r.Context(), o, "ebay")
+
+	// The taxonomy tree and this offer's resolved questions. ⚠ Both are loaded
+	// HERE, in the read model both the page load and the SSE loop go through, so
+	// answering a question and having the page re-render cannot disagree about
+	// which questions there were.
+	//
+	// Neither is fatal. A picker with no options and a card with no questions are
+	// both legible states; taking the offer page down because a taxonomy read
+	// failed is not.
+	if a.Taxonomies != nil {
+		if cats, err := a.Taxonomies.AllCategories(r.Context()); err == nil {
+			d.Categories = cats
+		} else {
+			a.Log.Warn("categories unavailable", "err", err)
+		}
+		if o.CategoryID != "" {
+			if fields, err := a.Taxonomies.OfferFields(r.Context(), id, o.CategoryID); err == nil {
+				d.Fields = fields
+			} else {
+				a.Log.Warn("offer fields unavailable", "err", err)
+			}
+		}
+	}
 	return d, nil
 }
 
@@ -287,16 +297,37 @@ type offerSignals struct {
 	OwnerAmount   string `json:"ownerAmount"`
 	OwnerCurrency string `json:"ownerCurrency"`
 	Location      string `json:"offerLocation"`
-	SoldAmount    string `json:"soldAmount"`
-	SoldCurrency  string `json:"soldCurrency"`
-	SoldDate      string `json:"soldDate"`
-	// EbayCategory is this offer's own eBay category, overriding the default
-	// configured at Settings. Empty means "use the default" — clearing it and
-	// never having set one are deliberately the same state (ADR-016).
+	// Sku is editable since ADR-020: deleting the intake screen removed the only
+	// place a reference could be typed, so it moved to the Details card.
+	Sku string `json:"offerSku"`
+	// Quantity is how many of the thing we hold. It is a STRING here for the same
+	// reason every other number on this screen is: the input is `type="text"` with
+	// an inputmode, so the signal arrives as a string. A `type="number"` input
+	// would send a JSON number and fail to unmarshal into this struct.
+	Quantity string `json:"offerQuantity"`
+	// Category is the node in the OPERATOR's tree that says what this thing is
+	// (ADR-021). ⚠ Not EbayCategory below, which says where to list it.
 	//
-	// Only eBay has one today because only eBay's resolution is wired; Shopify's
-	// and Allegro's are deferred in docs/adr/BACKLOG.md.
-	EbayCategory string `json:"offerEbayCategory"`
+	// ⚠ A POINTER, and it is the only field on this card that needs to be. The
+	// others treat empty as "the client did not send one", because none of them
+	// can be legitimately cleared. This one CAN: the picker's first option is
+	// "not filed", so an empty value is a choice the operator made — and a plain
+	// string cannot tell that choice apart from a payload that omitted the key.
+	// nil is absent; "" is cleared.
+	//
+	// Not hypothetical: the smoke walk caught it. A later save of the Details card
+	// with a partial body silently un-filed an offer that had just been
+	// categorised, and its custom columns then vanished from the export with
+	// nothing reporting anything anywhere.
+	Category     *string `json:"offerCategory"`
+	SoldAmount   string  `json:"soldAmount"`
+	SoldCurrency string  `json:"soldCurrency"`
+	SoldDate     string  `json:"soldDate"`
+	// ⚠ THE MARKETPLACE MUST-HAVES ARE NOT HERE, deliberately. They moved to
+	// [marketplaceSignals] when ADR-022 made them three controls instead of one,
+	// and leaving a copy of `offerEbayCategory` on this struct would mean two
+	// handlers reading the same signal with only one of them writing it — which
+	// reads like a save that works and silently is not.
 }
 
 // PostOffer saves the editable text of an offer.
@@ -316,6 +347,34 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	o.Title = in.Title
 	o.Description = in.Description
 	o.Condition = in.Condition
+	// An empty reference means "the client did not send one", never "clear it":
+	// the column is UNIQUE and NOT NULL, and Service.Create already allocated a
+	// value, so blanking it here would be a write nobody asked for.
+	if strings.TrimSpace(in.Sku) != "" {
+		o.SKU = strings.TrimSpace(in.Sku)
+	}
+	// ⚠ An empty quantity means "the client did not send one", never "we have none
+	// of it". Both exporters write this number — eBay's `*Quantity` and Shopify's
+	// `Variant Inventory Qty` — so silently coercing a blank to 0 would take a
+	// live listing out of stock on a marketplace because a payload omitted a field.
+	if q := strings.TrimSpace(in.Quantity); q != "" {
+		n, err := strconv.Atoi(q)
+		if err != nil || n < 0 {
+			a.flash(w, r, "offer-flash", "error",
+				"Quantity must be a whole number, 0 or more.")
+			return
+		}
+		o.Quantity = n
+	}
+	// The taxonomy category, unlike the reference and the quantity, IS clearable:
+	// it is a <select> whose first option is "not filed", so an empty value is a
+	// choice the operator made rather than a field the payload omitted. Un-filing
+	// something is a legitimate edit and there is no other control for it — which
+	// is exactly why the signal is a pointer: nil means the key was absent and the
+	// filing must be left alone.
+	if in.Category != nil {
+		o.CategoryID = strings.TrimSpace(*in.Category)
+	}
 
 	if err := a.Offer.Update(r.Context(), o); err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
@@ -323,6 +382,84 @@ func (a *App) PostOffer(w http.ResponseWriter, r *http.Request) {
 	}
 	a.Broadcast(id)
 	a.flash(w, r, "offer-flash", "ok", "Saved.")
+}
+
+// PostOfferFields stores this offer's answers to whatever its category asks.
+//
+// ⚠ IT ITERATES THE FIELDS THE CATEGORY DEFINES, NOT THE SIGNALS THE CLIENT
+// SENT. The page binds one signal per field, named for the field's id, and every
+// unprefixed signal on the screen rides along with the request — so trusting the
+// payload's key set would mean writing whatever a caller chose to name. Reading
+// the resolved list first and looking each one up is what keeps the write bounded
+// by the operator's own taxonomy.
+func (a *App) PostOfferFields(w http.ResponseWriter, r *http.Request) {
+	// A map rather than a struct, because the signal names are the operator's
+	// field ids and no Go type can be written for a set that is data.
+	var in map[string]any
+	if err := datastar.ReadSignals(r, &in); err != nil {
+		a.flash(w, r, "offer-flash", "error", "Could not read the form.")
+		return
+	}
+	id := param(r, "id")
+
+	o, err := a.Offers.Offer(r.Context(), id)
+	if err != nil {
+		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+		return
+	}
+	if o.CategoryID == "" {
+		a.flash(w, r, "offer-flash", "error",
+			"File this under a category first, and its questions will appear here.")
+		return
+	}
+
+	fields, err := a.Taxonomies.OfferFields(r.Context(), id, o.CategoryID)
+	if err != nil {
+		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+		return
+	}
+	for _, f := range fields {
+		raw, ok := in[view.FieldSignal(f.ID)]
+		if !ok {
+			// The client did not send this one. Leaving the stored answer alone is
+			// the only safe reading: a payload that omits a field has said nothing
+			// about it, and treating silence as "clear it" would erase answers
+			// whenever the markup and the handler disagree about a name.
+			continue
+		}
+		if err := a.Taxonomy.Answer(r.Context(), id, f.ID, signalText(raw)); err != nil {
+			a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+			return
+		}
+	}
+	a.Broadcast(id)
+	a.flash(w, r, "offer-flash", "ok", "Saved.")
+}
+
+// signalText renders one datastar signal as the text a field value is stored as.
+//
+// ⚠ A CHECKBOX SENDS A JSON BOOLEAN, NOT A STRING. Every other control on this
+// screen sends a string, and a bool arriving where a string was expected is
+// exactly the mismatch that makes a yes/no answer silently never save. A number
+// is handled for the same reason: nothing binds one today, but a future
+// type="number" input would send one, and returning "" for it would look like
+// the operator had cleared the field.
+func signalText(v any) string {
+	switch t := v.(type) {
+	case string:
+		return strings.TrimSpace(t)
+	case bool:
+		if t {
+			return "1"
+		}
+		return ""
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case nil:
+		return ""
+	default:
+		return strings.TrimSpace(fmt.Sprint(t))
+	}
 }
 
 // PostPrices records the outcome of the pricing research step.
@@ -362,29 +499,128 @@ func (a *App) PostPrices(w http.ResponseWriter, r *http.Request) {
 	_ = sse.PatchElementTempl(view.OfferStatusCard(d))
 }
 
-// PostOfferCategory records this offer's own eBay category, or clears it.
+// marketplaceSignals is what the offer editor's must-have controls send.
 //
-// It exists because eBay's categories are per ITEM: a lamp and a chair are not
-// the same number, so a single value for a whole export file would mean one
-// export per category. The default set at Settings covers everything that does
-// not name its own (ADR-016).
-func (a *App) PostOfferCategory(w http.ResponseWriter, r *http.Request) {
-	var in offerSignals
+// Written out with literal tags rather than derived, for the same reason the
+// settings editor's are: a struct tag cannot be computed, and a missing pair
+// should be a compile error rather than a control whose value silently never
+// arrives.
+//
+// ⚠ THESE NAMES MUST MATCH [view.MarketplaceChoice.Signal] EXACTLY, and nothing
+// checks that they do — which is what scripts/browser/marketplace.js is for.
+type marketplaceSignals struct {
+	Category  string `json:"offerEbayCategory"`
+	Condition string `json:"offerEbayCondition"`
+	Location  string `json:"offerEbayLocation"`
+}
+
+// forField returns the value belonging to one must-have.
+func (s marketplaceSignals) forField(f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return s.Category
+	case core.MarketplaceCondition:
+		return s.Condition
+	case core.MarketplaceLocation:
+		return s.Location
+	}
+	return ""
+}
+
+// marketplaceChoices builds the offer editor's must-have controls.
+//
+// ⚠ ALWAYS THE FULL SET, in [core.MarketplaceFields] order, even for a field
+// whose list is empty. The view seeds one signal per entry, so a field missing
+// here is a control bound to a signal the page never declared.
+func (a *App) marketplaceChoices(ctx context.Context, o core.Offer, profile string) []view.MarketplaceChoice {
+	groups := a.marketplaceOptions(ctx, profile)
+	def := a.ebayDefaults(ctx)
+
+	out := make([]view.MarketplaceChoice, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, view.MarketplaceChoice{
+			Field:   g.Field,
+			Title:   g.Title,
+			Hint:    g.Hint,
+			Signal:  marketplaceSignalName(g.Field),
+			Attr:    "offer-ebay-" + string(g.Field),
+			Options: g.Options,
+			Chosen:  o.MarketplaceValue(profile, g.Field),
+			Default: marketplaceDefault(def, g.Field),
+		})
+	}
+	return out
+}
+
+// marketplaceSignalName is the camelCase signal one must-have binds. It is
+// written beside [marketplaceSignals]'s tags on purpose: they must agree.
+func marketplaceSignalName(f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return "offerEbayCategory"
+	case core.MarketplaceCondition:
+		return "offerEbayCondition"
+	case core.MarketplaceLocation:
+		return "offerEbayLocation"
+	}
+	return ""
+}
+
+// marketplaceDefault reads one field out of the resolved settings.
+func marketplaceDefault(m core.Marketplace, f core.MarketplaceField) string {
+	switch f {
+	case core.MarketplaceCategory:
+		return m.Category
+	case core.MarketplaceCondition:
+		return m.ConditionID
+	case core.MarketplaceLocation:
+		return m.Location
+	}
+	return ""
+}
+
+// PostOfferMarketplace records this offer's own marketplace must-haves, or
+// clears them.
+//
+// It exists because eBay's must-haves are per ITEM: a lamp and a chair are not
+// the same category, and a new part and a used one are not the same condition —
+// so a single value for a whole export file would mean one export per
+// combination. The defaults set at Settings cover everything that names none
+// (ADR-016, widened by ADR-022).
+func (a *App) PostOfferMarketplace(w http.ResponseWriter, r *http.Request) {
+	var in marketplaceSignals
 	if err := datastar.ReadSignals(r, &in); err != nil {
 		a.flash(w, r, "offer-flash", "error", "Could not read the form.")
 		return
 	}
 	id := param(r, "id")
 
-	if err := a.Offer.SetCategory(r.Context(), id, "ebay", in.EbayCategory); err != nil {
+	o, err := a.Offers.Offer(r.Context(), id)
+	if err != nil {
 		a.flash(w, r, "offer-flash", "error", a.userMessage(err))
 		return
 	}
-	a.Broadcast(id)
 
-	msg := "eBay category saved."
-	if strings.TrimSpace(in.EbayCategory) == "" {
-		msg = "eBay category cleared — this offer will use the default from Settings."
+	// ⚠ UNCHANGED FIELDS ARE SKIPPED. Three controls where there was one means
+	// three writes per save otherwise, each one a row rewritten to the value it
+	// already held — and the writer pool is a single connection.
+	changed := 0
+	for _, f := range core.MarketplaceFields() {
+		want := strings.TrimSpace(in.forField(f))
+		if want == o.MarketplaceValue("ebay", f) {
+			continue
+		}
+		if err := a.Offer.SetMarketplaceValue(r.Context(), id, "ebay", f, want); err != nil {
+			a.flash(w, r, "offer-flash", "error", a.userMessage(err))
+			return
+		}
+		changed++
+	}
+
+	msg := "Nothing to save — these are already the values on this offer."
+	if changed > 0 {
+		a.Broadcast(id)
+		msg = "Saved. Anything left empty uses the default from Settings."
 	}
 	sse := render.NewSSE(w, r)
 	_ = sse.PatchElementTempl(view.Flash("offer-flash", "ok", msg))

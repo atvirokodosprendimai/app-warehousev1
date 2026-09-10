@@ -149,9 +149,15 @@ type Exporter interface {
 }
 
 // registry holds one instance per profile, in no particular order; [Names]
-// sorts. A slice rather than a map because there are two of them and each
+// sorts. A slice rather than a map because there are a handful of them and each
 // already knows its own name.
-var registry = []Exporter{Shopify{}, EBay{}}
+//
+// ⚠ ADDING A PROFILE HERE IS THE WHOLE WIRING. The export screen builds itself
+// from [Names] and asks each exporter whether it can run, so a new entry appears
+// in the interface with its own readiness message and needs no markup. It also
+// joins TestNoRegisteredProfileEverExportsTheOwnerPrice, which is the point of
+// that test looping the registry rather than naming profiles.
+var registry = []Exporter{Shopify{}, EBay{}, Recar{}}
 
 // For returns the exporter registered under name, matching case-insensitively
 // so that a profile arriving from a form or a CLI flag does not fail on "Ebay".
@@ -231,6 +237,99 @@ func photoURLs(o core.Offer, base string) []string {
 
 // writeCSV writes header then rows, so both profiles fail a broken io.Writer the
 // same way instead of each inventing a message for it.
+// customColumns returns the exported custom fields present across offers, in a
+// stable order (ADR-021).
+//
+// ⚠ A CSV HAS ONE HEADER ROW AND THE OFFERS IN AN EXPORT DO NOT SHARE A
+// CATEGORY. A turbocharger and a graphics card inherit different questions, so
+// there is no fixed column set to declare in advance and no profile can carry
+// one. The header is therefore a function of the ROWS: the union of every
+// exported field over the offers actually being written.
+//
+// Two exports of different batches can legitimately have different headers. That
+// is a property of the data rather than a defect, and both marketplaces tolerate
+// columns they do not recognise. The alternative — a fixed set — means either
+// every field in the whole tree as columns on every row, or a per-category export
+// that cannot mix; both are worse for the operator than a wide, mostly-empty row.
+//
+// The order is category path, then the operator's position within a level, then
+// label and id as tie-breaks. Path first so a batch's columns group by what the
+// things ARE; the last two so the order is total and the same batch in a
+// different sequence produces a byte-identical header.
+//
+// ⚠ A field NOT marked for export is absent entirely — no column, no cell. Off is
+// the default, because a private note about where a part came from is not
+// something to publish.
+func customColumns(offers []core.Offer) []core.CategoryField {
+	seen := map[string]bool{}
+	out := []core.CategoryField{}
+	for _, o := range offers {
+		for _, f := range o.Fields {
+			if !f.Export || seen[f.ID] {
+				continue
+			}
+			seen[f.ID] = true
+			out = append(out, f.CategoryField)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.CategoryPath != b.CategoryPath {
+			return a.CategoryPath < b.CategoryPath
+		}
+		if a.Position != b.Position {
+			return a.Position < b.Position
+		}
+		if a.Label != b.Label {
+			return a.Label < b.Label
+		}
+		return a.ID < b.ID
+	})
+	return out
+}
+
+// customCells returns o's answers for cols, in the same order.
+//
+// An offer that has no such field gets an EMPTY cell rather than a missing one:
+// every row must carry exactly as many cells as the header, or the file is not a
+// CSV any importer will read.
+func customCells(o core.Offer, cols []core.CategoryField) []string {
+	byID := make(map[string]core.OfferField, len(o.Fields))
+	for _, f := range o.Fields {
+		byID[f.ID] = f
+	}
+	cells := make([]string, len(cols))
+	for i, c := range cols {
+		// ⚠ No second Export check here, and its absence is deliberate. cols holds
+		// only exported fields, and a field's export flag is a property of the
+		// DEFINITION rather than of one offer's answer — so `f.Export` at this point
+		// is always true. A mutation run proved it: deleting the check changed
+		// nothing, because the state it guarded against cannot occur. Defensive
+		// handling for an impossible state reads as a real rule to the next person.
+		if f, ok := byID[c.ID]; ok {
+			// Display, not the raw value: it renders a yes/no as words and appends a
+			// unit, so "180000" reaches the marketplace as "180000 km". The unit is
+			// stored beside the number precisely so it can be shown without ever
+			// having been typed into the value.
+			cells[i] = f.Display()
+		}
+	}
+	return cells
+}
+
+// customLabels maps the columns to their header text through name.
+//
+// ⚠ THE LABEL IS WHAT REACHES THE MARKETPLACE, so renaming a field renames a
+// published column. Nothing internal breaks — the field's `code` is the stable
+// key everything here uses — but a listing tool on the far side might.
+func customLabels(cols []core.CategoryField, name func(core.CategoryField) string) []string {
+	out := make([]string, len(cols))
+	for i, c := range cols {
+		out[i] = name(c)
+	}
+	return out
+}
+
 func writeCSV(w io.Writer, profile string, header []string, rows [][]string) error {
 	cw := csv.NewWriter(w)
 	if err := cw.Write(header); err != nil {

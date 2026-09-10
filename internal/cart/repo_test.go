@@ -77,9 +77,9 @@ func TestContentsReturnsOffersInCartOrderEachWithItsPhotos(t *testing.T) {
 			t.Errorf("offer %s photos = %v, want %v", o.ID, ids, wantPhotos[o.ID])
 		}
 		for _, p := range o.Photos {
-			if p.OfferID != o.ID {
+			if p.ParentID != o.ID {
 				t.Errorf("photo %s is attached to offer %s but belongs to %s",
-					p.ID, o.ID, p.OfferID)
+					p.ID, o.ID, p.ParentID)
 			}
 		}
 		if o.Photos[0].Position != 0 {

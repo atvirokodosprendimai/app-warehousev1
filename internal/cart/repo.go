@@ -505,14 +505,14 @@ func (r *Repo) photosByOffer(ctx context.Context, offerIDs []string) (map[string
 			p       core.Photo
 			created string
 		)
-		if err := rows.Scan(&p.ID, &p.OfferID, &p.Position, &p.Filename, &p.ContentType,
+		if err := rows.Scan(&p.ID, &p.ParentID, &p.Position, &p.Filename, &p.ContentType,
 			&p.ByteSize, &p.SHA256, &created); err != nil {
 			return nil, fmt.Errorf("cart: load photos: %w", err)
 		}
 		if p.CreatedAt, err = parseTime(created); err != nil {
 			return nil, err
 		}
-		out[p.OfferID] = append(out[p.OfferID], p)
+		out[p.ParentID] = append(out[p.ParentID], p)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("cart: load photos: %w", err)

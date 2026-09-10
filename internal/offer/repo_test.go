@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func mustAddPhoto(t *testing.T, r *Repo, id, offerID string, position int) core.
 	t.Helper()
 	p := core.Photo{
 		ID:          id,
-		OfferID:     offerID,
+		ParentID:    offerID,
 		Position:    position,
 		Filename:    id + ".jpg",
 		ContentType: "image/jpeg",
@@ -135,8 +136,8 @@ func TestOffersPutsEachPhotoOnItsOwnOfferInOrder(t *testing.T) {
 	for _, o := range got {
 		var have []string
 		for _, p := range o.Photos {
-			if p.OfferID != o.ID {
-				t.Errorf("photo %s landed on offer %s but belongs to %s", p.ID, o.ID, p.OfferID)
+			if p.ParentID != o.ID {
+				t.Errorf("photo %s landed on offer %s but belongs to %s", p.ID, o.ID, p.ParentID)
 			}
 			have = append(have, p.ID)
 		}
@@ -532,6 +533,117 @@ func TestOffersFilterNeedsPricingIsTheResearchQueue(t *testing.T) {
 	}
 }
 
+// TestOffersFilterNeedsDescribingMatchesThePredicate is ADR-019's queue, and it
+// asserts the thing that actually breaks.
+//
+// The queue exists twice — once as SQL in this package and once as
+// core.Offer.NeedsDescribing in Go — and nothing forces the two to stay in step.
+// When they drift, the sidebar count and the list it links to disagree: the
+// operator is either promised work they cannot find, or shown work nobody told
+// them about. So this compares the two against each other rather than against a
+// hand-written expected list, which would keep passing while both sides drifted
+// together.
+func TestOffersFilterNeedsDescribingMatchesThePredicate(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+
+	mustCreate(t, r, newOffer("unnamed", "SKU-1", "", baseTime))
+	// A title of nothing but spaces is not a title. SQL must agree with the domain
+	// about that, or the two queues differ by exactly the rows somebody has pressed
+	// the space bar in.
+	mustCreate(t, r, newOffer("spaces", "SKU-2", "   ", baseTime.Add(time.Minute)))
+	mustCreate(t, r, newOffer("named", "SKU-3", "Vintage brass desk lamp", baseTime.Add(2*time.Minute)))
+	// Undescribed but no longer a draft: out of the queue, because the queue is
+	// work somebody is expected to pick up.
+	archived := newOffer("archived", "SKU-4", "", baseTime.Add(3*time.Minute))
+	archived.Status = core.StatusArchived
+	mustCreate(t, r, archived)
+
+	got, err := r.Offers(ctx, core.OfferFilter{NeedsDescribing: true})
+	if err != nil {
+		t.Fatalf("Offers: %v", err)
+	}
+
+	inQueue := map[string]bool{}
+	for _, o := range got {
+		inQueue[o.ID] = true
+		if !o.NeedsDescribing() {
+			t.Errorf("%s is in the SQL queue but NeedsDescribing() is false — the clause and "+
+				"the predicate have drifted apart", o.ID)
+		}
+	}
+
+	all, err := r.Offers(ctx, core.OfferFilter{})
+	if err != nil {
+		t.Fatalf("Offers(all): %v", err)
+	}
+	if len(all) != 4 {
+		t.Fatalf("the fixture holds %d offers, want 4 — the sweep below would prove nothing", len(all))
+	}
+	for _, o := range all {
+		if o.NeedsDescribing() && !inQueue[o.ID] {
+			t.Errorf("%s satisfies NeedsDescribing() but the SQL queue omits it, so the "+
+				"sidebar would count work the listing does not show", o.ID)
+		}
+	}
+	if len(got) != 2 {
+		t.Errorf("the queue holds %d rows, want 2 — the empty title and the whitespace one. "+
+			"A queue of 0 would make both sweeps above vacuous", len(got))
+	}
+}
+
+// TestPublishingAnUntitledOfferIsRefusedByTheDatabase proves ADR-019's second
+// gate, the one no Go path can bypass.
+//
+// The domain refuses this as well, which is exactly why the row is written with
+// raw SQL here: the whole point of the trigger is the writer that never calls
+// Validate — a migration, a future importer, or somebody at a sqlite3 prompt.
+// ADR-004 established the doubling up for the price; this is the same argument
+// for the title.
+func TestPublishingAnUntitledOfferIsRefusedByTheDatabase(t *testing.T) {
+	r := newTestRepo(t)
+	ts := formatTime(baseTime)
+
+	// An untitled DRAFT must be accepted, or the refusal below would be happening
+	// for the wrong reason and this test would pass against a database that simply
+	// rejects empty titles everywhere.
+	if _, err := r.write.Exec(
+		`INSERT INTO offers (id, sku, title, status, quantity, shop_minor, created_at, updated_at)
+		 VALUES ('d1', 'SKU-D1', '', 'draft', 1, 0, ?, ?)`, ts, ts); err != nil {
+		t.Fatalf("an untitled DRAFT was refused by the database, which ADR-019 permits: %v", err)
+	}
+
+	// Publishing it is what must fail.
+	_, err := r.write.Exec(`UPDATE offers SET status = 'listed', shop_minor = 4500 WHERE id = 'd1'`)
+	if err == nil {
+		t.Fatal("the database accepted a listed offer with no title: the trigger from " +
+			"migration 00008 is missing or was dropped, and a marketplace would be sent a " +
+			"listing headed by an empty string")
+	}
+	if !strings.Contains(err.Error(), "needs a title") {
+		t.Errorf("refused with %v, want the trigger's own message — a different error means "+
+			"something else refused this row and the trigger is still unproven", err)
+	}
+
+	// The INSERT arm of the same rule, and a whitespace-only title, which trim()
+	// has to treat as absent exactly as the domain does.
+	if _, err := r.write.Exec(
+		`INSERT INTO offers (id, sku, title, status, quantity, shop_minor, created_at, updated_at)
+		 VALUES ('l1', 'SKU-L1', '   ', 'listed', 1, 4500, ?, ?)`, ts, ts); err == nil {
+		t.Error("the database accepted an INSERT of a listed offer whose title is only spaces")
+	}
+
+	// The row must still be a draft: a refused UPDATE that half-applied would be
+	// worse than one that never ran.
+	var status string
+	if err := r.write.QueryRow(`SELECT status FROM offers WHERE id = 'd1'`).Scan(&status); err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if status != "draft" {
+		t.Errorf("status = %q after the refused update, want draft", status)
+	}
+}
+
 func TestOffersLimitAndOffsetPage(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
@@ -878,48 +990,48 @@ func TestOfferRoundTripsItsPerProfileCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if len(got.Categories) != 0 {
-		t.Errorf("a new offer has categories %v, want none — a category must not be "+
-			"required at intake", got.Categories)
+	if len(got.Marketplace) != 0 {
+		t.Errorf("a new offer has marketplace values %v, want none — a category must not be "+
+			"required at intake", got.Marketplace)
 	}
 
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o1", "shopify", "Lighting"); err != nil {
-		t.Fatalf("SetCategory (shopify): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "shopify", core.MarketplaceCategory, "Lighting"); err != nil {
+		t.Fatalf("SetMarketplaceValue (shopify): %v", err)
 	}
 
 	got, err = r.Offer(ctx, "o1")
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if got.Categories["ebay"] != "11450" {
-		t.Errorf("Categories[ebay] = %q, want %q", got.Categories["ebay"], "11450")
+	if got := got.MarketplaceValue("ebay", core.MarketplaceCategory); got != "11450" {
+		t.Errorf("ebay category = %q, want %q", got, "11450")
 	}
 	// Two profiles, two different KINDS of value on one offer — a number and a
 	// name. That is why this is a table with a TEXT column and not one column.
-	if got.Categories["shopify"] != "Lighting" {
-		t.Errorf("Categories[shopify] = %q, want %q", got.Categories["shopify"], "Lighting")
+	if got := got.MarketplaceValue("shopify", core.MarketplaceCategory); got != "Lighting" {
+		t.Errorf("shopify category = %q, want %q", got, "Lighting")
 	}
 
 	// Setting it again replaces rather than duplicating.
-	if err := r.SetCategory(ctx, "o1", "ebay", "20081"); err != nil {
-		t.Fatalf("SetCategory (replace): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "20081"); err != nil {
+		t.Fatalf("SetMarketplaceValue (replace): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
-	if got.Categories["ebay"] != "20081" {
-		t.Errorf("Categories[ebay] = %q after replacing, want %q", got.Categories["ebay"], "20081")
+	if got := got.MarketplaceValue("ebay", core.MarketplaceCategory); got != "20081" {
+		t.Errorf("ebay category = %q after replacing, want %q", got, "20081")
 	}
 
 	// An empty value CLEARS it, so an operator can go back to the default
 	// without a second verb.
-	if err := r.SetCategory(ctx, "o1", "ebay", ""); err != nil {
-		t.Fatalf("SetCategory (clear): %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, ""); err != nil {
+		t.Fatalf("SetMarketplaceValue (clear): %v", err)
 	}
 	got, _ = r.Offer(ctx, "o1")
-	if _, ok := got.Categories["ebay"]; ok {
-		t.Errorf("Categories still holds ebay after clearing: %v", got.Categories)
+	if _, ok := got.Marketplace[core.MarketplaceKey{Profile: "ebay", Field: core.MarketplaceCategory}]; ok {
+		t.Errorf("the ebay category survived being cleared: %v", got.Marketplace)
 	}
 }
 
@@ -935,11 +1047,11 @@ func TestOffersLoadEveryRowsCategoriesInOneQuery(t *testing.T) {
 			t.Fatalf("CreateOffer %s: %v", id, err)
 		}
 	}
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o3", "ebay", "20081"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o3", "ebay", core.MarketplaceCategory, "20081"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
 
 	got, err := r.Offers(ctx, core.OfferFilter{})
@@ -954,16 +1066,16 @@ func TestOffersLoadEveryRowsCategoriesInOneQuery(t *testing.T) {
 	for _, o := range got {
 		byID[o.ID] = o
 	}
-	if byID["o1"].Categories["ebay"] != "11450" {
-		t.Errorf("o1 ebay = %q, want %q", byID["o1"].Categories["ebay"], "11450")
+	if got := byID["o1"].MarketplaceValue("ebay", core.MarketplaceCategory); got != "11450" {
+		t.Errorf("o1 ebay = %q, want %q", got, "11450")
 	}
-	if byID["o3"].Categories["ebay"] != "20081" {
-		t.Errorf("o3 ebay = %q, want %q", byID["o3"].Categories["ebay"], "20081")
+	if got := byID["o3"].MarketplaceValue("ebay", core.MarketplaceCategory); got != "20081" {
+		t.Errorf("o3 ebay = %q, want %q", got, "20081")
 	}
 	// The offer in the middle has none, and must not inherit a neighbour's — the
 	// failure a per-row loop or a bad join produces.
-	if len(byID["o2"].Categories) != 0 {
-		t.Errorf("o2 has categories %v, want none", byID["o2"].Categories)
+	if len(byID["o2"].Marketplace) != 0 {
+		t.Errorf("o2 has marketplace values %v, want none", byID["o2"].Marketplace)
 	}
 }
 
@@ -981,8 +1093,8 @@ func TestDeletingAnOfferCascadesItsCategories(t *testing.T) {
 	if err := r.CreateOffer(ctx, newOffer("o1", "WH0000001", "First", baseTime)); err != nil {
 		t.Fatalf("CreateOffer: %v", err)
 	}
-	if err := r.SetCategory(ctx, "o1", "ebay", "11450"); err != nil {
-		t.Fatalf("SetCategory: %v", err)
+	if err := r.SetMarketplaceValue(ctx, "o1", "ebay", core.MarketplaceCategory, "11450"); err != nil {
+		t.Fatalf("SetMarketplaceValue: %v", err)
 	}
 	if err := r.DeleteOffer(ctx, "o1"); err != nil {
 		t.Fatalf("DeleteOffer: %v", err)
@@ -995,9 +1107,9 @@ func TestDeletingAnOfferCascadesItsCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Offer: %v", err)
 	}
-	if len(got.Categories) != 0 {
+	if len(got.Marketplace) != 0 {
 		t.Errorf("a new offer reusing a deleted id inherited %v — the category row "+
-			"outlived the offer it described", got.Categories)
+			"outlived the offer it described", got.Marketplace)
 	}
 }
 

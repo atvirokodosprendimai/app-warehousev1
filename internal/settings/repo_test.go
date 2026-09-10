@@ -14,8 +14,9 @@ import (
 // table is exactly what production has.
 //
 // This package had no tests at all before ADR-016. It deliberately does not
-// carry a copied CREATE TABLE: four other packages still do, and each one is a
-// schema that can drift from the migration without anything going red.
+// carry a copied CREATE TABLE — and as of 2026-09-07 no package does: the last
+// four were converted and `internal/store/schema_guard_test.go` now walks the
+// tree so a new one cannot appear quietly.
 func newRepo(t *testing.T) *Repo {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "settings.db"))

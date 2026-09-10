@@ -300,6 +300,21 @@ func (a *App) GetExportFile(w http.ResponseWriter, r *http.Request) {
 
 	opt := a.exportOptions(r.Context())
 
+	// ⚠ THE CUSTOM FIELD VALUES HAVE TO BE LOADED HERE. internal/export is a PURE
+	// package — it is handed offers and an io.Writer and touches no database — so
+	// anything that reaches a CSV rides on the offer the caller already loaded,
+	// which is the seam ADR-016 opened for Offer.Categories.
+	//
+	// Forgetting this produces a WELL-FORMED FILE WITH EVERY CUSTOM COLUMN EMPTY,
+	// and every unit test still passes, because a unit test supplies its own
+	// Offer.Fields. Only the smoke walk catches it, which is why the smoke
+	// assertion is this task's reachability proof rather than a formality.
+	//
+	// These come from the list read path, where Fields is deliberately not loaded
+	// (an ancestor walk per row on a listing that renders none would be waste), so
+	// the walk is paid here — once per offer, only on an export.
+	offers = a.withFields(r, offers)
+
 	// Render into memory first. Write streams straight to w, and a failure
 	// halfway through would otherwise leave a 200 carrying half a catalogue that
 	// imports without complaint.
@@ -313,6 +328,36 @@ func (a *App) GetExportFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(buf.Bytes())
+}
+
+// withFields resolves each offer's custom field values for an export.
+//
+// One ancestor walk per offer, and only on the export path. An offer with no
+// category is left alone, which is the ordinary case and costs nothing.
+//
+// A read failure is LOGGED AND SKIPPED rather than fatal, and that is a real
+// trade rather than laziness: the alternative is refusing a whole catalogue
+// because one optional column could not be resolved. The row still carries its
+// title, price, photographs and quantity — everything a listing actually needs —
+// and a marketplace tolerates a column it does not recognise, including an empty
+// one. Refusing beats guessing applies to values that would be WRONG; an absent
+// custom field is not wrong, it is absent.
+func (a *App) withFields(r *http.Request, offers []core.Offer) []core.Offer {
+	if a.Taxonomies == nil {
+		return offers
+	}
+	for i := range offers {
+		if offers[i].CategoryID == "" {
+			continue
+		}
+		fields, err := a.Taxonomies.OfferFields(r.Context(), offers[i].ID, offers[i].CategoryID)
+		if err != nil {
+			a.Log.Warn("custom fields unavailable for export", "offer", offers[i].SKU, "err", err)
+			continue
+		}
+		offers[i].Fields = fields
+	}
+	return offers
 }
 
 // exportSet chooses what an export run covers.

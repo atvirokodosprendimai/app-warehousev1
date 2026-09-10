@@ -137,7 +137,7 @@ record.
 
 - Letting a submitter edit a submission after sending it (deferred: docs/adr/BACKLOG.md)
 - Notifying the submitter of a decision by email or SMS (deferred: docs/adr/BACKLOG.md)
-- Renaming `Photo.OfferID` to something honest (deferred: docs/adr/BACKLOG.md)
+- Renaming `Photo.OfferID` to something honest (permanent: fact: done 2026-09-07 — the field is `core.Photo.ParentID`, renamed across seventeen sites in five packages by removing it and letting the compiler name them; citation: file `internal/core/offer.go:301`)
 - Bulk acceptance of several submissions (permanent: boundary: each one is a phone call and a negotiated price; a bulk action would model a process nobody performs)
 - A submitter seeing what their item eventually sold for (permanent: boundary: the sale price is the business's, and the submitter is owed the agreed owner price regardless — ADR-003)
 
@@ -158,4 +158,4 @@ not reference them, apart from the nullable back-pointer.
 
 ## Follow-ups
 
-- [ ] `core.Photo.OfferID` should be an aggregate-neutral name. Recorded in `docs/adr/BACKLOG.md`.
+- [x] `core.Photo.OfferID` should be an aggregate-neutral name. **Done 2026-09-07**: it is `core.Photo.ParentID`, across seventeen sites in five packages. ⚠ `core.Submission.OfferID` is a DIFFERENT field and a true one — a submission accepted onto an offer really does carry that offer's id — so it was left alone; the two are told apart by their type, not by their name, which is exactly why the rename was worth doing. The database column stays `offer_id` on `offer_photos`, which is the honest half: those rows really are an offer's.

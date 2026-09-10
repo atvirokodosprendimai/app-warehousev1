@@ -55,6 +55,19 @@ func (EBay) Name() string { return "ebay" }
 // default; [Options.ConditionID] falls back to [DefaultConditionID]. The whole
 // export is refused, with w untouched, when the options or any exportable offer
 // would produce a file that lists the wrong thing.
+// ebayValue resolves one of eBay's must-haves for one offer.
+//
+// The offer's own value wins and the configured setting is the fallback, which
+// is the same precedence [core.Marketplace.Resolve] applies at the settings
+// screen — written once here so the two can never disagree about which value an
+// operator is actually looking at.
+func ebayValue(o core.Offer, f core.MarketplaceField, fallback string) string {
+	if v := strings.TrimSpace(o.MarketplaceValue(EBay{}.Name(), f)); v != "" {
+		return v
+	}
+	return strings.TrimSpace(fallback)
+}
+
 func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 	if err := opt.validateCommon(); err != nil {
 		return fmt.Errorf("ebay: %w", err)
@@ -76,19 +89,31 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 		return fmt.Errorf("ebay: %w", err)
 	}
 
-	condition := strings.TrimSpace(opt.ConditionID)
-	if condition == "" {
-		condition = DefaultConditionID
-	}
+	// The custom columns are computed from the offers actually being written, not
+	// from the whole tree — see [customColumns] for why a CSV cannot declare a
+	// fixed set here. eBay's item specifics are "C:<Label>" columns, so an
+	// exported field becomes one.
+	cols := customColumns(items)
 
 	rows := make([][]string, 0, len(items))
 	var problems []error
 	for _, o := range items {
-		// The offer's own category wins; the configured one is the fallback.
-		category := strings.TrimSpace(o.Categories[EBay{}.Name()])
-		if category == "" {
-			category = strings.TrimSpace(opt.Category)
+		// ⚠ ALL THREE MUST-HAVES RESOLVE PER OFFER, not just the category. ADR-022
+		// gives an operator a list to pick each one from, and a value they can pick
+		// and store but that no export ever reads would be worse than no control at
+		// all — it would look set, on the offer, for ever. Condition was a single
+		// value for the whole file until then, so a warehouse holding a new part
+		// and a used one had to run two exports or lie about one of them.
+		category := ebayValue(o, core.MarketplaceCategory, opt.Category)
+		condition := ebayValue(o, core.MarketplaceCondition, opt.ConditionID)
+		if condition == "" {
+			condition = DefaultConditionID
 		}
+		// Location keeps its up-front requirement (checked above) rather than
+		// following the category's refuse-per-offer shape: a default location is
+		// something every deployment has, and the offer's own value is an override
+		// for the item that ships from somewhere else.
+		location := ebayValue(o, core.MarketplaceLocation, opt.Location)
 		if category == "" {
 			// Naming BOTH places is the whole point of this message. The reported
 			// bug was not a missing value — it was that the error said one was
@@ -106,7 +131,7 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 			problems = append(problems, fmt.Errorf("%w: %s: %w", ErrIncomplete, o.SKU, err))
 			continue
 		}
-		rows = append(rows, []string{
+		row := []string{
 			"Add",         // *Action
 			o.SKU,         // CustomLabel
 			category,      // *Category — this offer's own, or the configured default
@@ -115,15 +140,20 @@ func (EBay) Write(w io.Writer, offers []core.Offer, opt Options) error {
 			strings.Join(photoURLs(o, opt.BaseURL), "|"), // PicURL — all of them, one cell
 			strconv.Itoa(o.Quantity),                     // *Quantity
 			price,                                        // *StartPrice — Shop, never Owner
-			condition,                                    // *ConditionID
+			condition,                                    // *ConditionID — this offer's own, or the configured default
 			"FixedPrice",                                 // *Format
 			"GTC",                                        // *Duration
-			opt.Location,                                 // *Location
+			location,                                     // *Location — this offer's own, or the configured default
 			"ReturnsAccepted",                            // *ReturnsAcceptedOption
-		})
+		}
+		// The variable tail. Empty where this offer's category does not ask that
+		// question, so every row is the same width as the header.
+		rows = append(rows, append(row, customCells(o, cols)...))
 	}
 	if len(problems) > 0 {
 		return fmt.Errorf("ebay: %w", errors.Join(problems...))
 	}
-	return writeCSV(w, "ebay", ebayHeader(opt.currency()), rows)
+	header := append(ebayHeader(opt.currency()),
+		customLabels(cols, func(c core.CategoryField) string { return "C:" + c.Label })...)
+	return writeCSV(w, "ebay", header, rows)
 }

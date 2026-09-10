@@ -96,11 +96,13 @@ func InboxBanner(open int) templ.Component {
 	})
 }
 
-// NewOfferAction is the top-bar button that starts an intake.
+// NewOfferAction is the top-bar button that creates an offer.
 //
-// It is a link rather than a datastar action because it navigates: the intake
-// screen has its own URL, so it should be bookmarkable, openable in a new tab,
-// and reachable with the back button afterwards.
+// It POSTS rather than navigating (ADR-020). There is no intake screen left to
+// navigate to: every question that screen asked was already optional — the title
+// since ADR-019, the reference because ADR-010 gives the database that job, and
+// the location because the editor has its own card for it — so it stood between
+// a person holding an object and the camera while collecting nothing.
 func NewOfferAction() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
@@ -122,7 +124,7 @@ func NewOfferAction() templ.Component {
 			templ_7745c5c3_Var3 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<a class=\"btn btn-primary\" href=\"/offers/new\">New offer</a>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "<button class=\"btn btn-primary\" type=\"button\" data-on:click=\"@post('/offers')\" data-indicator:_busy data-attr:disabled=\"$_busy\"><span data-show=\"$_busy\" style=\"display:none\" class=\"spinner\" aria-hidden=\"true\"></span> <span>New offer</span></button>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -205,7 +207,7 @@ func Flash(id, kind, text string) templ.Component {
 		var templ_7745c5c3_Var6 string
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 69, Col: 13}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 80, Col: 13}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 		if templ_7745c5c3_Err != nil {
@@ -263,7 +265,7 @@ func UserTable(users []core.User) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(m.Name())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 91, Col: 20}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 102, Col: 20}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -276,7 +278,7 @@ func UserTable(users []core.User) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(m.Email)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 92, Col: 32}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/view/fragments.templ`, Line: 103, Col: 32}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 			if templ_7745c5c3_Err != nil {
